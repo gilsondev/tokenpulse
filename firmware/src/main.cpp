@@ -49,7 +49,8 @@ void checkButton() {
   }
 }
 
-// Gestos: arrastar para os lados troca de tela, toque curto avança, segurar volta para a principal.
+// Gestos: arrastar para os lados troca de tela, para cima/baixo rola, da borda de baixo para cima volta
+// para a principal; toque curto abre o que foi tocado; segurar também volta para a principal.
 void checkTouch() {
   static bool down = false, held = false;
   static int16_t x0, y0, x, y;
@@ -73,7 +74,9 @@ void checkTouch() {
   const int dx = x - x0, dy = y - y0;
   Serial.printf("toque: %d,%d -> %d,%d em %lu ms\n", x0, y0, x, y, millis() - downMs);
   if (held) return;
-  if (abs(dx) > 40 && abs(dx) > 2 * abs(dy)) dx < 0 ? screens::next() : screens::prev();
+  // arrastar para cima a partir da borda de baixo: volta para a principal de qualquer lugar, como no celular
+  if (y0 > gfx::height() - 36 && dy < -50 && abs(dy) > abs(dx)) screens::home();
+  else if (abs(dx) > 40 && abs(dx) > 2 * abs(dy)) dx < 0 ? screens::next() : screens::prev();
   else if (abs(dy) > 40 && abs(dy) > 2 * abs(dx)) screens::scroll(dy < 0 ? 1 : -1);
   else if (abs(dx) < 24 && abs(dy) < 24) screens::tap(x0, y0);
 }

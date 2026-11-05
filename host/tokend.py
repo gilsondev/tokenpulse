@@ -113,10 +113,14 @@ class Usage:
         self.last_model, self.last_ts = "", 0.0
         self.sessions = {}  # sessionId -> última linha: ts, tipo, stop_reason, projeto, origem
         self.titles = {}    # sessionId -> título da sessão (linha custom-title do Claude Code)
+        self.paths, self.globbed_at = [], 0.0
 
     def poll(self):
         cutoff = time.time() - 86400
-        for path in glob.glob(PROJECTS, recursive=True):
+        # o glob recursivo em ~1.240 arquivos custa ~300 ms; arquivo novo de sessão aparece no máximo a cada 15 s
+        if time.time() - self.globbed_at > 15:
+            self.paths, self.globbed_at = glob.glob(PROJECTS, recursive=True), time.time()
+        for path in self.paths:
             try:
                 st = os.stat(path)
             except OSError:
@@ -243,6 +247,42 @@ _STATE_TITLE = re.compile(r"^[●✳]?\s*[^:]*:\s*(done|ready|working|blocked|id
 
 
 HERDR = shutil.which("herdr") or "/opt/homebrew/bin/herdr"  # o LaunchAgent roda sem o PATH do Homebrew
+
+
+HERDR_SOCKET = os.path.join(HOME, ".config/herdr/herdr.sock")
+HERDR_EVENTS = ["pane.focused", "pane.created", "pane.closed", "pane.agent_detected", "tab.focused", "tab.renamed",
+                "workspace.focused", "workspace.renamed"]
+_RESUBSCRIBE = (b"pane.created", b"pane.closed", b"pane.agent_detected")  # mudou a lista de painéis
+_wake = threading.Event()  # algo mudou: manda o frame agora, sem esperar o próximo segundo
+
+
+def herdr_events():
+    """Escuta os eventos do herdr pelo socket: quando uma sessão muda de estado ou de foco, o cache cai e a
+    placa recebe o frame na hora (antes: até 3 s do cache + 1 s do loop). O estado do agente só pode ser
+    assinado painel por painel, então a assinatura é refeita quando um painel abre ou fecha.
+    Sem herdr, tenta de novo a cada 30 s."""
+    import socket
+    while True:
+        try:
+            _herdr["at"] = 0
+            panes = {a["pane"] for a in herdr_agents().values() if a.get("pane")}
+            subs = [{"type": t} for t in HERDR_EVENTS]
+            subs += [{"type": "pane.agent_status_changed", "pane_id": p} for p in sorted(panes)]
+            with socket.socket(socket.AF_UNIX) as sock:
+                sock.connect(HERDR_SOCKET)
+                sock.sendall((json.dumps({"id": "tokenpulse", "method": "events.subscribe",
+                                          "params": {"subscriptions": subs}}) + "\n").encode())
+                for line in sock.makefile("rb"):
+                    if b'"error"' in line:
+                        print(f"herdr: assinatura recusada: {line[:160]!r}", file=sys.stderr, flush=True)
+                        break
+                    _herdr["at"] = 0
+                    _wake.set()
+                    if any(k in line for k in _RESUBSCRIBE):
+                        break
+        except OSError:
+            pass
+        time.sleep(30 if not os.path.exists(HERDR_SOCKET) else 1)
 
 
 def herdr_agents():
@@ -909,13 +949,17 @@ def main():
     if not DEMO:
         threading.Thread(target=usage_loop, daemon=True).start()
         threading.Thread(target=history_loop, daemon=True).start()
+        threading.Thread(target=herdr_events, daemon=True).start()
     if "--once" in sys.argv:
         time.sleep(3)  # dá tempo da primeira busca na API
     while True:
+        woke = _wake.is_set()
+        _wake.clear()
         if DEMO:
             frame = demo_frame()
         else:
-            usage.poll()
+            if not woke:  # acordado por evento do herdr: manda já, os .jsonl esperam o próximo segundo
+                usage.poll()
             org_name = org()  # antes de limits(), que depende de saber se a org mudou
             frame = (usage.snapshot() | limits() | account_frame()
                      | {"clk": datetime.now().strftime("%H:%M"), "org": org_name, "dark": dark_mode()})
@@ -940,7 +984,8 @@ def main():
         for path, board in list(boards.items()):
             if not serve(board, frame):
                 del boards[path]
-        time.sleep(1)
+        if _wake.wait(1):
+            time.sleep(0.1)  # junta uma rajada de eventos do herdr num frame só
 
 
 if __name__ == "__main__":

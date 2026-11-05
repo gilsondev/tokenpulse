@@ -125,7 +125,8 @@ atual como argumento para encadear). Ela serve de reserva do % quando a API de u
 
 - Arraste para os lados para trocar de tela; para cima e para baixo para ver mais sessões.
 - Toque num workspace para ver as sessões e no título para voltar. Toque num modelo para o detalhe.
-- Segure para voltar à principal. Toque no nome da org para trocar de org; na engrenagem para os ajustes.
+- Arraste da borda de baixo para cima (ou segure) para voltar à principal de qualquer tela.
+- Toque no nome da org para trocar de org; na engrenagem para os ajustes.
 - `uv run host/tokend.py --demo` manda dados fictícios, como nas capturas acima
   (`TOKENPULSE_DEMO_P5=86` muda o % da janela de 5 h).
 - `host/shot.sh saida.png "page 1" "tap 80 90"` tira um screenshot da placa
