@@ -161,6 +161,10 @@ Waveshare de 1,47", em OpenSCAD, inspirado no
   serial e abra a porta a 1200 baud.
 - **Custo:** é o equivalente pela tabela de preços da API, não o que a assinatura cobra.
 
+## Licença
+
+[MIT](LICENSE). A fonte Inter em `firmware/tools/fonts` e os headers gerados dela seguem a SIL OFL 1.1.
+
 ## Créditos
 
 [LovyanGFX](https://github.com/lovyan03/LovyanGFX), [Arduino_GFX](https://github.com/moononournation/Arduino_GFX),
