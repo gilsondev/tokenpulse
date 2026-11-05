@@ -29,7 +29,8 @@ inline void dropLastChar(String& t) {
 }
 const uint16_t* shown();  // o último quadro entregue à tela (RGB565, byte alto primeiro)
 void clear(uint16_t c = color::BG);  // mais rápido que fillScreen na PSRAM
-// A próxima troca de tela desliza: -1 o conteúdo sai pela esquerda, +1 pela direita.
+// A próxima troca de tela desliza: -1 o conteúdo sai pela esquerda, +1 pela direita, UP sobe e revela a nova.
+constexpr int UP = 2;
 void slide(int dir);
 
 // Papéis de texto. Em tela grande são Inter com anti-aliasing; nas pequenas, as fontes bitmap.

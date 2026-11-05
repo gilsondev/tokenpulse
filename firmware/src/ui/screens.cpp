@@ -227,7 +227,7 @@ void go(int to, int dir) {
   sessWs = -1;
   if (to == page) return;
   page = to;
-  gfx::slide(dir);
+  if (dir) gfx::slide(dir);
   anim::reset();
 }
 
@@ -237,13 +237,17 @@ void bootSplash() {
   const char* steps[] = {"iniciando a tela", "lendo o sensor de movimento", "pronto"};
   uint32_t t0 = millis();
   for (float p = 0; p < 1; p = (millis() - t0) / 1400.f) {
-    gfx::loading(gfx::BOOT, "claude · tokens", steps[min(2, (int)(p * 3))], p);
+    gfx::loading(gfx::BOOT, "tokenpulse", steps[min(2, (int)(p * 3))], p);
     board::setLed(0, 0, 18 * breath(1400));
   }
-  gfx::loading(gfx::OK, "claude · tokens", "pronto", 1, GREEN);
+  gfx::loading(gfx::BOOT, "tokenpulse", "pronto", 1);
 }
 
+uint32_t holdUntil = 0;
+void holdFor(uint32_t ms) { holdUntil = millis() + ms; }
+
 void render() {
+  if (millis() < holdUntil) return;
   power::update();
   const bool dark = settings::v.theme == 0 ? (bool)(app::frame["dark"] | true) : settings::v.theme == 2;
   if (dark != color::dark) color::apply(dark);
@@ -363,6 +367,11 @@ void tap(int x, int y) {
   next();
 }
 void home() { go(0, 1); }
+
+void homeUp() {
+  gfx::slide(gfx::UP);  // sempre sobe, até quando só fecha um painel aberto por cima da principal
+  go(0, 0);
+}
 void goTo(int to) { go(constrain(to, 0, count() - 1), to > page ? -1 : 1); }
 
 }  // namespace screens

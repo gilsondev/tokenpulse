@@ -75,7 +75,7 @@ void checkTouch() {
   Serial.printf("toque: %d,%d -> %d,%d em %lu ms\n", x0, y0, x, y, millis() - downMs);
   if (held) return;
   // arrastar para cima a partir da borda de baixo: volta para a principal de qualquer lugar, como no celular
-  if (y0 > gfx::height() - 36 && dy < -50 && abs(dy) > abs(dx)) screens::home();
+  if (y0 > gfx::height() - 36 && dy < -50 && abs(dy) > abs(dx)) screens::homeUp();
   else if (abs(dx) > 40 && abs(dx) > 2 * abs(dy)) dx < 0 ? screens::next() : screens::prev();
   else if (abs(dy) > 40 && abs(dy) > 2 * abs(dx)) screens::scroll(dy < 0 ? 1 : -1);
   else if (abs(dx) < 24 && abs(dy) < 24) screens::tap(x0, y0);

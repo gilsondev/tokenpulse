@@ -13,3 +13,6 @@ hardware/stand/original/
 hardware/stand/imprimir/
 hardware/stand/preview-berco.png
 hardware/stand/berco-encaixe.scad
+
+# configuração local do Claude Code
+.claude/

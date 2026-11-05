@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="tokenpulse">
+  <rect width="512" height="512" rx="112" fill="#1F1E1D"/>
+  <circle cx="256" cy="256" r="176" fill="none" stroke="#3A3936" stroke-width="44"/>
+  <path d="M256 80 A176 176 0 1 1 80 256" fill="none" stroke="#D97757" stroke-width="44" stroke-linecap="round"/>
+  <polyline points="150,256 210,256 234,180 266,324 290,256 362,256" fill="none" stroke="#F5F4EE"
+            stroke-width="26" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

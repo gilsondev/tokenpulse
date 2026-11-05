@@ -143,14 +143,20 @@ void present() {
   } else {
     float e = 1 - powf(1 - t, 3);    // ease-out cúbico
     int off = lroundf(w * (1 - e));  // quanto do quadro novo ainda falta entrar
-    for (int y = 0; y < h; y++) {
-      uint16_t *o = out + y * w, *p = prev + y * w, *c = frame + y * w;
-      if (slideDir < 0) {  // novo entra pela direita
-        memcpy(o, p + (w - off), off * 2);
-        memcpy(o + off, c, (w - off) * 2);
-      } else {
-        memcpy(o, c + off, (w - off) * 2);
-        memcpy(o + (w - off), p, off * 2);
+    if (slideDir == UP) {  // a tela atual sobe e revela a nova por baixo, como o gesto de início do celular
+      const int shift = h - lroundf(h * (1 - e));  // quanto a tela antiga já subiu
+      for (int y = 0; y < h; y++)
+        memcpy(out + y * w, y + shift < h ? prev + (y + shift) * w : frame + y * w, w * 2);
+    } else {
+      for (int y = 0; y < h; y++) {
+        uint16_t *o = out + y * w, *p = prev + y * w, *c = frame + y * w;
+        if (slideDir < 0) {  // novo entra pela direita
+          memcpy(o, p + (w - off), off * 2);
+          memcpy(o + off, c, (w - off) * 2);
+        } else {
+          memcpy(o, c + off, (w - off) * 2);
+          memcpy(o + (w - off), p, off * 2);
+        }
       }
     }
     frame = out;
@@ -417,10 +423,11 @@ void ringHalo(int cx, int cy, int r, int thick, float frac, uint16_t c, float al
 }
 
 void loading(Icon icon, const char* title, const char* status, float progress, uint16_t c) {
-  const int cx = width() / 2, cy = height() / 2 - s(20), r = s(34), u = s(12);
+  const bool logo = icon == BOOT;  // o boot mostra o logo: anel grosso com a linha de pulso no meio
+  const int cx = width() / 2, cy = height() / 2 - s(20), r = s(logo ? 44 : 34), u = s(12);
   const float lw = max(1.f, scale() * 1.4f);
   S().fillScreen(color::BG);
-  ring(cx, cy, r, s(5), progress, c, color::TRACK);
+  ring(cx, cy, r, logo ? r / 4 : s(5), progress, logo ? color::ACCENT : c, color::TRACK);
   auto line = [&](float x0, float y0, float x1, float y1) {
     S().drawWideLine(cx + x0 * u, cy + y0 * u, cx + x1 * u, cy + y1 * u, lw, color::TEXT);
   };
@@ -430,14 +437,22 @@ void loading(Icon icon, const char* title, const char* status, float progress, u
       break;
     case OK: line(-0.65f, 0, -0.15f, 0.5f), line(-0.15f, 0.5f, 0.7f, -0.45f); break;
     case FAIL: line(-0.55f, -0.55f, 0.55f, 0.55f), line(-0.55f, 0.55f, 0.55f, -0.55f); break;
-    case BOOT:  // asterisco girando devagar
-      for (int i = 0; i < 4; i++) {
-        float a = i * TAU / 8 + millis() / 1400.f;
-        line(-cosf(a), -sinf(a), cosf(a), sinf(a));
-      }
+    case BOOT: {
+      // a linha de pulso do logo (docs/assets/logo.svg), na escala do anel: pontos em unidades do raio de 176
+      static const int16_t P[][2] = {{-106, 0}, {-46, 0}, {-22, -76}, {10, 68}, {34, 0}, {106, 0}};
+      const float k = r / 176.f, w = max(1.5f, 13 * k);
+      for (int i = 1; i < 6; i++)
+        S().drawWideLine(cx + P[i - 1][0] * k, cy + P[i - 1][1] * k, cx + P[i][0] * k, cy + P[i][1] * k, w, color::TEXT);
       break;
+    }
   }
-  text(title, cx, cy + r + s(22), TITLE, color::TEXT, middle_center);
+  if (logo && !strcmp(title, "tokenpulse")) {  // o nome em duas cores, como no logotipo
+    const int tw = textWidth("token", TITLE), pw = textWidth("pulse", TITLE), x = cx - (tw + pw) / 2;
+    text("token", x, cy + r + s(22), TITLE, color::TEXT, middle_left);
+    text("pulse", x + tw, cy + r + s(22), TITLE, color::ACCENT, middle_left);
+  } else {
+    text(title, cx, cy + r + s(22), TITLE, color::TEXT, middle_center);
+  }
   text(status, cx, cy + r + s(44), SMALL, color::MUTED, middle_center);
   present();
 }

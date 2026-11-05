@@ -5,7 +5,8 @@
 //                  {"ota": tamanho, "md5": "..."}     seguido do .bin em blocos de 1 KB
 //                  imu                                diagnóstico: leitura crua da gravidade
 //                  shot                               a placa manda SHOT w h n e o último quadro cru
-//                  page N / tap X Y / swipe L|R|U|D      navegação remota, para testar e tirar screenshots
+//                  page N / tap X Y / swipe L|R|U|D|H    navegação remota, para testar e tirar screenshots
+//                  splash                             mostra a abertura por 3 s (screenshot da tela de boot)
 //   placa -> Mac   OK / DONE / ERRO ...               respostas do OTA; o resto é log
 
 #include <Arduino.h>

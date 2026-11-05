@@ -350,6 +350,7 @@ def sessions(state, titles, herdr, events, now):
     tokens = {}
     for e in events:
         tokens[e.session] = tokens.get(e.session, 0) + e.total
+    seen = herdr and terminal_in_front()  # o foco do herdr só conta se a janela do terminal está na frente
     groups = {}
     for sid in set(state) | set(herdr):
         s, h = state.get(sid), herdr.get(sid)
@@ -374,14 +375,14 @@ def sessions(state, titles, herdr, events, now):
         # sem herdr na máquina, o agrupamento natural é o projeto (pasta) da sessão
         group = h["ws"] if h else OUTSIDE if herdr else (0, folder)
         groups.setdefault(group, []).append((st, -(s["ts"] if s else 0), row, sid[:8],
-                                                               bool(h and h["focused"])))
+                                              bool(seen and h and h["focused"])))
     order = {"block": 0, "work": 1, "turn": 2, "idle": 3}
     ws, rows = [], []
     for i, (key, items) in enumerate(sorted(groups.items())):
         items.sort(key=lambda r: (order[r[0]], r[1]))
         count = lambda st: sum(1 for r in items if r[0] == st)
         ws.append([cut(key[1], 32), len(items), count("work"), count("block"), count("turn"),
-                   1 if key == _herdr.get("focused_ws") else 0])
+                   1 if seen and key == _herdr.get("focused_ws") else 0])
         rows += [r[2] + [i, r[3], 1 if r[4] else 0] for r in items[:MAX_PER_WS]]
     return {"n": sum(w[1] for w in ws), "ws": ws, "rows": rows[:MAX_SESSIONS]}
 
@@ -506,6 +507,30 @@ def terminal_app():
     except (OSError, ValueError):
         pass
     return None
+
+
+_front = {"at": 0.0, "path": "", "term_at": 0.0, "term": None}
+
+
+def frontmost_app():
+    """Caminho do .app em primeiro plano no Mac (lsappinfo, ~15 ms, sem permissão de acessibilidade)."""
+    if time.time() - _front["at"] > 1:
+        try:
+            asn = subprocess.run(["lsappinfo", "front"], capture_output=True, text=True, timeout=2).stdout.strip()
+            out = subprocess.run(["lsappinfo", "info", "-only", "bundlepath", asn], capture_output=True, text=True,
+                                 timeout=2).stdout
+            _front["path"] = out.split("=", 1)[1].strip().strip('"') if "=" in out else ""
+        except (OSError, subprocess.TimeoutExpired):
+            _front["path"] = ""
+        _front["at"] = time.time()
+    return _front["path"]
+
+
+def terminal_in_front():
+    """O app de terminal do herdr está em primeiro plano: só então a sessão em foco no herdr é a que você vê."""
+    if time.time() - _front["term_at"] > 60:
+        _front["term"], _front["term_at"] = terminal_app(), time.time()
+    return bool(_front["term"]) and frontmost_app() == _front["term"]
 
 
 def focus_session(sid8):
@@ -778,7 +803,7 @@ def ota(port, path):
         return err
     for i in range(0, len(data), 1024):
         port.write(data[i:i + 1024])
-        if err := wait_for(port, "OK", 5):
+        if err := wait_for(port, "OK", 10):  # apagar um setor da flash às vezes passa de 5 s
             return f"{err} no byte {i}"
     return wait_for(port, "DONE", 15)
 

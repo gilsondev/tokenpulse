@@ -1,4 +1,12 @@
-# tokenpulse
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/wordmark-dark.svg">
+    <img src="docs/assets/wordmark-light.svg" alt="tokenpulse" width="420">
+  </picture>
+</p>
+
+<p align="center"><a href="https://gilsondev.github.io/tokenpulse/">Site do projeto</a> ·
+<a href="https://github.com/gilsondev/tokenpulse/releases/latest">Baixar o firmware</a></p>
 
 Um monitor de mesa para o uso do **Claude Code** (CLI e Desktop) numa tela ESP32 com touch. Ele mostra quanto
 da janela de 5 h e da semana você já usou, quantos tokens estão passando por minuto, o que cada sessão está
@@ -116,6 +124,7 @@ Recomendados:
 host/install.sh                                # daemon no login do macOS (log em ~/Library/Logs/tokenpulse.log)
 firmware/flash.sh --usb                        # primeira gravação, pela USB
 firmware/flash.sh                              # as próximas: OTA pela serial, ~15 s
+firmware/flash.sh guition-jc3248w535 --bin tokenpulse-guition-jc3248w535-ota.bin   # OTA de um release
 ```
 
 Opcional: aponte o `statusLine` do `~/.claude/settings.json` para `host/statusline.sh` (passe a sua statusline

@@ -74,6 +74,11 @@ void handle(const String& line) {
   } else if (line.startsWith("tap ")) {
     const int sp = line.indexOf(' ', 4);
     screens::tap(line.substring(4, sp).toInt(), line.substring(sp + 1).toInt());
+  } else if (line == "splash") {  // redesenha a abertura e a segura 3 s: para screenshot da tela de boot
+    screens::bootSplash();
+    screens::holdFor(3000);
+  } else if (line == "swipe H") {
+    screens::homeUp();
   } else if (line == "swipe U") {
     screens::scroll(1);
   } else if (line == "swipe D") {
