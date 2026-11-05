@@ -38,6 +38,23 @@ menor uso.
 Também tem animações com mola nas barras e no anel, halo na ponta do progresso, transições deslizando entre
 as telas, modo noite (22h–7h) e uma tela de diagnóstico quando o Mac some ("cabo USB / daemon / dados").
 
+## Sessões: com ou sem herdr
+
+O tokenpulse acompanha qualquer sessão do Claude Code: a CLI num terminal comum, o Claude Desktop e as sessões
+abertas no [herdr](https://herdr.dev). O herdr é opcional e só acrescenta detalhes:
+
+| | Sessões comuns (terminal, Desktop) | Sessões no herdr |
+|---|---|---|
+| Aparecem na tela | sim, as com atividade na última hora | sim, todos os painéis abertos |
+| Tokens, modelos, custo, histórico | sim (dos logs do Claude Code) | sim |
+| Estado (trabalhando, sua vez, parada) | estimado pelos logs | o do herdr, na hora |
+| "Precisa de você" (esperando aprovação) | — | sim |
+| Agrupamento | por projeto (pasta) | pelos workspaces do herdr |
+| Nome no cartão | título da sessão ou pasta | o nome que você deu à aba |
+| Sessão em foco e tocar para trazer à frente | Desktop: abre o app | sim, no painel do herdr |
+
+As duas convivem: com o herdr rodando, as sessões de fora dele aparecem num grupo "fora do herdr".
+
 ## Como funciona
 
 ```mermaid

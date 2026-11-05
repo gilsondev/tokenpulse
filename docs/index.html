@@ -120,6 +120,7 @@
     <a class="brand" href="#"><img src="assets/logo.svg" width="30" height="30" alt=""><span>token<b>pulse</b></span></a>
     <div class="links">
       <a href="#telas">Telas</a>
+      <a href="#sessoes">Sessões</a>
       <a href="#como-funciona">Como funciona</a>
       <a href="#instalar">Instalar</a>
       <a href="#ota">OTA</a>
@@ -149,7 +150,7 @@
     <p class="sub">Arraste para os lados para trocar de tela. Toque para abrir detalhes. Da borda de baixo para cima, volta para a principal de qualquer lugar.</p>
     <div class="grid">
       <div class="shot"><img src="screenshots/01-principal.png" alt="Tela principal" loading="lazy"><div><h3>Principal</h3><p>A janela de 5 h no anel, que muda de cor com o uso: verde, amarelo a 70%, laranja a 80%, vermelho a 90%. A semana com o ritmo esperado, tokens do dia, por minuto e a última hora.</p></div></div>
-      <div class="shot"><img src="screenshots/02-workspaces.png" alt="Sessões agrupadas por workspace" loading="lazy"><div><h3>Sessões por workspace</h3><p>Os workspaces do <a href="https://herdr.dev">herdr</a>, com quantas sessões estão trabalhando, esperando você ou na sua vez. O que está em foco ganha borda.</p></div></div>
+      <div class="shot"><img src="screenshots/02-workspaces.png" alt="Sessões agrupadas por workspace" loading="lazy"><div><h3>Sessões por workspace</h3><p>Os workspaces do <a href="https://herdr.dev">herdr</a>, com quantas sessões estão trabalhando, esperando você ou na sua vez. Sem herdr, as sessões do terminal e do Desktop se agrupam por projeto.</p></div></div>
       <div class="shot"><img src="screenshots/03-sessoes.png" alt="Cartões de sessão com mascote" loading="lazy"><div><h3>Sessões</h3><p>Cada sessão com um mascote que anda trabalhando, pula na sua vez, treme quando precisa de aprovação e dorme parada. Toque para trazê-la à frente no Mac.</p></div></div>
       <div class="shot"><img src="screenshots/04-modelos.png" alt="Modelos usados hoje" loading="lazy"><div><h3>Modelos</h3><p>Os modelos usados hoje e a fatia de cada um, com entrada, saída e cache.</p></div></div>
       <div class="shot"><img src="screenshots/05-modelo.png" alt="Detalhe de um modelo" loading="lazy"><div><h3>Detalhe do modelo</h3><p>Composição dos tokens, custo equivalente na API e os projetos que mais usaram.</p></div></div>
@@ -173,6 +174,24 @@
       <div class="feature"><div class="ico">↑</div><h3>Atualiza pela USB</h3><p>Firmware novo em cerca de 15 segundos, com verificação de md5 e a versão anterior preservada se algo falhar.</p></div>
       <div class="feature"><div class="ico">⌂</div><h3>Seus dados ficam no Mac</h3><p>Nada vai para a nuvem: os logs, o token e as sessões ficam no seu computador. A placa só desenha.</p></div>
     </div>
+  </div>
+</section>
+
+<section id="sessoes">
+  <div class="wrap">
+    <h2>Sessões: com ou sem herdr</h2>
+    <p class="sub">O tokenpulse acompanha qualquer sessão do Claude Code: a CLI num terminal comum, o Claude Desktop e as sessões abertas no <a href="https://herdr.dev">herdr</a>. O herdr é opcional e só acrescenta detalhes.</p>
+    <div class="tbl"><table>
+      <tr><th></th><th>Sessões comuns (terminal, Desktop)</th><th>Sessões no herdr</th></tr>
+      <tr><td>Aparecem na tela</td><td>sim, as com atividade na última hora</td><td>sim, todos os painéis abertos</td></tr>
+      <tr><td>Tokens, modelos, custo, histórico</td><td>sim, dos logs do Claude Code</td><td>sim</td></tr>
+      <tr><td>Estado (trabalhando, sua vez, parada)</td><td>estimado pelos logs</td><td>o do herdr, na hora</td></tr>
+      <tr><td>"Precisa de você" (esperando aprovação)</td><td>—</td><td>sim</td></tr>
+      <tr><td>Agrupamento</td><td>por projeto (pasta)</td><td>pelos workspaces do herdr</td></tr>
+      <tr><td>Nome no cartão</td><td>título da sessão ou pasta</td><td>o nome que você deu à aba</td></tr>
+      <tr><td>Tocar para trazer à frente</td><td>Desktop: abre o app</td><td>sim, no painel do herdr</td></tr>
+    </table></div>
+    <p class="note" style="text-align:left">As duas convivem: com o herdr rodando, as sessões de fora dele aparecem num grupo "fora do herdr".</p>
   </div>
 </section>
 
