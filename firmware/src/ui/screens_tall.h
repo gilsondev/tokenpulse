@@ -24,6 +24,8 @@ bool accountTap(int x, int y);   // pediu uma troca de conta ao Mac; false: fech
 bool aboutRestartAt(int y);      // o toque caiu no botão de reiniciar
 bool gearAt(int x, int y);       // o toque caiu na engrenagem do cabeçalho
 bool orgTitleAt(int x, int y);   // o toque caiu no nome da org (tela principal)
+bool suggestionAt(int x, int y); // o toque caiu no botão "esgotado · trocar para…" (tela principal)
+bool sessionTap(int x, int y, int ws, int scroll);  // pediu ao Mac para trazer a sessão tocada
 void setGearActive(bool on);     // engrenagem acesa enquanto os ajustes estão abertos
 
 }  // namespace screens::tall

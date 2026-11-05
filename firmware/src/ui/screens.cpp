@@ -296,7 +296,7 @@ void scroll(int dir) {
 
 void tap(int x, int y) {
   if (!gfx::large()) return next();
-  if (page == 0 && !settingsOpen && tall::orgTitleAt(x, y)) {  // nome da org: lista de orgs para trocar
+  if (page == 0 && !settingsOpen && (tall::orgTitleAt(x, y) || tall::suggestionAt(x, y))) {  // lista de orgs
     gfx::slide(-1);
     settingsOpen = true, about = 3, orgFromHeader = true;
     anim::reset();
@@ -350,7 +350,10 @@ void tap(int x, int y) {
       anim::reset();
       return;
     }
-    if (sessWs >= 0) return;  // toque num cartão de sessão: nada por enquanto
+    if (sessWs >= 0) {  // toque num cartão: traz a sessão para a frente no Mac
+      tall::sessionTap(x, y, sessWs, sessScroll);
+      return;
+    }
   }
   if (page == 3) {
     const int d = tall::historyBarAt(x, y);

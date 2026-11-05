@@ -109,6 +109,18 @@ void header(bool live, const char* title, bool dropdown = false) {
   fb().fillSmoothCircle(W() - M - w - 8, 39, 3, live ? GREEN : RED);
 }
 
+// Outra org salva no cswap para sugerir quando a janela esgota: a de menor % conhecido.
+const char* suggestedOrg() {
+  const char* best = nullptr;
+  int bestPct = 1000;
+  for (JsonArrayConst a : app::frame["accts"].as<JsonArrayConst>()) {
+    if ((int)a[2]) continue;  // a org em uso
+    const int pct = (int)(a[4] | -1) < 0 ? 500 : (int)a[4];
+    if (pct < bestPct) bestPct = pct, best = a[1] | "";
+  }
+  return best;
+}
+
 // Dígitos em células de largura fixa: o número não treme enquanto conta.
 void heroNumber(const char* s, int cx, int cy, uint16_t c) {
   const int cell = gfx::textWidth("0", gfx::HERO);
@@ -181,7 +193,17 @@ void drawMain(bool live, int page) {
   heroNumber(buf, cx, cy, stale ? DIM : p5 < 0 ? TEXT : lc);  // o número na cor da faixa, como o anel
   if (app::stale()) snprintf(buf, sizeof buf, "atualizado há %d min", app::dataAge() / 60);
   ringText(app::stale() ? buf : (const char*)(f["r5"] | ""), 44, gfx::LABEL, app::stale() ? AMBER : MUTED);
-  if (!stale && p5 >= 80) text(p5 >= 90 ? "no limite" : "perto do limite", cx, cy + r + 14, gfx::SMALL, levelColor(p5), middle_center);
+  const char* other = suggestedOrg();
+  if (!stale && p5 >= 100 && other) {  // janela esgotada e há outra org salva: oferece a troca
+    snprintf(buf, sizeof buf, "esgotado · trocar para %s ›", other);
+    const String t = fit(buf, gfx::SMALL, W() - 2 * M - 24);
+    const int bw = gfx::textWidth(t.c_str(), gfx::SMALL) + 24;
+    fb().fillSmoothRoundRect(cx - bw / 2, cy + r + 2, bw, 26, 13, RED);
+    text(t.c_str(), cx, cy + r + 15, gfx::SMALL, BG, middle_center, RED);
+  } else if (!stale && p5 >= 80) {
+    text(p5 >= 100 ? "esgotado" : p5 >= 90 ? "no limite" : "perto do limite", cx, cy + r + 14, gfx::SMALL, levelColor(p5),
+         middle_center);
+  }
 
   // Semana, com o marcador do ritmo linear: barra à frente do marcador = uso adiantado.
   const int wy = 290, bw = W() - 2 * M;
@@ -302,6 +324,28 @@ void drawWaiting() {
 }
 
 constexpr int GRID_Y = 62, CARD_W = 140, CARD_H = 120, CARD_GAP = 8;
+int focusReqIdx = -1;  // cartão tocado por último, para piscar a borda enquanto o Mac responde
+uint32_t focusReqMs = 0;
+
+// Cartão com borda laranja quando é o que está em foco no Mac (painel ativo do herdr).
+void card(int x, int y, int w, int h, int r, uint16_t fill, bool focused) {
+  if (focused) {
+    fb().fillSmoothRoundRect(x, y, w, h, r, ACCENT);
+    fb().fillSmoothRoundRect(x + 2, y + 2, w - 4, h - 4, r - 2, fill);
+  } else {
+    fb().fillSmoothRoundRect(x, y, w, h, r, fill);
+  }
+}
+
+// Índices em sess.rows das sessões do workspace `ws`, na ordem do daemon (já por estado); devolve quantas.
+int sessionsOf(int ws, int* ids, int max) {
+  JsonArrayConst rows = app::frame["sess"]["rows"];
+  int n = 0;
+  for (int r = 0; r < (int)rows.size() && n < max; r++)
+    if ((int)rows[r][5] == ws) ids[n++] = r;
+  return n;
+}
+int sessFrom(int scroll, int n) { return min(scroll * 6, max(0, n - 1) / 6 * 6); }
 
 // Primeiro workspace à mostra: o desenho e o toque usam a mesma conta (a lista pode encolher).
 int wsFrom(int scroll, int n) { return min(scroll * 10, max(0, n - 1) / 10 * 10); }
@@ -323,15 +367,15 @@ void drawWorkspaces(bool live, int page, int scroll) {
     JsonArrayConst w = ws[i];
     const int k = i - from, x = M + (k % 2) * (CARD_W + CARD_GAP), y = WS_Y + (k / 2) * (WS_H + WS_GAP);
     const int total = w[1], work = w[2], block = w[3], turn = w[4];
-    const uint16_t card = block ? blend(BG, RED, 0.16f) : blend(BG, TRACK, work || turn ? 0.6f : 0.35f);
+    const uint16_t cardBg = block ? blend(BG, RED, 0.16f) : blend(BG, TRACK, work || turn ? 0.6f : 0.35f);
     const float in = anim::entrance(k);
-    fb().fillSmoothRoundRect(x, y + (int)((1 - in) * 12), CARD_W, WS_H, 12, card);
+    card(x, y + (int)((1 - in) * 12), CARD_W, WS_H, 12, cardBg, (int)(w[5] | 0));
     if (in < 0.9f) continue;
-    text(fit(w[0], gfx::LABEL, CARD_W - 24).c_str(), x + 12, y + 10, gfx::LABEL, TEXT, top_left, card);
+    text(fit(w[0], gfx::LABEL, CARD_W - 24).c_str(), x + 12, y + 10, gfx::LABEL, TEXT, top_left, cardBg);
     snprintf(buf, sizeof buf, total == 1 ? "1 sessão" : "%d sessões", total);
     int cx = x + 12;
     if (!work && !block && !turn) {
-      text(buf, cx, y + 40, gfx::SMALL, DIM, top_left, card);
+      text(buf, cx, y + 40, gfx::SMALL, DIM, top_left, cardBg);
       continue;
     }
     // um ponto colorido com a contagem para cada estado que importa
@@ -340,7 +384,7 @@ void drawWorkspaces(bool live, int page, int scroll) {
       if (!ch.count) continue;
       fb().fillSmoothCircle(cx + 4, y + 48, 4, ch.c);
       snprintf(buf, sizeof buf, "%d", ch.count);
-      text(buf, cx + 12, y + 40, gfx::SMALL, ch.c, top_left, card);
+      text(buf, cx + 12, y + 40, gfx::SMALL, ch.c, top_left, cardBg);
       cx += 12 + gfx::textWidth(buf, gfx::SMALL) + 10;
     }
   }
@@ -364,11 +408,9 @@ void drawSessions(bool live, int page, int ws, int scroll) {
   }
   // as sessões do workspace, na ordem em que vieram (já ordenadas por estado)
   JsonArrayConst rows = app::frame["sess"]["rows"];
-  int ids[48], shown = 0;
-  for (int r = 0; r < (int)rows.size() && shown < 48; r++)
-    if ((int)rows[r][5] == ws) ids[shown++] = r;
+  int ids[48];
+  const int shown = sessionsOf(ws, ids, 48), from = sessFrom(scroll, shown);
   JsonArrayConst w = app::frame["sess"]["ws"][ws];
-  const int from = min(scroll * 6, max(0, shown - 1) / 6 * 6);
   if (shown > 6) snprintf(buf, sizeof buf, "‹ %s · %d–%d de %d", (const char*)(w[0] | "?"), from + 1, min(from + 6, shown), (int)(w[1] | 0));
   else snprintf(buf, sizeof buf, "‹ %s", (const char*)(w[0] | "?"));
   header(live, buf);
@@ -382,22 +424,25 @@ void drawSessions(bool live, int page, int ws, int scroll) {
                               : !strcmp(state, "turn")  ? mascot::TURN
                               : !strcmp(state, "block") ? mascot::BLOCK
                                                         : mascot::IDLE;
-    const uint16_t card = mood == mascot::BLOCK ? blend(BG, RED, 0.16f) : blend(BG, TRACK, mood == mascot::IDLE ? 0.35f : 0.6f);
+    const uint16_t cardBg = mood == mascot::BLOCK ? blend(BG, RED, 0.16f) : blend(BG, TRACK, mood == mascot::IDLE ? 0.35f : 0.6f);
+    // tocado agora há pouco: a borda pisca enquanto o Mac traz a sessão para a frente
+    const bool asked = focusReqIdx == ids[idx] && anim::since(focusReqMs, 900) < 1;
+    const bool focused = (int)(row[7] | 0) || (asked && (millis() - focusReqMs) / 150 % 2);
     const float in = anim::entrance(i);
-    fb().fillSmoothRoundRect(x, y + (int)((1 - in) * 16), CARD_W, CARD_H, 14, card);
+    card(x, y + (int)((1 - in) * 16), CARD_W, CARD_H, 14, cardBg, focused);
     if (in < 0.9f) {
       i++;
       continue;
     }
-    mascot::draw(x + 12, y + 14, 4, mood, card, i);
+    mascot::draw(x + 12, y + 14, 4, mood, cardBg, i);
     const char* origin = row[1] | "CLI";
-    badge(origin, x + CARD_W - 10, y + 12, !strcmp(origin, "Desk") ? ACCENT : GREEN, card);
-    text(row[3], x + CARD_W - 10, y + 40, gfx::SMALL, DIM, top_right, card);
+    badge(origin, x + CARD_W - 10, y + 12, !strcmp(origin, "Desk") ? ACCENT : GREEN, cardBg);
+    text(row[3], x + CARD_W - 10, y + 40, gfx::SMALL, DIM, top_right, cardBg);
     // título da sessão em até duas linhas, quebrado nas palavras
     const int maxW = CARD_W - 24;
     String l2, name = wrap2(row[0] | "", gfx::LABEL, maxW, l2);
-    text(fit(name.c_str(), gfx::LABEL, maxW).c_str(), x + 12, y + 56, gfx::LABEL, TEXT, top_left, card);
-    if (l2.length()) text(fit(l2.c_str(), gfx::LABEL, maxW).c_str(), x + 12, y + 75, gfx::LABEL, TEXT, top_left, card);
+    text(fit(name.c_str(), gfx::LABEL, maxW).c_str(), x + 12, y + 56, gfx::LABEL, TEXT, top_left, cardBg);
+    if (l2.length()) text(fit(l2.c_str(), gfx::LABEL, maxW).c_str(), x + 12, y + 75, gfx::LABEL, TEXT, top_left, cardBg);
     const int mins = row[4];
     if (mood == mascot::WORK) strcpy(buf, "trabalhando");
     else if (mood == mascot::BLOCK) strcpy(buf, "precisa de você");
@@ -406,10 +451,23 @@ void drawSessions(bool live, int page, int ws, int scroll) {
     else if (mins >= 120) snprintf(buf, sizeof buf, "parada há %dh", mins / 60);
     else snprintf(buf, sizeof buf, "parada há %d min", mins);
     const uint16_t sc = mood == mascot::WORK ? GREEN : mood == mascot::BLOCK ? RED : mood == mascot::TURN ? ACCENT : DIM;
-    text(buf, x + 12, y + 100, gfx::SMALL, sc, top_left, card);
+    text(buf, x + 12, y + 100, gfx::SMALL, sc, top_left, cardBg);
     i++;
   }
   dots(page);
+}
+
+// Toque num cartão de sessão: pede ao Mac para trazer a sessão (painel do herdr ou Claude Desktop).
+bool sessionTap(int x, int y, int ws, int scroll) {
+  int ids[48];
+  const int shown = sessionsOf(ws, ids, 48), row = (y - GRID_Y) / (CARD_H + CARD_GAP), col = (x - M) / (CARD_W + CARD_GAP);
+  const int i = sessFrom(scroll, shown) + row * 2 + col;
+  if (y < GRID_Y || row > 2 || col < 0 || col > 1 || i >= shown) return false;
+  const char* sid = app::frame["sess"]["rows"][ids[i]][6] | "";
+  if (!*sid) return false;
+  Serial.printf("ACTION focus %s\n", sid);
+  focusReqIdx = ids[i], focusReqMs = millis();
+  return true;
 }
 
 int modelAt(int y) {
@@ -600,7 +658,7 @@ int settingsTap(int x, int y) {
 }
 
 // Sobre: o que a placa sabe de si mesma, e reiniciar com toque duplo de confirmação.
-constexpr int RESTART_Y = 372;
+constexpr int RESTART_Y = 384;
 
 void drawAbout(bool live, bool armed) {
   char buf[64];
@@ -610,8 +668,12 @@ void drawAbout(bool live, bool armed) {
   if (up >= 60) snprintf(buf, sizeof buf, "%luh%02lu", up / 60, up % 60);
   else snprintf(buf, sizeof buf, "%lu min", up);
   String upTxt = buf;
-  snprintf(buf, sizeof buf, "%u KB · PSRAM %u KB", ESP.getFreeHeap() / 1024, ESP.getFreePsram() / 1024);
-  String mem = buf;
+  // livre de quanto: só o livre ("6168 KB") parecia memória acabando
+  snprintf(buf, sizeof buf, "%.1f de %.1f MB livres", ESP.getFreePsram() / 1048576.f, ESP.getPsramSize() / 1048576.f);
+  String psram = buf;
+  psram.replace('.', ',');
+  snprintf(buf, sizeof buf, "%u de %u KB livres", ESP.getFreeHeap() / 1024, ESP.getHeapSize() / 1024);
+  String ram = buf;
   if (live) strcpy(buf, "ao vivo pela USB");
   else if (app::lastFrameMs) snprintf(buf, sizeof buf, "sem dados há %lu min", (millis() - app::lastFrameMs) / 60000);
   else strcpy(buf, "esperando o Mac");
@@ -620,24 +682,28 @@ void drawAbout(bool live, bool armed) {
   String pct = app::stale() ? String(buf) : String("em dia");
   const char* items[][2] = {
       {"placa", board::NAME},          {"firmware", hostlink::firmware()}, {"ligada há", upTxt.c_str()},
-      {"memória livre", mem.c_str()},  {"conexão", link.c_str()},          {"% de uso", pct.c_str()},
+      {"PSRAM (telas e caches)", psram.c_str()}, {"RAM interna", ram.c_str()},  {"conexão", link.c_str()},          {"% de uso", pct.c_str()},
   };
   int y = 70;
   for (auto& it : items) {
     text(it[0], M, y, gfx::SMALL, DIM);
     text(it[1], M, y + 18, gfx::LABEL, TEXT);
-    y += 48;
+    y += 44;
   }
   const uint16_t c = armed ? RED : blend(BG, TRACK, 0.7f);
   fb().fillSmoothRoundRect(M, RESTART_Y, W() - 2 * M, 48, 12, c);
   text(armed ? "toque de novo para reiniciar" : "reiniciar a placa", W() / 2, RESTART_Y + 24, gfx::LABEL, armed ? BG : TEXT,
        middle_center, c);
-  text("toque fora para voltar aos ajustes", W() / 2, gfx::height() - 34, gfx::SMALL, DIM, middle_center);
+  text("toque fora para voltar aos ajustes", W() / 2, gfx::height() - 22, gfx::SMALL, DIM, middle_center);
 }
 
 bool aboutRestartAt(int y) { return y >= RESTART_Y && y < RESTART_Y + 48; }
 bool gearAt(int x, int y) { return x >= W() - 64 && y < 52; }
 bool orgTitleAt(int x, int y) { return x < W() / 2 && y < 30; }
+bool suggestionAt(int x, int y) {
+  const int p5 = app::frame["p5"] | -1;
+  return p5 >= 100 && suggestedOrg() && y >= 262 && y < 292 && x > M && x < W() - M;  // botão sob o anel
+}
 void setGearActive(bool on) { gearActive = on; }
 
 // Conta: a org atual, as contas que o cswap conhece e o login de uma org nova. A troca roda no Mac

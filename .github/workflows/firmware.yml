@@ -1,0 +1,66 @@
+# Compila o firmware das placas em todo push e PR. Numa tag v* (ex.: v0.2.0) publica um release com,
+# por placa, o .bin de OTA (firmware/flash.sh) e a imagem completa para a primeira gravação pela USB.
+name: firmware
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        board: [guition-jc3248w535, waveshare-s3-lcd-147b]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: pio-${{ runner.os }}-${{ hashFiles('firmware/platformio.ini') }}
+      - run: pip install platformio
+      - name: Compilar
+        working-directory: firmware
+        env:
+          # a versão aparece no Sobre e no handshake com o daemon: a tag no release, o commit no resto
+          PLATFORMIO_BUILD_FLAGS: '-DFW_VERSION=\"${{ github.ref_type == ''tag'' && github.ref_name || github.sha }}\"'
+        run: pio run -e ${{ matrix.board }}
+      - name: Imagem completa (bootloader + partições + app)
+        working-directory: firmware
+        run: |
+          B=.pio/build/${{ matrix.board }}
+          python ~/.platformio/packages/tool-esptoolpy/esptool.py --chip esp32s3 merge_bin -o "$B/factory.bin" \
+            0x0 "$B/bootloader.bin" 0x8000 "$B/partitions.bin" \
+            0xe000 ~/.platformio/packages/framework-arduinoespressif32/tools/partitions/boot_app0.bin \
+            0x10000 "$B/firmware.bin"
+          mkdir -p ../dist
+          cp "$B/firmware.bin" "../dist/tokenpulse-${{ matrix.board }}-ota.bin"
+          cp "$B/factory.bin" "../dist/tokenpulse-${{ matrix.board }}-factory.bin"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: firmware-${{ matrix.board }}
+          path: dist/*
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Publicar o release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ github.ref_name }}" dist/* --repo "${{ github.repository }}" \
+            --title "${{ github.ref_name }}" --generate-notes

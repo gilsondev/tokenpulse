@@ -16,28 +16,50 @@ fazendo e quanto esse uso custaria pela API. Tudo ao vivo, pela USB, sem Wi-Fi.
 | | | |
 |:-:|:-:|:-:|
 | ![Principal](docs/screenshots/01-principal.png) | ![Workspaces](docs/screenshots/02-workspaces.png) | ![Sessões de um workspace](docs/screenshots/03-sessoes.png) |
-| **Principal**: a janela de 5 h no anel (verde, amarelo a 70%, laranja a 80%, vermelho a 90%), a semana com o ritmo esperado, tokens do dia, tokens por minuto e a última hora. | **Sessões por workspace** do [herdr](https://herdr.dev), com quantas estão trabalhando, esperando você ou na sua vez. | **Sessões** de um workspace, cada uma com um mascote no estado dela: anda trabalhando, pula na sua vez, treme quando precisa de aprovação, dorme parada. |
+| **Principal**: a janela de 5 h no anel (verde, amarelo a 70%, laranja a 80%, vermelho a 90%), a semana com o ritmo esperado, tokens do dia, tokens por minuto e a última hora. | **Sessões por workspace** do [herdr](https://herdr.dev), com quantas estão trabalhando, esperando você ou na sua vez. O workspace em foco no Mac ganha borda laranja. Sem herdr, as sessões vêm dos logs e se agrupam por projeto. | **Sessões** de um workspace, cada uma com um mascote no estado dela: anda trabalhando, pula na sua vez, treme quando precisa de aprovação, dorme parada. A sessão em foco tem borda; tocar num cartão traz a sessão para a frente no Mac (o painel do herdr no seu terminal, ou o Claude Desktop). |
 | ![Modelos](docs/screenshots/04-modelos.png) | ![Detalhe do modelo](docs/screenshots/05-modelo.png) | ![Histórico](docs/screenshots/06-historico.png) |
 | **Modelos** usados hoje e a fatia de cada um. | **Detalhe do modelo**: entrada, saída e cache, custo equivalente na API e os projetos que mais usaram. | **Histórico** de 14 dias; toque numa barra para ver o dia. |
 | ![Ajustes](docs/screenshots/07-ajustes.png) | ![Trocar de org](docs/screenshots/08-org.png) | ![Sobre](docs/screenshots/09-sobre.png) |
 | **Ajustes** pela engrenagem: brilho, escurecer quando parada, tema (segue o macOS), girar 180°, ocultar custo. | **Trocar de org** pelo nome no topo, com o último % de cada uma. Usa o [claude-swap](https://github.com/realiti4/claude-swap) e pede dois toques, porque troca o login de todas as sessões do Mac. | **Sobre**: placa, firmware, memória, conexão e reiniciar. |
+
+<p align="center"><img src="docs/screenshots/10-esgotado.png" alt="Janela de 5 h esgotada, com o botão para trocar de org" width="32%"></p>
+
+Quando a janela de 5 h esgota e há outra org salva no claude-swap, a tela principal sugere a troca para a de
+menor uso.
 
 Também tem animações com mola nas barras e no anel, halo na ponta do progresso, transições deslizando entre
 as telas, modo noite (22h–7h) e uma tela de diagnóstico quando o Mac some ("cabo USB / daemon / dados").
 
 ## Como funciona
 
-```
-~/.claude/projects/**/*.jsonl ─┐
-API de uso da Anthropic (OAuth)─┤
-herdr agent list ───────────────┼─▶ host/tokend.py ──USB, 1 JSON/s──▶ ESP32 (firmware/) ──▶ tela
-cswap list ─────────────────────┘        ▲                                │
-                                         └──── ACTION switch/login ───────┘  (toques na tela)
+```mermaid
+flowchart LR
+    subgraph mac["Mac"]
+        logs["Logs do Claude Code<br/>~/.claude/projects/**/*.jsonl"]
+        api["API de uso da Anthropic<br/>(token OAuth do Keychain)"]
+        herdr["herdr<br/>agent list · workspace list"]
+        cswap["claude-swap<br/>cswap list"]
+        daemon["host/tokend.py<br/>LaunchAgent"]
+        logs --> daemon
+        api --> daemon
+        herdr --> daemon
+        cswap --> daemon
+    end
+    subgraph esp["ESP32 (firmware/)"]
+        link["hostlink<br/>JSON por linha"]
+        ui["telas · anel · sessões<br/>modelos · histórico"]
+        panel["tela 320×480<br/>+ touch"]
+        link --> ui --> panel
+    end
+    daemon -- "USB serial: 1 frame JSON/s" --> link
+    panel -- "toques" --> ui
+    ui -- "ACTION focus / switch / login" --> daemon
 ```
 
 O Mac faz o trabalho pesado: o daemon `host/tokend.py` lê os logs do Claude Code, busca o % na mesma API que
 o Claude Code usa e manda um frame por segundo. A placa só desenha, com fontes Inter suaves, anti-aliasing e
-envio da tela em paralelo no segundo núcleo (~30 fps).
+envio da tela em paralelo no segundo núcleo (~30 fps). As ações que a placa pede são uma lista fechada
+(`focus`, `switch`, `login`): o daemon nunca executa texto vindo da serial.
 
 ## Dispositivos suportados
 
@@ -69,6 +91,15 @@ qual placa está rodando.
    ~240×240 pede PSRAM: o canvas usa largura × altura × 2 bytes, em dobro.
 5. Grave a primeira vez pela USB: `firmware/flash.sh <sua-placa> --usb`. Depois disso, o OTA pelo daemon.
 
+## Releases do firmware
+
+Cada tag `v*` gera um [release](https://github.com/gilsondev/tokenpulse/releases) pelo GitHub Actions com, por
+placa, `tokenpulse-<placa>-ota.bin` (para o OTA) e `tokenpulse-<placa>-factory.bin` (primeira gravação):
+
+```bash
+esptool.py --chip esp32s3 write_flash 0x0 tokenpulse-guition-jc3248w535-factory.bin
+```
+
 ## Instalação
 
 Requisitos no Mac: [uv](https://docs.astral.sh/uv/), [PlatformIO](https://platformio.org/)
@@ -95,17 +126,19 @@ atual como argumento para encadear). Ela serve de reserva do % quando a API de u
 - Arraste para os lados para trocar de tela; para cima e para baixo para ver mais sessões.
 - Toque num workspace para ver as sessões e no título para voltar. Toque num modelo para o detalhe.
 - Segure para voltar à principal. Toque no nome da org para trocar de org; na engrenagem para os ajustes.
-- `host/shot.sh saida.png "page 1" "tap 80 90"` tira um screenshot da placa
-  (comandos: `page N`, `tap X Y`, `swipe L|R|U|D`).
 - `uv run host/tokend.py --demo` manda dados fictícios, como nas capturas acima
   (`TOKENPULSE_DEMO_P5=86` muda o % da janela de 5 h).
+- `host/shot.sh saida.png "page 1" "tap 80 90"` tira um screenshot da placa
+  (comandos: `page N`, `tap X Y`, `swipe L|R|U|D`). Por padrão só funciona com o daemon em `--demo`; com os seus
+  dados reais, rode `REAL=1 host/shot.sh …` e confira a imagem antes de publicar: ela mostra org, títulos de
+  sessão e custos.
+- `uv run host/tokend.py --once` imprime um frame com os seus dados reais: não cole em issues.
 
 ## Suporte de mesa
 
 Em [`hardware/stand/alternativa`](hardware/stand/alternativa) há um suporte inclinado sem parafuso para a
-Waveshare de 1,47", em OpenSCAD. O [`berco-encaixe.scad`](hardware/stand/berco-encaixe.scad) adapta o berço do
-[Waveshare ESP32-C6 1.47 Landscape stand](https://makerworld.com/en/models/3408098) para encaixe sem parafuso:
-baixe os STLs do autor no MakerWorld (a licença não permite redistribuí-los) para `hardware/stand/original/`.
+Waveshare de 1,47", em OpenSCAD, inspirado no
+[Waveshare ESP32-C6 1.47 Landscape stand](https://makerworld.com/en/models/3408098).
 
 ## Problemas conhecidos
 

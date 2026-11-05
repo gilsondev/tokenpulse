@@ -8,7 +8,8 @@ __pycache__/
 .remember/
 backups/
 
-# stand do MakerWorld (Standard Digital File License: não pode ser redistribuído, nem o remix)
+# stand do MakerWorld e o remix dele (Standard Digital File License: não podem ser redistribuídos)
 hardware/stand/original/
 hardware/stand/imprimir/
 hardware/stand/preview-berco.png
+hardware/stand/berco-encaixe.scad

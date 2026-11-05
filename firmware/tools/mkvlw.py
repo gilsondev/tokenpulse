@@ -21,7 +21,7 @@ FONTS = [
     ("inter_label", 16, 500, TEXT),
     ("inter_title", 20, 600, TEXT),
     ("inter_num", 30, 700, TEXT),
-    ("inter_hero", 64, 700, DIGITS),
+    ("inter_hero", 58, 700, DIGITS),  # 58 e não 64: "100%" cabe dentro do anel
 ]
 
 

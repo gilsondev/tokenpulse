@@ -113,6 +113,9 @@ void poll() {
 }
 
 uint32_t lastIdMs() { return idMs; }
-const char* firmware() { return __DATE__ " " __TIME__; }
+#ifndef FW_VERSION
+#define FW_VERSION "dev " __DATE__ " " __TIME__  // build local; o CI passa a tag (v1.2.0) em -DFW_VERSION
+#endif
+const char* firmware() { return FW_VERSION; }
 
 }  // namespace hostlink

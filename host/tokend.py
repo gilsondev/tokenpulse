@@ -237,7 +237,7 @@ def projects(events, now):
             for es in rows]
 
 
-_herdr = {"at": 0.0, "agents": {}}
+_herdr = {"at": 0.0, "agents": {}, "focused_ws": None}
 HERDR_STATE = {"working": "work", "blocked": "block", "done": "turn"}
 _STATE_TITLE = re.compile(r"^[●✳]?\s*[^:]*:\s*(done|ready|working|blocked|idle)$")
 
@@ -255,6 +255,8 @@ def herdr_agents():
         r = subprocess.run([HERDR, "workspace", "list"], capture_output=True, text=True, timeout=3)
         for w in json.loads(r.stdout)["result"]["workspaces"]:
             labels[w["workspace_id"]] = (w.get("number") or 99, w.get("label") or w["workspace_id"])
+            if w.get("focused"):
+                _herdr["focused_ws"] = labels[w["workspace_id"]]
         r = subprocess.run([HERDR, "agent", "list"], capture_output=True, text=True, timeout=3)
         for a in json.loads(r.stdout)["result"]["agents"]:
             sid = (a.get("agent_session") or {}).get("value")
@@ -262,7 +264,8 @@ def herdr_agents():
                 title = (a.get("terminal_title_stripped") or "").strip()
                 ws = labels.get(a.get("workspace_id"), (99, a.get("workspace_id") or "?"))
                 agents[sid] = {"status": a.get("agent_status"), "cwd": a.get("cwd") or "", "ws": ws,
-                               "title": "" if _STATE_TITLE.match(title) else title}
+                               "title": "" if _STATE_TITLE.match(title) else title, "pane": a.get("pane_id"),
+                               "focused": bool(a.get("focused")) and _herdr.get("focused_ws") == ws}
     except (OSError, ValueError, KeyError, subprocess.TimeoutExpired):
         pass
     _herdr.update(at=time.time(), agents=agents)
@@ -295,8 +298,9 @@ OUTSIDE = (1000, "fora do herdr")  # Desktop e terminais sem herdr, depois dos w
 
 def sessions(state, titles, herdr, events, now):
     """Sessões agrupadas pelos workspaces do herdr.
-    ws: [nome, sessões, trabalhando, precisa de você, sua vez], na ordem do herdr.
-    rows: [nome, CLI/Desk, estado, tokens, minutos desde a última atividade (-1: sem dado), índice do workspace].
+    ws: [nome, sessões, trabalhando, precisa de você, sua vez, em foco], na ordem do herdr.
+    rows: [nome, CLI/Desk, estado, tokens, minutos desde a última atividade (-1: sem dado), índice do workspace,
+           id curto da sessão (para o toque trazê-la à frente), em foco no herdr].
     Entram todos os painéis de Claude do herdr e as outras sessões com atividade na última hora.
     Estado: block (esperando você aprovar), work, turn (o Claude terminou, sua vez) ou idle.
     O estado do herdr vale mais que a heurística do .jsonl; o nome é o título da sessão quando existe."""
@@ -322,14 +326,19 @@ def sessions(state, titles, herdr, events, now):
         origin = "Desk" if s and s["entry"] == "claude-desktop" else "CLI"
         row = [cut(name, 48), origin, st, fmt_tokens(tokens[sid]) if sid in tokens else "--",
                int(age // 60) if age is not None else -1]
-        groups.setdefault(h["ws"] if h else OUTSIDE, []).append((st, -(s["ts"] if s else 0), row))
+        _known_sessions[sid[:8]] = {"pane": h["pane"] if h else None, "desk": origin == "Desk"}
+        # sem herdr na máquina, o agrupamento natural é o projeto (pasta) da sessão
+        group = h["ws"] if h else OUTSIDE if herdr else (0, folder)
+        groups.setdefault(group, []).append((st, -(s["ts"] if s else 0), row, sid[:8],
+                                                               bool(h and h["focused"])))
     order = {"block": 0, "work": 1, "turn": 2, "idle": 3}
     ws, rows = [], []
     for i, (key, items) in enumerate(sorted(groups.items())):
         items.sort(key=lambda r: (order[r[0]], r[1]))
         count = lambda st: sum(1 for r in items if r[0] == st)
-        ws.append([cut(key[1], 32), len(items), count("work"), count("block"), count("turn")])
-        rows += [r[2] + [i] for r in items[:MAX_PER_WS]]
+        ws.append([cut(key[1], 32), len(items), count("work"), count("block"), count("turn"),
+                   1 if key == _herdr.get("focused_ws") else 0])
+        rows += [r[2] + [i, r[3], 1 if r[4] else 0] for r in items[:MAX_PER_WS]]
     return {"n": sum(w[1] for w in ws), "ws": ws, "rows": rows[:MAX_SESSIONS]}
 
 
@@ -433,11 +442,49 @@ def accounts_frame():
     return out
 
 
+_known_sessions = {}  # id curto -> painel do herdr ou Desktop: o "focus" só aceita sessões listadas aqui
+
+
+def terminal_app():
+    """App de terminal onde o cliente do herdr roda (Warp, iTerm, Ghostty…), achado subindo a árvore de
+    processos até um .app; None se não achar."""
+    try:
+        pid = subprocess.run(["pgrep", "-x", "herdr"], capture_output=True, text=True).stdout.split()
+        for p in pid:
+            for _ in range(8):
+                out = subprocess.run(["ps", "-o", "ppid=,comm=", "-p", p], capture_output=True, text=True).stdout.strip()
+                if not out:
+                    break
+                ppid, comm = out.split(None, 1)
+                if ".app/" in comm:
+                    return comm[:comm.index(".app/") + 4]
+                p = ppid
+    except (OSError, ValueError):
+        pass
+    return None
+
+
+def focus_session(sid8):
+    """Traz a sessão para a frente no Mac: o painel no herdr e o app de terminal, ou o Claude Desktop."""
+    target = _known_sessions.get(sid8)
+    if not target:
+        return
+    if target["pane"]:
+        subprocess.run([HERDR, "agent", "focus", target["pane"]], capture_output=True, timeout=5)
+        app = terminal_app()
+        if app:
+            subprocess.run(["open", "-a", app], capture_output=True, timeout=5)
+    elif target["desk"]:
+        subprocess.run(["open", "-a", "Claude"], capture_output=True, timeout=5)
+
+
 def run_action(cmd):
     """Ação pedida pela placa: "switch N" troca para a conta N do cswap; "login" entra numa org nova.
     Conta com login válido troca na hora; sem ele, abre o login do Claude Code no navegador e, quando
     ele terminar, registra a conta no cswap."""
     parts = cmd.split()
+    if len(parts) == 2 and parts[0] == "focus" and re.fullmatch(r"[0-9a-f-]{8}", parts[1]):
+        return focus_session(parts[1])  # trazer à frente não troca nada: sem confirmação nem estado
     if _action["state"] in ("switching", "login") or not parts or parts[0] not in ("switch", "login"):
         return
     target = next((a for a in accounts() if parts[0] == "switch" and len(parts) > 1 and str(a[0]) == parts[1]), None)
@@ -775,10 +822,14 @@ def demo_frame():
         d = now - timedelta(days=back)
         hist.append([WEEKDAYS[d.weekday()], d.day, float(tok), round(tok * 0.42)])
     sessions = [
-        ["Refatorar o checkout", "CLI", "work", "12,4M", 0, 0], ["Revisar PR de pagamentos", "CLI", "block", "3,1M", 1, 0],
-        ["Testes do carrinho", "CLI", "turn", "6,8M", 4, 0], ["Migração do banco", "Desk", "idle", "1,2M", 52, 0],
-        ["Pipeline de deploy", "CLI", "turn", "2,2M", 9, 1], ["Alertas do cluster", "CLI", "idle", "--", -1, 1],
-        ["Terraform da VPC", "CLI", "idle", "540k", 130, 1], ["Blog pessoal", "CLI", "idle", "--", -1, 2],
+        ["Refatorar o checkout", "CLI", "work", "12,4M", 0, 0, "0000000a", 1],
+        ["Revisar PR de pagamentos", "CLI", "block", "3,1M", 1, 0, "0000000b", 0],
+        ["Testes do carrinho", "CLI", "turn", "6,8M", 4, 0, "0000000c", 0],
+        ["Migração do banco", "Desk", "idle", "1,2M", 52, 0, "0000000d", 0],
+        ["Pipeline de deploy", "CLI", "turn", "2,2M", 9, 1, "0000000e", 0],
+        ["Alertas do cluster", "CLI", "idle", "--", -1, 1, "0000000f", 0],
+        ["Terraform da VPC", "CLI", "idle", "540k", 130, 1, "00000010", 0],
+        ["Blog pessoal", "CLI", "idle", "--", -1, 2, "00000011", 0],
     ]
     return {
         "m": "Opus 5.5 · high", "tot": "84,2M", "rate": fmt_tokens(sum(sp[-5:]) / 5), "sp": sp, "cli": 3, "desk": 1,
@@ -789,7 +840,7 @@ def demo_frame():
                   [["infra", "6,2M"], ["blog", "3,1M"]]],
                  ["Haiku 5.5", "1,7M", 2, "2k", "31k", "1,6M", "90k", "US$ 0,06", [["scripts", "1,7M"]]]],
         "projs": [[r[0], r[1], r[3], max(r[4], 0)] for r in sessions[:5]],
-        "sess": {"n": len(sessions), "ws": [["Produto", 4, 1, 1, 1], ["Infra", 3, 0, 0, 1], ["Pessoal", 1, 0, 0, 0]],
+        "sess": {"n": len(sessions), "ws": [["Produto", 4, 1, 1, 1, 1], ["Infra", 3, 0, 0, 1, 0], ["Pessoal", 1, 0, 0, 0, 0]],
                  "rows": sessions},
         "hist": hist,
         "p5": DEMO_P5, "r5": "reset em 2h18", "pw": 38, "rw": "seg 6h", "wf": 49, "age": 30,
@@ -822,7 +873,10 @@ def serve(board, frame):
             board.ser.close()
             return False  # a placa reinicia; volta pelo handshake
         if req := pending_shot(board.name):
-            err = screenshot(board.ser, req, frame)
+            # captura com dados reais só se o pedido disser (shot.sh com REAL=1): uma captura para o
+            # README feita sem --demo exporia org, títulos de sessão e custos
+            err = screenshot(board.ser, req, frame) if DEMO or req.get("real") else (
+                "recusado: daemon sem --demo; rode com REAL=1 para capturar dados reais")
             board.log(f"shot: {err or 'ok'} ({req.get('out')})")
         board.ser.write(encode_frame(frame))
         board.buf += board.ser.read(4096)  # lê sempre para não encher o buffer
