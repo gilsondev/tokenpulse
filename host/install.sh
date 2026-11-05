@@ -8,5 +8,7 @@ plist=~/Library/LaunchAgents/$label.plist
 mkdir -p ~/Library/LaunchAgents
 sed -e "s|__UV__|$uv|" -e "s|__REPO__|$repo|" -e "s|__HOME__|$HOME|" "$repo/host/tokenpulse.plist.in" > "$plist"
 launchctl bootout "gui/$(id -u)/$label" 2>/dev/null || true
+# o bootout volta antes de o serviço sair; subir de novo nessa janela dá "Bootstrap failed: 5"
+for _ in $(seq 1 20); do launchctl print "gui/$(id -u)/$label" >/dev/null 2>&1 || break; sleep 0.25; done
 launchctl bootstrap "gui/$(id -u)" "$plist"
 echo "daemon instalado; log em ~/Library/Logs/tokenpulse.log"

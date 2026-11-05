@@ -246,8 +246,8 @@ HERDR = shutil.which("herdr") or "/opt/homebrew/bin/herdr"  # o LaunchAgent roda
 
 
 def herdr_agents():
-    """Painéis do herdr com Claude, por sessionId: estado (working/blocked/done/idle), título, pasta e
-    workspace. Relido a cada 3 s (~70 ms); sem herdr instalado ou rodando, fica vazio e vale só o .jsonl."""
+    """Painéis do herdr com Claude, por sessionId: estado (working/blocked/done/idle), nome da aba, título,
+    pasta e workspace. Relido a cada 3 s (~70 ms); sem herdr instalado ou rodando, fica vazio e vale só o .jsonl."""
     if time.time() - _herdr["at"] < 3:
         return _herdr["agents"]
     agents, labels = {}, {}
@@ -257,6 +257,8 @@ def herdr_agents():
             labels[w["workspace_id"]] = (w.get("number") or 99, w.get("label") or w["workspace_id"])
             if w.get("focused"):
                 _herdr["focused_ws"] = labels[w["workspace_id"]]
+        r = subprocess.run([HERDR, "tab", "list"], capture_output=True, text=True, timeout=3)
+        tabs = {t["tab_id"]: t.get("label") or "" for t in json.loads(r.stdout)["result"]["tabs"]}
         r = subprocess.run([HERDR, "agent", "list"], capture_output=True, text=True, timeout=3)
         for a in json.loads(r.stdout)["result"]["agents"]:
             sid = (a.get("agent_session") or {}).get("value")
@@ -265,6 +267,7 @@ def herdr_agents():
                 ws = labels.get(a.get("workspace_id"), (99, a.get("workspace_id") or "?"))
                 agents[sid] = {"status": a.get("agent_status"), "cwd": a.get("cwd") or "", "ws": ws,
                                "title": "" if _STATE_TITLE.match(title) else title, "pane": a.get("pane_id"),
+                               "tab": tabs.get(a.get("tab_id"), ""),  # o nome que você deu à aba no herdr
                                "focused": bool(a.get("focused")) and _herdr.get("focused_ws") == ws}
     except (OSError, ValueError, KeyError, subprocess.TimeoutExpired):
         pass
@@ -322,7 +325,8 @@ def sessions(state, titles, herdr, events, now):
         else:
             st = "idle"
         folder = s["project"] if s else os.path.basename((h["cwd"] if h else "").rstrip("/")) or "?"
-        name = titles.get(sid) or (h and h["title"]) or (h and session_title(sid)) or folder
+        # o nome da aba no herdr é o que você escolheu; depois o título da sessão; por último a pasta
+        name = (h and h["tab"]) or titles.get(sid) or (h and h["title"]) or (h and session_title(sid)) or folder
         origin = "Desk" if s and s["entry"] == "claude-desktop" else "CLI"
         row = [cut(name, 48), origin, st, fmt_tokens(tokens[sid]) if sid in tokens else "--",
                int(age // 60) if age is not None else -1]
