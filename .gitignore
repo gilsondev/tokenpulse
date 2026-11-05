@@ -1,0 +1,14 @@
+# build
+firmware/.pio/
+__pycache__/
+*.pyc
+.DS_Store
+
+# local, nunca no repositório público
+.remember/
+backups/
+
+# stand do MakerWorld (Standard Digital File License: não pode ser redistribuído, nem o remix)
+hardware/stand/original/
+hardware/stand/imprimir/
+hardware/stand/preview-berco.png

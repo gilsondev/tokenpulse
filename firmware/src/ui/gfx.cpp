@@ -1,0 +1,445 @@
+#include "gfx.h"
+
+#include "fonts/inter_hero.h"
+#include "fonts/inter_label.h"
+#include "fonts/inter_num.h"
+#include "fonts/inter_small.h"
+#include "fonts/inter_title.h"
+
+namespace gfx {
+namespace {
+// Dois canvas em memória: enquanto o outro núcleo envia um quadro para a tela, o próximo é desenhado
+// no outro. Sem memória para o segundo, desenha e envia em série.
+LGFX_Sprite canvas[2];
+int cur = 0;
+bool dual = false;
+const uint16_t* lastShown = nullptr;  // o último quadro entregue à tela
+QueueHandle_t pushQueue = nullptr;
+SemaphoreHandle_t pushDone = nullptr;
+struct Job {
+  const uint16_t* px;
+  int w, h;
+};
+
+LGFX_Sprite& S() { return canvas[cur]; }
+
+void pushTask(void*) {
+  Job j;
+  for (;;) {
+    xQueueReceive(pushQueue, &j, portMAX_DELAY);
+    board::displayPush(j.px, j.w, j.h);
+    xSemaphoreGive(pushDone);
+    // o próximo quadro costuma já estar na fila: sem esta pausa a tarefa nunca bloqueia, a IDLE0 não
+    // roda e o watchdog reinicia a placa (task_wdt: IDLE0)
+    vTaskDelay(1);
+  }
+}
+uint8_t currentRotation = 0;
+bool canvasOk = false;
+float uiScale = 1;
+
+// Transição: o último quadro mostrado fica em `prev`; durante SLIDE_MS o quadro novo entra por cima.
+constexpr uint32_t SLIDE_MS = 280;
+uint16_t *prev = nullptr, *out = nullptr;
+int slideDir = 0;
+uint32_t slideMs = 0;
+
+struct Vlw {
+  const uint8_t* data;
+  lgfx::PointerWrapper wrap;
+  lgfx::VLWfont font;
+};
+Vlw vlw[] = {{inter_small}, {inter_label}, {inter_title}, {inter_num}, {inter_hero}};
+bool vlwOk = false;
+
+// O canvas tem largura × altura × 2 bytes. Tenta a PSRAM e depois a RAM interna.
+bool allocCanvas(int w, int h) {
+  for (auto& c : canvas) c.deleteSprite(), c.setColorDepth(16);
+  bool ok = false;
+  for (bool psram : {true, false}) {
+    canvas[0].setPsram(psram);
+    if ((ok = canvas[0].createSprite(w, h))) break;
+  }
+  canvas[1].setPsram(true);
+  dual = ok && canvas[1].createSprite(w, h);
+  cur = 0;
+  return ok;
+}
+
+void setFont(Font f) {
+  if (large() && vlwOk) return S().setFont(&vlw[f].font);
+  static const lgfx::IFont* SMALL_SCREEN[] = {&fonts::efontJA_10, &fonts::efontJA_12, &fonts::efontJA_12,
+                                              &fonts::FreeSansBold12pt7b, &fonts::FreeSansBold12pt7b};
+  S().setFont(SMALL_SCREEN[f]);
+}
+}  // namespace
+
+void begin() {
+  color::apply(true);
+  board::displayBegin();
+  pushQueue = xQueueCreate(1, sizeof(Job));
+  pushDone = xSemaphoreCreateBinary();
+  xSemaphoreGive(pushDone);
+  xTaskCreatePinnedToCore(pushTask, "push", 4096, nullptr, 2, nullptr, 0);
+  setRotation(board::DEFAULT_ROTATION);
+  vlwOk = true;
+  for (auto& v : vlw) {
+    v.wrap.set(v.data);
+    vlwOk &= v.font.loadFont(&v.wrap);
+  }
+  if (!vlwOk) Serial.println("ERRO fontes VLW: usando as bitmap");
+}
+
+void setRotation(uint8_t rot) {
+  // o envio no outro núcleo usa os canvas e o barramento da tela: espera ele terminar antes de mexer
+  const bool locked = pushDone && xSemaphoreTake(pushDone, pdMS_TO_TICKS(1000));
+  board::displaySetRotation(rot);
+  currentRotation = rot;
+  const int w = board::displayWidth(), h = board::displayHeight();
+  uiScale = max(1.f, min(min(w, h) / 172.f, max(w, h) / 320.f));
+  canvasOk = allocCanvas(w, h);
+  if (!canvasOk) Serial.printf("ERRO sem memória para o canvas %dx%d\n", w, h);
+  free(prev), free(out);
+  prev = (uint16_t*)ps_malloc(w * h * 2);
+  out = (uint16_t*)ps_malloc(w * h * 2);
+  if (!prev || !out) free(prev), free(out), prev = out = nullptr;  // sem PSRAM: troca de tela sem deslizar
+  lastShown = nullptr, slideDir = 0;  // o quadro mostrado era de um canvas que acabou de ser refeito
+  if (locked) xSemaphoreGive(pushDone);
+}
+
+bool ready() { return canvasOk; }
+
+void clear(uint16_t c) {
+  const uint32_t sw = __builtin_bswap16(c), v = sw | sw << 16;
+  auto* p = static_cast<uint32_t*>(S().getBuffer());
+  for (int i = 0, n = S().width() * S().height() / 2; i < n; i++) p[i] = v;
+}
+float scale() { return uiScale; }
+bool large() { return uiScale >= 1.4f; }
+uint8_t rotation() { return currentRotation; }
+LGFX_Sprite& fb() { return S(); }
+
+const uint16_t* shown() { return lastShown; }
+
+void slide(int dir) {
+  if (!prev || !lastShown) return;
+  memcpy(prev, lastShown, S().width() * S().height() * 2);  // a foto do que está na tela agora
+  slideDir = dir;
+  slideMs = millis();
+}
+
+void present() {
+  if (!canvasOk) return;
+  const int w = S().width(), h = S().height();
+  auto* frame = static_cast<uint16_t*>(S().getBuffer());
+  // o quadro anterior terminou de ir para a tela; se o envio travou (QSPI pendurado), reinicia
+  if (!xSemaphoreTake(pushDone, pdMS_TO_TICKS(2000))) {
+    Serial.println("ERRO envio da tela travado: reiniciando");
+    ESP.restart();
+  }
+  float t = slideDir ? (millis() - slideMs) / (float)SLIDE_MS : 1;
+  if (t >= 1) {
+    slideDir = 0;
+  } else {
+    float e = 1 - powf(1 - t, 3);    // ease-out cúbico
+    int off = lroundf(w * (1 - e));  // quanto do quadro novo ainda falta entrar
+    for (int y = 0; y < h; y++) {
+      uint16_t *o = out + y * w, *p = prev + y * w, *c = frame + y * w;
+      if (slideDir < 0) {  // novo entra pela direita
+        memcpy(o, p + (w - off), off * 2);
+        memcpy(o + off, c, (w - off) * 2);
+      } else {
+        memcpy(o, c + off, (w - off) * 2);
+        memcpy(o + (w - off), p, off * 2);
+      }
+    }
+    frame = out;
+  }
+  lastShown = frame;
+  if (!dual) {
+    board::displayPush(frame, w, h);
+    xSemaphoreGive(pushDone);
+    return;
+  }
+  Job j{frame, w, h};
+  xQueueSend(pushQueue, &j, portMAX_DELAY);
+  cur ^= 1;  // o próximo quadro é desenhado no outro canvas
+}
+
+namespace {
+// Texto suave custa ~1 ms por linha (cada pixel do glifo é misturado com o fundo). As telas repetem
+// os mesmos textos a cada quadro, então o texto pronto fica guardado e volta como cópia de bloco.
+struct CachedText {
+  uint32_t key = 0, usedMs = 0;
+  LGFX_Sprite spr;
+  int ax = 0, ay = 0;  // ponto de ancoragem do datum dentro do sprite
+};
+CachedText textCache[40];
+constexpr int PAD = 3;
+
+uint32_t textKey(const char* s, Font f, uint16_t c, uint8_t datum, uint16_t bg) {
+  uint32_t h = 2166136261u;  // FNV-1a do texto; o resto entra pelo hashOf
+  for (const char* p = s; *p; p++) h = (h ^ (uint8_t)*p) * 16777619u;
+  return hashOf({h, (uint32_t)f, c, datum, bg});
+}
+
+// Copia o sprite para o canvas. Com `skip`, pula os pixels dessa cor (já trocada de byte): o fundo
+// do texto pronto não cobre o que já foi desenhado embaixo.
+void blit(LGFX_Sprite& from, int x, int y, int32_t skip = -1) {
+  auto* src = static_cast<uint16_t*>(from.getBuffer());
+  auto* dst = static_cast<uint16_t*>(S().getBuffer());
+  const int W = S().width(), H = S().height(), w = from.width(), h = from.height();
+  const int x0 = max(0, x), x1 = min(W, x + w);
+  if (x1 <= x0) return;
+  for (int r = max(0, -y); r < h && y + r < H; r++) {
+    uint16_t *d = dst + (y + r) * W + x0, *s = src + r * w + (x0 - x);
+    if (skip < 0) {
+      memcpy(d, s, (x1 - x0) * 2);
+      continue;
+    }
+    for (int i = 0; i < x1 - x0; i++)
+      if (s[i] != skip) d[i] = s[i];
+  }
+}
+}  // namespace
+
+bool RegionCache::restore(uint32_t k, int rx, int ry, int rw, int rh) {
+  const bool same = k == key && rx == x && ry == y && rw == w && rh == h;
+  x = rx, y = ry, w = rw, h = rh;
+  if (same) blit(spr, x, y);
+  return same;
+}
+
+void RegionCache::store(uint32_t k) {
+  if (spr.width() != w || spr.height() != h) {
+    spr.deleteSprite();
+    spr.setColorDepth(16);
+    spr.setPsram(true);
+    if (!spr.createSprite(w, h)) return void(key = 0);
+  }
+  auto* src = static_cast<uint16_t*>(S().getBuffer());
+  auto* dst = static_cast<uint16_t*>(spr.getBuffer());
+  for (int r = 0; r < h; r++) memcpy(dst + r * w, src + (y + r) * S().width() + x, w * 2);
+  key = k;
+}
+
+uint32_t hashOf(std::initializer_list<uint32_t> vals) {
+  uint32_t h = 2166136261u;
+  for (uint32_t v : vals) h = (h ^ v) * 16777619u;
+  return h | 1;
+}
+
+void text(const char* s, int x, int y, Font f, uint16_t c, uint8_t datum, uint16_t bg) {
+  if (!s) return;  // campo ausente no frame: nada a desenhar
+  setFont(f);
+  if (!large() || !vlwOk || !*s) {
+    S().setTextDatum(datum);
+    S().setTextColor(c);
+    S().drawString(s, x, y);
+    return;
+  }
+  const uint32_t key = textKey(s, f, c, datum, bg);
+  CachedText* hit = nullptr;
+  CachedText* oldest = &textCache[0];
+  for (auto& e : textCache) {
+    if (e.key == key) hit = &e;
+    if (e.usedMs < oldest->usedMs) oldest = &e;
+  }
+  if (!hit) {
+    hit = oldest;
+    // folga de meia linha em cima e embaixo: acentos e descendentes passam da altura da fonte
+    // textWidth da LovyanGFX erra para menos em textos com acento ou "·" (perde o último caractere),
+    // então o sprite tem uma linha de folga de cada lado; a cópia pula o fundo e a folga não cobre nada
+    const int fh = S().fontHeight(), padX = PAD + fh, w = S().textWidth(s) + 2 * padX, h = 2 * fh + 2 * PAD;
+    hit->spr.deleteSprite();
+    hit->spr.setColorDepth(16);
+    hit->spr.setPsram(true);
+    if (!hit->spr.createSprite(w, h)) {
+      hit->key = 0;
+      S().setTextDatum(datum);
+      S().setTextColor(c);
+      S().drawString(s, x, y);
+      return;
+    }
+    const int hz = datum & 3, vt = datum & ~3;  // horizontal: 0 esquerda, 1 centro, 2 direita
+    hit->ax = hz == 1 ? w / 2 : hz == 2 ? w - padX : padX;
+    hit->ay = vt == middle_left ? h / 2 : vt == bottom_left ? h - PAD - fh / 2 : PAD + fh / 2;
+    hit->spr.fillScreen(bg);
+    hit->spr.setFont(&vlw[f].font);
+    hit->spr.setTextDatum(datum);
+    hit->spr.setTextColor(c);
+    hit->spr.drawString(s, hit->ax, hit->ay);
+    hit->key = key;
+  }
+  hit->usedMs = millis();
+  blit(hit->spr, x - hit->ax, y - hit->ay, __builtin_bswap16(bg));
+}
+
+int textWidth(const char* s, Font f) {
+  setFont(f);
+  return S().textWidth(s);
+}
+
+void bar(int x, int y, int w, int h, float frac, uint16_t c, float shine, float pace, float halo) {
+  frac = constrain(frac, 0.f, 1.f);
+  if (!large()) {  // tela pequena: barra simples com o brilho periódico
+    S().fillRoundRect(x, y, w, h, 2, color::TRACK);
+    int fw = w * frac;
+    if (fw < 5) return;
+    S().fillRoundRect(x, y, fw, h, 2, c);
+    int sx = x - 12 + (millis() % 2400) * (fw + 24) / 2400;
+    for (int i = 0; i < 12; i++)
+      if (sx + i > x + 2 && sx + i < x + fw - 2) S().drawFastVLine(sx + i, y + 1, h - 2, blend(c, color::TEXT, 0.5f * (1 - abs(i - 6) / 6.f)));
+    return;
+  }
+  const int r = h / 2;
+  S().fillSmoothRoundRect(x, y, w, h, r, color::TRACK);
+  if (frac <= 0.002f) return;
+  const int fw = max(h, (int)lroundf(w * frac));  // valor pequeno ainda aparece como um ponto
+  const uint16_t from = blend(c, color::BG, 0.45f), head = blend(c, color::TEXT, 0.25f);
+  // halo: o trilho logo depois da ponta acende na cor da barra, sumindo em 10 px
+  for (int d = 1; d <= 10 && halo > 0; d++) {
+    const int col = x + fw + d - 1;
+    if (col >= x + w - r) break;
+    const float a = halo * (1 - d / 10.f) * (1 - d / 10.f);
+    S().drawFastVLine(col, y, h, blend(color::TRACK, c, a));
+  }
+  S().fillSmoothRoundRect(x, y, fw, h, r, from);
+  for (int i = r; i < fw - r; i++)  // gradiente: mais apagado no começo, cheio perto da ponta
+    S().drawFastVLine(x + i, y, h, blend(from, c, powf((float)i / fw, 0.8f)));
+  S().fillSmoothRoundRect(x + fw - h, y, h, h, r, head);
+  auto* buf = static_cast<uint16_t*>(S().getBuffer());
+  const int W = S().width();
+  // listras andando no trecho que passou do ritmo da semana
+  const int px0 = pace >= 0 ? x + (int)(w * pace) : x + fw;
+  const int off = millis() * 8 / 1000;
+  for (int col = max(px0, x + r); col < x + fw - r; col++)
+    for (int row = y + 1; row < y + h - 1; row++)
+      if (((col - row + off) & 7) < 3) {
+        uint16_t& p = buf[row * W + col];
+        p = __builtin_bswap16(blend(__builtin_bswap16(p), color::TEXT, 0.14f));
+      }
+  // brilho único depois de uma mudança: uma faixa clara atravessa e desacelera
+  if (shine >= 0 && shine < 1) {
+    const float e = 1 - powf(1 - shine, 3);
+    const int sx = x - 16 + (int)(e * (fw + 32));
+    for (int i = 0; i < 16; i++) {
+      const int col = sx + i;
+      if (col <= x + r || col >= x + fw - r) continue;
+      const float a = 0.55f * (1 - abs(i - 8) / 8.f) * (1 - shine);
+      for (int row = y; row < y + h; row++) {
+        uint16_t& p = buf[row * W + col];
+        p = __builtin_bswap16(blend(__builtin_bswap16(p), color::TEXT, a));
+      }
+    }
+  }
+}
+
+namespace {
+// atan2 em [0, 2π) a partir de 12 h no sentido horário; erro máximo ~0,005 rad, bem abaixo de um pixel no anel
+inline float clockAngle(float dx, float dy) {
+  float y = dx, x = -dy, ax = fabsf(x), ay = fabsf(y);
+  float a = min(ax, ay) / max(max(ax, ay), 1e-6f), s2 = a * a;
+  float r = ((-0.0464964749f * s2 + 0.15931422f) * s2 - 0.327622764f) * s2 * a + a;
+  if (ay > ax) r = TAU / 4 - r;
+  if (x < 0) r = TAU / 2 - r;
+  if (y < 0) r = TAU - r;
+  return r;
+}
+}  // namespace
+
+void ring(int cx, int cy, int r, int thick, float frac, uint16_t c, uint16_t track, uint16_t bg) {
+  frac = constrain(frac, 0.f, 1.f);
+  const float rOut = r, rIn = r - thick, rMid = r - thick / 2.f, cap = thick / 2.f;
+  const float sweep = frac * TAU;
+  // centros das pontas: 12 h e o fim do arco
+  const float ax = cx, ay = cy - rMid, bx = cx + rMid * sinf(sweep), by = cy - rMid * cosf(sweep);
+  auto cov = [](float d) { return constrain(0.5f - d, 0.f, 1.f); };  // d: distância com sinal até a borda
+  auto capCov = [&](int x, int y, float px, float py) {
+    float dx = x - px, dy = y - py;
+    return fabsf(dx) > cap + 1 || fabsf(dy) > cap + 1 ? 0.f : cov(sqrtf(dx * dx + dy * dy) - cap);
+  };
+  auto* buf = static_cast<uint16_t*>(S().getBuffer());
+  const int W = S().width(), H = S().height();
+  // gradiente ao longo do arco: apagado em 12 h, cheio na ponta
+  uint16_t lut[64];
+  for (int i = 0; i < 64; i++) lut[i] = blend(blend(c, bg, 0.4f), c, i / 63.f);
+  const uint16_t tSw = __builtin_bswap16(track);  // o sprite guarda o byte alto primeiro
+  for (int y = max(0, cy - r - 1); y <= min(H - 1, cy + r + 1); y++) {
+    const float dy = y - cy;
+    // só a faixa do anel nesta linha: entre o círculo de fora e o buraco de dentro
+    const int xo = (int)sqrtf(max(0.f, (rOut + 1) * (rOut + 1) - dy * dy)) + 1;
+    const int xi = rIn > 1 && fabsf(dy) < rIn - 1 ? (int)sqrtf((rIn - 1) * (rIn - 1) - dy * dy) : 0;
+    for (int side = -1; side <= 1; side += 2) {
+      for (int k = xi; k <= xo; k++) {
+        const int x = cx + side * k;
+        if (x < 0 || x >= W || (side > 0 && k == 0)) continue;
+        const float dx = x - cx, d = sqrtf(dx * dx + dy * dy);
+        const float annulus = min(cov(d - rOut), cov(rIn - d));
+        if (annulus <= 0) continue;
+        float arc = 0;
+        int li = 63;
+        if (frac > 0) {
+          const float a = clockAngle(dx, dy);
+          if (a <= sweep || frac >= 1) arc = annulus, li = min(63, (int)(a / max(sweep, 1e-3f) * 63));
+          if (arc < 1 && frac < 1) {
+            const float ca = capCov(x, y, ax, ay), cb = capCov(x, y, bx, by);
+            if (ca > arc) arc = ca, li = 0;
+            if (cb > arc) arc = cb, li = 63;
+          }
+        }
+        uint16_t& px = buf[y * W + x];
+        if (annulus >= 1 && arc <= 0) px = tSw;  // miolo do trilho: sem mistura
+        else if (annulus >= 1 && arc >= 1) px = __builtin_bswap16(lut[li]);
+        else px = __builtin_bswap16(blend(blend(bg, track, annulus), lut[li], arc));
+      }
+    }
+  }
+}
+
+void ringHalo(int cx, int cy, int r, int thick, float frac, uint16_t c, float alpha) {
+  if (frac <= 0 || frac >= 1 || alpha <= 0) return;
+  const float rMid = r - thick / 2.f, cap = thick / 2.f, sweep = frac * TAU, R = 12;
+  const float hx = cx + rMid * sinf(sweep), hy = cy - rMid * cosf(sweep);
+  auto* buf = static_cast<uint16_t*>(S().getBuffer());
+  const int W = S().width();
+  for (int y = (int)(hy - cap - R); y <= (int)(hy + cap + R); y++)
+    for (int x = (int)(hx - cap - R); x <= (int)(hx + cap + R); x++) {
+      const float dx = x - cx, dy = y - cy, d = sqrtf(dx * dx + dy * dy);
+      if (d < r - thick + 0.5f || d > r - 0.5f) continue;  // só o miolo do trilho
+      if (clockAngle(dx, dy) <= sweep) continue;
+      const float e = sqrtf((x - hx) * (x - hx) + (y - hy) * (y - hy)) - cap;
+      if (e <= 0 || e >= R) continue;
+      const float a = alpha * (1 - e / R) * (1 - e / R);
+      uint16_t& p = buf[y * W + x];
+      p = __builtin_bswap16(blend(__builtin_bswap16(p), c, a));
+    }
+}
+
+void loading(Icon icon, const char* title, const char* status, float progress, uint16_t c) {
+  const int cx = width() / 2, cy = height() / 2 - s(20), r = s(34), u = s(12);
+  const float lw = max(1.f, scale() * 1.4f);
+  S().fillScreen(color::BG);
+  ring(cx, cy, r, s(5), progress, c, color::TRACK);
+  auto line = [&](float x0, float y0, float x1, float y1) {
+    S().drawWideLine(cx + x0 * u, cy + y0 * u, cx + x1 * u, cy + y1 * u, lw, color::TEXT);
+  };
+  switch (icon) {
+    case DOWNLOAD:
+      line(0, -1, 0, 0.45f), line(-0.55f, -0.1f, 0, 0.45f), line(0.55f, -0.1f, 0, 0.45f), line(-0.75f, 0.95f, 0.75f, 0.95f);
+      break;
+    case OK: line(-0.65f, 0, -0.15f, 0.5f), line(-0.15f, 0.5f, 0.7f, -0.45f); break;
+    case FAIL: line(-0.55f, -0.55f, 0.55f, 0.55f), line(-0.55f, 0.55f, 0.55f, -0.55f); break;
+    case BOOT:  // asterisco girando devagar
+      for (int i = 0; i < 4; i++) {
+        float a = i * TAU / 8 + millis() / 1400.f;
+        line(-cosf(a), -sinf(a), cosf(a), sinf(a));
+      }
+      break;
+  }
+  text(title, cx, cy + r + s(22), TITLE, color::TEXT, middle_center);
+  text(status, cx, cy + r + s(44), SMALL, color::MUTED, middle_center);
+  present();
+}
+
+}  // namespace gfx
