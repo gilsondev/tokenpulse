@@ -471,8 +471,9 @@ void drawWorkspaces(bool live, int page, int scroll) {
       text(buf, cx, ly, gfx::SMALL, DIM, top_left, cardBg);
       continue;
     }
-    // um ponto colorido com a contagem para cada estado que importa
-    const struct { int count; uint16_t c; } chips[] = {{block, RED}, {work, GREEN}, {turn, ACCENT}};
+    // um ponto colorido com a contagem para cada estado que importa, uma cor por estado sem tons vizinhos
+    // (verde trabalha, vermelho pede aprovação, amarelo é sua vez), as mesmas do SmallTV
+    const struct { int count; uint16_t c; } chips[] = {{work, GREEN}, {block, RED}, {turn, YELLOW}};
     for (auto& ch : chips) {
       if (!ch.count) continue;
       const int d = max(3, u(4));
@@ -543,13 +544,13 @@ void drawSessions(bool live, int page, int ws, int scroll) {
     if (l2.length()) text(fit(l2.c_str(), gfx::LABEL, maxW).c_str(), x + pad, t2, gfx::LABEL, TEXT, top_left, cardBg);
     const int mins = row[4];
     if (mood == mascot::WORK) strcpy(buf, "trabalhando");
-    else if (mood == mascot::BLOCK) strcpy(buf, "precisa de você");
+    else if (mood == mascot::BLOCK) strcpy(buf, "aprovar");  // o mesmo rótulo do SmallTV
     else if (mood == mascot::TURN) snprintf(buf, sizeof buf, mins ? "sua vez · %d min" : "sua vez", mins);
     else if (mins < 0) strcpy(buf, "parada");
     else if (mins >= 120) snprintf(buf, sizeof buf, "parada há %dh", mins / 60);
     else snprintf(buf, sizeof buf, "parada há %d min", mins);
-    const uint16_t sc = mood == mascot::WORK ? GREEN : mood == mascot::BLOCK ? RED : mood == mascot::TURN ? ACCENT : DIM;
-    text(buf, x + pad, statusY, gfx::SMALL, sc, top_left, cardBg);
+    const uint16_t sc = mood == mascot::WORK ? GREEN : mood == mascot::BLOCK ? RED : mood == mascot::TURN ? YELLOW : DIM;
+    text(fit(buf, gfx::SMALL, maxW).c_str(), x + pad, statusY, gfx::SMALL, sc, top_left, cardBg);  // cartão estreito deitado
     i++;
   }
   dots(page);

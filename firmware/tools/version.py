@@ -10,9 +10,11 @@ Import("env")  # noqa: F821 (definido pelo PlatformIO)
 
 if "FW_VERSION" not in os.environ.get("PLATFORMIO_BUILD_FLAGS", ""):
     try:
-        # as tags dos releases nascem no CI: sem buscá-las, o describe partiria do último release feito daqui
-        subprocess.run(["git", "fetch", "--tags", "--quiet"], cwd=env["PROJECT_DIR"], timeout=5,  # noqa: F821
-                       capture_output=True)
+        # as tags dos releases nascem no CI: sem buscá-las, o describe partiria do último release feito daqui.
+        # Pelo HTTPS público e sem credencial: pelo remote (SSH) cada build pedia autorização da chave.
+        subprocess.run(["git", "fetch", "--quiet", "--no-write-fetch-head", "https://github.com/gilsondev/tokenpulse.git",
+                        "+refs/tags/*:refs/tags/*"], cwd=env["PROJECT_DIR"], timeout=5, capture_output=True,  # noqa: F821
+                       env={**os.environ, "GIT_TERMINAL_PROMPT": "0"})
     except (OSError, subprocess.TimeoutExpired):
         pass  # sem rede: vale a última tag conhecida
     try:

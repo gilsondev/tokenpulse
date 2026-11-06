@@ -7,6 +7,8 @@ namespace app {
 
 inline JsonDocument frame;       // último frame do daemon, como chegou
 inline uint32_t lastFrameMs = 0;  // 0 enquanto o Mac ainda não mandou nada
+inline uint32_t approveMs = 0;    // quando surgiu a última sessão pedindo aprovação (0: nunca)
+inline int blocks = 0;            // sessões pedindo aprovação agora
 
 inline bool hasData() { return lastFrameMs != 0; }
 

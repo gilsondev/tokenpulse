@@ -41,7 +41,7 @@ void draw(int x, int y, int px, Mood mood, uint16_t bg, uint32_t seed) {
     const float a = (t % 1800) / 1800.f, fade = floorf(a * 6) / 6;  // 6 tons: o texto pronto fica no cache
     gfx::text("z", x + W * px - px, y - (int)(a * 3 * px), gfx::SMALL, blend(color::DIM, bg, fade), top_left, bg);
   }
-  if (mood == TURN) gfx::text("!", x + W * px + px / 2, y - px, gfx::TITLE, color::ACCENT, top_left, bg);
+  if (mood == TURN) gfx::text("!", x + W * px + px / 2, y - px, gfx::TITLE, color::YELLOW, top_left, bg);
   if (mood == BLOCK) gfx::text("?", x + W * px + px / 2, y - px, gfx::TITLE, color::RED, top_left, bg);
 }
 

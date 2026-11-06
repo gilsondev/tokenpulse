@@ -4,6 +4,7 @@
 #include "settings.h"
 #include "boards/board.h"
 #include "ui/anim.h"
+#include "ui/theme.h"
 
 namespace power {
 namespace {
@@ -28,6 +29,7 @@ void update() {
   // parado escurece para 45% do máximo; à noite, para 8%
   const float target = !idle || alert ? full : night() ? max(6.f, full * 0.08f) : full * 0.45f;
   level += (target - level) * (target > level ? 0.25f : 0.04f);  // acende rápido, apaga devagar
+  if (app::approveMs && millis() - app::approveMs < 20000) level = full * (0.35f + 0.65f * (1 - breath(1200)));  // pede aprovação
   const int v = lroundf(level);
   if (v != written) board::setBrightness(v), written = v;
 }

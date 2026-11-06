@@ -49,6 +49,7 @@ void resolveOpen() {
 int count() { return gfx::full() ? tall::PAGES : COUNT; }
 
 // LED de status na cor da faixa da janela de 5h, sempre respirando; acima de 90% respira mais rápido.
+// Com sessão pedindo aprovação, pisca vermelho no lugar da faixa.
 void updateLed() {
   static const uint8_t RGB[4][3] = {{0, 40, 0}, {40, 30, 0}, {48, 14, 0}, {48, 0, 0}};
   static uint32_t last = 0xFFFFFFFF;
@@ -56,6 +57,7 @@ void updateLed() {
   float k = !app::live() || p5 < 0 ? 0 : app::stale() ? 0.3f : 1;
   k *= 0.15f + 0.85f * breath(p5 >= 90 ? 1200 : 3200);
   const uint8_t* c = RGB[level(max(p5, 0))];
+  if (app::blocks > 0) k = breath(800), c = RGB[3];
   uint8_t r = c[0] * k, g = c[1] * k, b = c[2] * k;
   uint32_t packed = r << 16 | g << 8 | b;
   if (packed != last) board::setLed(r, g, b), last = packed;
@@ -347,7 +349,31 @@ bool calibrateNative() {
   return true;
 }
 
+// Sessão nova pedindo aprovação: nas telas cheias abre o workspace dela, e o power pulsa o brilho por 20 s.
+// A tela não fica presa como no SmallTV: com toque, a pessoa navega para onde quiser.
+void checkApproval() {
+  static uint32_t seenFrame = 0;
+  static int last = -1;  // -1 até o primeiro frame: o boot não dispara alerta
+  if (app::lastFrameMs == seenFrame) return;
+  seenFrame = app::lastFrameMs;
+  int n = 0, ws = -1;
+  for (JsonArrayConst r : app::frame["sess"]["rows"].as<JsonArrayConst>())
+    if (!strcmp(r[2] | "", "block") && n++ == 0) ws = r[5] | -1;
+  app::blocks = n;
+  if (last >= 0 && n > last) {
+    app::approveMs = millis();
+    power::wake();
+    if (gfx::full() && !settingsOpen && ws >= 0) {
+      if (page != 1) go(1, -1);
+      sessWs = ws, sessScroll = 0;
+      sessWsName = (const char*)(app::frame["sess"]["ws"][ws][0] | "");
+    }
+  }
+  last = n;
+}
+
 void render() {
+  checkApproval();
   if (millis() < holdUntil) return;
   power::update();
   const bool dark = settings::v.theme == 0 ? (bool)(app::frame["dark"] | true) : settings::v.theme == 2;
