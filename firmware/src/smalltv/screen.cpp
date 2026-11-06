@@ -3,7 +3,7 @@
 #include <LovyanGFX.hpp>
 #include <SPI.h>
 
-#include "../ui/fonts/inter_hero_m.h"
+#include "../ui/fonts/inter_hero_s.h"
 #include "../ui/fonts/inter_label_m.h"
 #include "../ui/fonts/inter_num_m.h"
 #include "../ui/theme.h"
@@ -59,7 +59,7 @@ struct Vlw {
   lgfx::PointerWrapper wrap;
   lgfx::VLWfont font;
 };
-Vlw LABEL{inter_label_m}, NUM{inter_num_m}, HERO{inter_hero_m};
+Vlw LABEL{inter_label_m}, NUM{inter_num_m}, HERO{inter_hero_s};
 
 void text(const char* s, int x, int y, Vlw& f, uint16_t c, uint8_t datum = top_left) {
   if (y > oy + BAND || y + 48 < oy) return;  // fora da faixa: nem passa pela fonte
@@ -97,7 +97,8 @@ void drawMain() {
   band.fillArc(cx, cy - oy, r - 9, r, 0, 360, TRACK);
   if (p5 > 0) band.fillArc(cx, cy - oy, r - 9, r, 270, 270 + 3.6f * min(p5, 100), ring);
   snprintf(buf, sizeof buf, p5 < 0 ? "--" : "%d%%", p5);
-  text(buf, cx, cy - 22, p5 >= 100 ? NUM : HERO, p5 < 0 ? TEXT : ring, top_center);
+  Vlw& pf = textWidth(buf, HERO) <= 2 * (r - 9) - 12 ? HERO : NUM;  // "42%" na fonte grande não cabe no anel
+  text(buf, cx, cy - (&pf == &HERO ? 18 : 12), pf, p5 < 0 ? TEXT : ring, top_center);
   text("sessão 5h", cx, 162, LABEL, MUTED, top_center);
   if (stale) {
     snprintf(buf, sizeof buf, "há %d min", (int)(f["age"] | 0) / 60);
@@ -228,9 +229,8 @@ void drawSessions() {
     const bool work = !strcmp(st, "work"), block = !strcmp(st, "block"), turn = !strcmp(st, "turn");
     const uint16_t c = work ? GREEN : block ? RED : turn ? ORANGE : DIM;
     ago(when, sizeof when, s[2] | -1);
-    if (work) snprintf(buf, sizeof buf, "trabalhando");
-    else if (block || turn) snprintf(buf, sizeof buf, "%s · %s", block ? "aprovar" : "sua vez", when);
-    else snprintf(buf, sizeof buf, "%s", when);
+    // à direita só o essencial, para sobrar nome: a cor e o contador do topo dizem o resto
+    snprintf(buf, sizeof buf, "%s", work ? "ativa" : block ? "aprovar" : when);
     band.fillCircle(12, y + 7 - oy, 4, c);
     const int rw = textWidth(buf, LABEL);
     text(fit(s[0] | "?", W - 8 - 22 - rw - 8, LABEL).c_str(), 22, y, LABEL, work || block || turn ? TEXT : MUTED);

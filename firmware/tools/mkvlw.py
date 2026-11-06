@@ -28,6 +28,8 @@ FONTS = [
     ("inter_title_m", 16, 600, TEXT),
     ("inter_num_m", 22, 700, TEXT),
     ("inter_hero_m", 40, 700, DIGITS),
+    # SmallTV: o % de dois dígitos tem que caber no anel de 90 px por dentro
+    ("inter_hero_s", 32, 700, DIGITS),
 ]
 
 
