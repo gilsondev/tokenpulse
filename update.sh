@@ -1,9 +1,13 @@
 #!/bin/bash
 # Atualiza pelo OTA, pelo mesmo cabo USB, todas as placas plugadas que estão atrás do último release.
-# Diferente do setup.sh, mantém os ajustes e a calibração do toque.
-#   ./update.sh
+# Diferente do setup.sh, mantém os ajustes e a calibração do toque. Placa com firmware compilado aqui
+# ("dev <data>") fica como está: o release poderia ser mais velho que o seu teste.
+#   ./update.sh            atualiza as placas com release diferente do último
+#   ./update.sh --force    troca também os firmwares compilados localmente pelo release
 set -euo pipefail
 cd "$(dirname "$0")"
+force=false
+[ "${1:-}" = "--force" ] && force=true
 
 boards=~/.claude/esp-tokens-boards.json  # o daemon grava aqui quem está conectado e com qual firmware
 launchctl list | grep -q com.gilsondev.tokenpulse ||
@@ -24,6 +28,10 @@ failed=0
 while read -r board fw; do
   if [ "$fw" = "$tag" ]; then
     echo "$board: já está na $tag"
+    continue
+  fi
+  if [[ "$fw" == dev_* ]] && ! $force; then
+    echo "$board: firmware compilado localmente (${fw//_/ }), fica como está; ./update.sh --force troca pelo $tag"
     continue
   fi
   echo "$board: ${fw//_/ } -> $tag"

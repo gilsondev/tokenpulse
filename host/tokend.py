@@ -868,6 +868,7 @@ def screenshot(port, req, frame):
     # pela ponte CH340 o macOS às vezes perde bytes da placa para o Mac, e às vezes o pedido seguinte
     # some: tenta de novo, a tela é a mesma
     for _ in range(5):
+        port.write(line)  # sem frame por uns segundos a placa se mostra offline na captura seguinte
         if not (err := capture(port, req)):
             return None
     return err

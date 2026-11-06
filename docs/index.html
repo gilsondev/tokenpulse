@@ -72,6 +72,9 @@
   h3 { font-size: 18px; margin: 0 0 6px; }
 
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 20px; }
+  .strip { margin-top: 28px; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 20px; }
+  .strip p { color: var(--muted); margin: 4px 0 16px; }
+  .strip img { display: block; width: 100%; border-radius: 8px; image-rendering: auto; }
   .shot { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; }
   .shot img { width: 100%; display: block; aspect-ratio: 2 / 3; object-fit: cover; background: #191817; }
   .shot div { padding: 14px 16px 18px; }
@@ -170,6 +173,8 @@
       <div class="shot"><img src="screenshots/07-ajustes.png" alt="Ajustes" loading="lazy"><div><h3>Ajustes</h3><p>Brilho, escurecer quando parada, tema que segue o macOS, tela em pé ou deitada e ocultar o custo. Pela engrenagem ao lado do relógio.</p></div></div>
       <div class="shot"><img src="screenshots/00-boot.png" alt="Tela de abertura com o logo" loading="lazy"><div><h3>Abertura</h3><p>E uma tela de diagnóstico que diz o que falta quando o Mac some: cabo, daemon ou dados.</p></div></div>
     </div>
+    <div class="strip"><h3>Deitada</h3><p>Em Ajustes → Tela → horizontal, cada tela ganha uma versão deitada: o anel à esquerda, as sessões em 3 colunas e o detalhe do modelo com os projetos ao lado.</p><img src="screenshots/deitada.png" alt="As telas deitadas: principal, sessões em 3 colunas e detalhe do modelo" loading="lazy"></div>
+    <div class="strip"><h3>Na placa amarela</h3><p>A ESP32-2432S028R (2,8", 240×320, touch resistivo) roda as mesmas telas num layout menor. No Sobre fica o botão para recalibrar o toque.</p><img src="screenshots/amarela.png" alt="A placa amarela: principal, sessões e Sobre com o botão de calibrar o toque" loading="lazy" style="max-width: 720px"></div>
   </div>
 </section>
 
