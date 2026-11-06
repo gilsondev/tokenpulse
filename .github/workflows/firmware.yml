@@ -1,5 +1,8 @@
-# Compila o firmware das placas em todo push e PR. Numa tag v* (ex.: v0.2.0) publica um release com,
-# por placa, o .bin de OTA (firmware/flash.sh) e a imagem completa para a primeira gravação pela USB.
+# Compila o firmware das placas em todo push e PR. No push no main, os commits desde a última tag decidem a
+# versão pelo Conventional Commits (.github/scripts/next_version.py): feat sobe a minor, fix e perf a patch, ! ou
+# BREAKING CHANGE a major, e o resto não gera release. Havendo versão, o firmware sai com ela e o release é
+# publicado com, por placa, o .bin de OTA e a imagem completa para a primeira gravação pela USB. Uma tag v*
+# empurrada à mão também publica.
 name: firmware
 
 on:
@@ -8,8 +11,27 @@ on:
     tags: ["v*"]
   pull_request:
 
+# um release por vez: dois pushes seguidos não calculam a mesma versão
+concurrency:
+  group: firmware-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.next.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # o histórico e as tags inteiros: a versão sai dos commits desde a última tag
+      - run: python3 .github/scripts/next_version.py --test
+      - id: next
+        run: |
+          python3 .github/scripts/next_version.py | tee -a "$GITHUB_OUTPUT"
+
   build:
+    needs: version
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -33,7 +55,7 @@ jobs:
         working-directory: firmware
         env:
           # a versão aparece no Sobre e no handshake com o daemon: a tag no release, o commit no resto
-          PLATFORMIO_BUILD_FLAGS: '-DFW_VERSION=\"${{ github.ref_type == ''tag'' && github.ref_name || github.sha }}\"'
+          PLATFORMIO_BUILD_FLAGS: '-DFW_VERSION=\"${{ needs.version.outputs.tag || github.sha }}\"'
         run: pio run -e ${{ matrix.board }}
       - name: Imagem completa (bootloader + partições + app)
         if: matrix.chip != 'esp8266'
@@ -59,8 +81,8 @@ jobs:
           path: dist/*
 
   release:
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: build
+    if: needs.version.outputs.tag != ''
+    needs: [version, build]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -72,6 +94,9 @@ jobs:
       - name: Publicar o release
         env:
           GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.version.outputs.tag }}
         run: |
-          gh release create "${{ github.ref_name }}" dist/* --repo "${{ github.repository }}" \
-            --title "${{ github.ref_name }}" --generate-notes
+          # --target cria a tag no commit deste build quando ela ainda não existe (release automático).
+          # Tag criada pelo GITHUB_TOKEN não dispara outro workflow, então não há build repetido.
+          gh release create "$TAG" dist/* --repo "${{ github.repository }}" --target "${{ github.sha }}" \
+            --title "$TAG" --generate-notes

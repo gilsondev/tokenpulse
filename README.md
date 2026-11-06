@@ -182,9 +182,21 @@ qual placa está rodando.
 
 ## Releases do firmware
 
-Cada tag `v*` gera um [release](https://github.com/gilsondev/tokenpulse/releases) pelo GitHub Actions com, por
-placa, `tokenpulse-<placa>-factory.bin` (primeira gravação, imagem completa a partir do 0x0) e
-`tokenpulse-<placa>-ota.bin` (atualização pelo daemon).
+Os [releases](https://github.com/gilsondev/tokenpulse/releases) saem sozinhos do GitHub Actions a cada push no
+`main` que traz mudança de firmware ou de daemon. A versão segue o [semver](https://semver.org/lang/pt-BR/), decidida
+pelo prefixo dos commits desde o último release ([Conventional Commits](https://www.conventionalcommits.org/pt-br/)):
+
+| Prefixo do título do commit | Versão | Exemplo |
+|---|---|---|
+| `feat:` | minor: v0.4.0 → v0.5.0 | `feat(smalltv): tela de histórico` |
+| `fix:`, `perf:` | patch: v0.4.0 → v0.4.1 | `fix(daemon): nome de sessão sem pasta` |
+| `!` depois do tipo, ou `BREAKING CHANGE:` no corpo | major: v0.4.0 → v1.0.0 | `feat!: frame novo, firmware antigo não lê` |
+| `docs:`, `ci:`, `chore:`, `refactor:`, `test:`, `style:` | nenhum release | `docs: capturas do SmallTV` |
+
+O texto depois do prefixo fica em português. O cálculo está em
+[`.github/scripts/next_version.py`](.github/scripts/next_version.py) (`--test` confere as regras). Cada release traz,
+por placa, `tokenpulse-<placa>-factory.bin` (primeira gravação, imagem completa a partir do 0x0) e
+`tokenpulse-<placa>-ota.bin` (atualização pelo daemon). Uma tag `v*` empurrada à mão também publica.
 
 ## Instalação
 
