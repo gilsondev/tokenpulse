@@ -262,14 +262,16 @@ flowchart LR
           <dt>Tela</dt><dd>3,5" IPS 320×480, AXS15231B por QSPI</dd>
           <dt>Toque</dt><dd>capacitivo, com o dedo</dd>
           <dt>Interface</dt><dd>todas as telas no layout grande, em pé ou deitada</dd>
+          <dt>Página web</dt><dd>ajustes, troca automática de tela, telas da volta e alertas em <code>http://&lt;nome&gt;.local</code>; o WiFi só liga quando pedido em Ajustes → Sobre</dd>
           <dt>Atualização</dt><dd>OTA pela USB em ~15 s</dd>
         </dl>
         <p class="note">A USB-C dela só passa dados num dos lados do plugue. Se a placa liga mas o Mac não a vê, gire o plugue.</p>
+        <img class="cfg" src="screenshots/usb-config.png" alt="Página de ajustes da Guition e da ESP32-2432S028R, com dados fictícios" loading="lazy">
       </div>
     </div>
 
     <div class="model" data-only="cyd-2432s028r">
-      <img src="screenshots/cyd-2432s028r.png" alt="ESP32-2432S028R: principal, sessões e Sobre com o botão de calibrar o toque" loading="lazy">
+      <img src="screenshots/cyd-2432s028r.png" alt="ESP32-2432S028R deitada: principal, sessões e Sobre com o botão de calibrar o toque" loading="lazy">
       <div>
         <h3>ESP32-2432S028R</h3>
         <dl>
@@ -277,7 +279,8 @@ flowchart LR
           <dt>Chip</dt><dd>ESP32-D0WD-V3: 4 MB de flash, sem PSRAM (a tela é desenhada em duas faixas)</dd>
           <dt>Tela</dt><dd>2,8" 240×320, ST7789</dd>
           <dt>Toque</dt><dd>resistivo XPT2046, com a caneta; calibração na primeira vez</dd>
-          <dt>Interface</dt><dd>todas as telas no layout médio, em pé ou deitada; LED RGB na cor da faixa</dd>
+          <dt>Interface</dt><dd>todas as telas no layout médio, em 4 posições (0°, 90°, 180°, 270°) para o cabo sair por qualquer lado; LED RGB na cor da faixa, vermelho piscando quando uma sessão pede aprovação</dd>
+          <dt>Página web</dt><dd>a mesma da Guition, com o WiFi ligado só quando pedido em Ajustes → Sobre</dd>
           <dt>Atualização</dt><dd>OTA pela USB (ponte CH340) em ~40 s</dd>
         </dl>
         <p class="note">Na primeira vez a tela pede quatro toques com a caneta, um em cada canto. Para refazer: Ajustes → Sobre → calibrar o toque.</p>

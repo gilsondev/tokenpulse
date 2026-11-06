@@ -28,7 +28,7 @@ fazendo e quanto esse uso custaria pela API. Tudo ao vivo, pela USB, sem Wi-Fi.
 | ![Modelos](docs/screenshots/04-modelos.png) | ![Detalhe do modelo](docs/screenshots/05-modelo.png) | ![Histórico](docs/screenshots/06-historico.png) |
 | **Modelos** usados hoje e a fatia de cada um. | **Detalhe do modelo**: entrada, saída e cache, custo equivalente na API e os projetos que mais usaram. | **Histórico** de 14 dias; toque numa barra para ver o dia. |
 | ![Ajustes](docs/screenshots/07-ajustes.png) | ![Trocar de org](docs/screenshots/08-org.png) | ![Sobre](docs/screenshots/09-sobre.png) |
-| **Ajustes** pela engrenagem: brilho, escurecer quando parada, tema (segue o macOS), tela em pé ou deitada, ocultar custo. | **Trocar de org** pelo nome no topo, com o último % de cada uma. Usa o [claude-swap](https://github.com/realiti4/claude-swap) e pede dois toques, porque troca o login de todas as sessões do Mac. | **Sobre**: placa, firmware, recursos da placa, memória, conexão e reiniciar. |
+| **Ajustes** pela engrenagem: brilho, escurecer quando parada, tema (segue o macOS), tela em pé ou deitada, ocultar custo. | **Trocar de org** pelo nome no topo, com o último % de cada uma. Usa o [claude-swap](https://github.com/realiti4/claude-swap) e pede dois toques, porque troca o login de todas as sessões do Mac. | **Sobre**: placa, firmware, memória, conexão, reiniciar e o endereço da página web (toque para abrir o QR). |
 
 <p align="center"><img src="docs/screenshots/10-esgotado.png" alt="Janela de 5 h esgotada, com o botão para trocar de org" width="32%"></p>
 
@@ -41,9 +41,31 @@ em 3 colunas e o detalhe do modelo com os projetos ao lado.
 <p align="center"><img src="docs/screenshots/deitada.png" alt="As telas deitadas: principal com o anel à esquerda, sessões em 3 colunas e o detalhe do modelo" width="100%"></p>
 
 **Na ESP32-2432S028R.** A placa de 2,8" (240×320, touch resistivo) roda as mesmas telas num layout
-menor. No Sobre fica o botão para recalibrar o toque.
+menor, em 4 posições (Ajustes → Tela: 0°, 90°, 180°, 270°), para o cabo USB sair por qualquer lado. No Sobre fica o
+botão para recalibrar o toque.
 
-<p align="center"><img src="docs/screenshots/cyd-2432s028r.png" alt="ESP32-2432S028R: principal, sessões e Sobre com o botão de calibrar o toque" width="75%"></p>
+<p align="center"><img src="docs/screenshots/cyd-2432s028r.png" alt="ESP32-2432S028R deitada: principal, sessões e Sobre com o botão de calibrar o toque" width="100%"></p>
+
+**Alertas.** Quando uma sessão passa a pedir aprovação, a tela abre o workspace dela e o brilho pulsa por 20 s;
+nas placas com LED ele pisca vermelho enquanto houver sessão para aprovar. Cada estado de sessão tem a sua cor:
+verde trabalhando, vermelho aprovar, amarelo sua vez.
+
+**Página web.** Guition e ESP32-2432S028R têm uma página de ajustes com mais opções que a tela: troca automática
+de tela depois de N segundos sem toque, quais telas entram na volta, o alerta de aprovar, o nome na rede, as
+versões do firmware e do agente, atualização guiada e "Preparar para entrega". Os dados continuam pelo cabo: o
+WiFi só liga quando você pede em Ajustes → Sobre → página web, que mostra o QR para o celular entrar no WiFi da
+placa e escolher a rede da casa. Depois disso a placa entra nessa rede ao ligar, e a página fica em
+`http://<nome>.local`.
+
+<table><tr>
+<td width="33%"><img src="docs/screenshots/12-pagina-web.png" alt="Tela da página web: QR code do endereço .local"></td>
+<td width="33%"><img src="docs/screenshots/11-instalar.png" alt="Tela de espera de uma placa recém-recebida: QR code da instalação no Mac"></td>
+<td width="33%"><img src="docs/screenshots/usb-config.png" alt="Página de ajustes das placas USB, com dados fictícios"></td>
+</tr><tr>
+<td><b>Página web</b> no Sobre: o QR do endereço <code>.local</code>, ou do WiFi da placa quando ainda não há rede.</td>
+<td><b>Placa recém-recebida</b>: sem nenhum daemon no Mac, a tela de espera mostra o QR da instalação.</td>
+<td><b>Ajustes pela web</b>, com dados fictícios.</td>
+</tr></table>
 
 Também tem animações com mola nas barras e no anel, halo na ponta do progresso, transições deslizando entre
 as telas, modo noite (22h–7h) e uma tela de diagnóstico quando o Mac some ("cabo USB / daemon / dados").
