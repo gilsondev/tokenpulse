@@ -217,10 +217,11 @@ flowchart LR
 <section id="dispositivos">
   <div class="wrap">
     <h2>Dispositivos suportados</h2>
-    <p class="sub">Tudo que muda de uma placa para outra fica num header só. Para suportar uma placa nova, copie o mais parecido e cumpra o <a href="https://github.com/gilsondev/tokenpulse/blob/main/firmware/src/boards/board.h">contrato de placa</a>: tela, brilho, toque e periféricos, com funções vazias para o que a placa não tiver.</p>
+    <p class="sub">Tudo que muda de uma placa para outra fica num header só, com um perfil do que ela tem (touch, IMU, LED, botão). A interface escolhe o layout pelo tamanho da tela e pelo perfil, nunca pelo nome da placa. Para suportar uma placa nova, copie o header mais parecido e cumpra o <a href="https://github.com/gilsondev/tokenpulse/blob/main/firmware/src/boards/board.h">contrato de placa</a>.</p>
     <div class="tbl"><table>
       <tr><th>Placa</th><th>Tela</th><th>Toque</th><th>Extras</th></tr>
-      <tr><td><b>Guition JC3248W535</b><br>ESP32-S3 N16R8</td><td>3,5" IPS 320×480</td><td>capacitivo</td><td>a placa padrão, com todas as telas grandes</td></tr>
+      <tr><td><b>Guition JC3248W535</b><br>ESP32-S3 N16R8</td><td>3,5" IPS 320×480</td><td>capacitivo</td><td>a placa padrão, com todas as telas grandes, em pé ou deitada</td></tr>
+      <tr><td><b>ESP32-2432S028R</b><br>a "placa amarela", ESP32 sem PSRAM</td><td>2,8" 240×320</td><td>resistivo, com caneta</td><td>todas as telas no layout médio, calibração do toque na primeira vez, LED RGB na cor da faixa</td></tr>
       <tr><td><b>Waveshare ESP32-S3-LCD-1.47B</b></td><td>1,47" 172×320</td><td>botão</td><td>gira sozinha pela IMU, LED RGB na cor da faixa</td></tr>
     </table></div>
   </div>
