@@ -134,6 +134,7 @@
   [data-only] { display: none; }
   [data-only].on { display: block; }
   [data-not].off { display: none; }
+  span[data-only].on { display: inline; }
   .model img.cfg { max-width: 270px; margin: 20px 0 0; border: 1px solid var(--line); }
   footer { padding: 40px 0 60px; border-top: 1px solid var(--line); color: var(--dim); font-size: 14px; }
   footer .wrap { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: center; }
@@ -339,32 +340,32 @@ flowchart LR
       <li><h3>Baixe o projeto</h3><pre><code>git clone https://github.com/gilsondev/tokenpulse
 cd tokenpulse</code></pre></li>
       <li data-not="smalltv-ultra"><h3>Rode o instalador, com a placa plugada</h3><p>Ele acha a placa, grava o firmware do <a href="https://github.com/gilsondev/tokenpulse/releases/latest">último release</a> pela USB e liga o daemon no login do macOS. Em alguns segundos a placa sai de "sem dados do Mac" e mostra o seu uso. O log fica em <code>~/Library/Logs/tokenpulse.log</code>.</p><pre><code>./setup.sh <span class="env">guition-jc3248w535</span></code></pre><p data-only="cyd-2432s028r">Na primeira vez a ESP32-2432S028R abre a calibração: toque com a caneta no centro de cada alvo. Para refazer depois: Ajustes → Sobre → calibrar o toque.</p><p>O daemon roda direto desta pasta: não apague nem mova o <code>tokenpulse</code>. Para mudar de lugar, rode <code>host/install.sh</code> de novo na pasta nova.</p><p>Prefere compilar? <code>firmware/flash.sh <span class="env">guition-jc3248w535</span> --usb</code> e depois <code>host/install.sh</code>.</p></li>
-      <li data-only="smalltv-ultra"><h3>Compile, ligue o daemon e envie pelo WiFi</h3><p>O <code>.bin</code> do SmallTV entra nos releases a partir da próxima versão. Até lá, compile com o <a href="https://platformio.org/">PlatformIO</a>:</p><pre><code>cd firmware &amp;&amp; pio run -e smalltv-ultra &amp;&amp; cd ..
-host/install.sh</code></pre><p>No painel de fábrica, abra <code>http://&lt;ip-do-smalltv&gt;/update</code> e envie <code>firmware/.pio/build/smalltv-ultra/firmware.bin</code> (~460 KB, cabe no espaço de OTA de fábrica). Sem rede salva, a placa abre o WiFi <code>tokenpulse-XXXXXX</code>: conecte pelo celular, abra <code>http://192.168.4.1</code> e informe a sua rede. Em ~20 s o daemon acha a placa e a tela sai de "sem dados do Mac".</p></li>
+      <li data-only="smalltv-ultra"><h3>Ligue o daemon e envie o firmware pelo WiFi</h3><p>Baixe o <a href="https://github.com/gilsondev/tokenpulse/releases/latest/download/tokenpulse-smalltv-ultra-ota.bin"><code>tokenpulse-smalltv-ultra-ota.bin</code></a> do último release e ligue o daemon no login do macOS:</p><pre><code>host/install.sh</code></pre><p>No painel de fábrica, abra <code>http://&lt;ip-do-smalltv&gt;/update</code> e envie o <code>.bin</code> (~460 KB, cabe no espaço de OTA de fábrica). Sem rede salva, a placa abre o WiFi <code>tokenpulse-XXXXXX</code>: conecte pelo celular, abra <code>http://192.168.4.1</code> e informe a sua rede. Em ~20 s o daemon acha a placa e a tela sai de "sem dados do Mac".</p><p>Prefere compilar? <code>cd firmware &amp;&amp; pio run -e smalltv-ultra</code> gera o <code>firmware/.pio/build/smalltv-ultra/firmware.bin</code>.</p></li>
     </ol>
   </div>
 </section>
 
 <section id="ota">
   <div class="wrap">
-    <h2>Atualizar por OTA, pela própria USB</h2>
-    <p class="sub">Depois da primeira gravação, você nunca mais precisa do bootloader nem de botões. O daemon que já está rodando manda o firmware novo pelo mesmo cabo USB, enquanto a placa mostra o progresso na tela. Sem Wi-Fi e sem abrir o case.</p>
+    <h2>Atualizar por OTA, <span data-not="smalltv-ultra">pela própria USB</span><span data-only="smalltv-ultra">pelo WiFi</span></h2>
+    <p class="sub" data-only="smalltv-ultra">Depois da primeira gravação, o SmallTV-Ultra atualiza pela rede. O daemon acha a placa por mDNS e envia o firmware pelo <code>/update</code> dela, com os mesmos comandos das outras placas. Os ajustes da página de configuração ficam.</p>
+    <p class="sub" data-not="smalltv-ultra">Depois da primeira gravação, você nunca mais precisa do bootloader nem de botões. O daemon que já está rodando manda o firmware novo pelo mesmo cabo USB, enquanto a placa mostra o progresso na tela. Sem Wi-Fi e sem abrir o case.</p>
     <div class="split">
       <ol class="steps">
         <li><h3>Atualize para o último release</h3><p>Um comando para todas as placas plugadas: ele vê a versão de cada uma, baixa o <code>*-ota.bin</code> das que estão atrás e manda pelo OTA. Os ajustes e a calibração do toque ficam.</p><pre><code>./update.sh</code></pre></li>
         <li><h3>Ou compile da fonte</h3><p>Compila com o PlatformIO e manda na sequência:</p><pre><code>firmware/flash.sh <span class="env">guition-jc3248w535</span></code></pre></li>
-        <li><h3>Pronto em ~<span class="ota">15</span> segundos</h3><p>A placa reinicia na versão nova, que aparece em Ajustes → Sobre.</p></li>
+        <li><h3>Pronto em ~<span class="ota">15</span> segundos</h3><p>A placa reinicia na versão nova, que aparece <span data-not="smalltv-ultra">em Ajustes → Sobre</span><span data-only="smalltv-ultra">na página de configuração</span>.</p></li>
       </ol>
       <div>
-        <div class="ota-flow">
+        <div class="ota-flow" data-not="smalltv-ultra">
           <div><b>1 · pedido</b>O <code>flash.sh</code> avisa o daemon qual <code>.bin</code> mandar.</div>
           <div><b>2 · cabeçalho</b>O daemon manda o tamanho e o md5; a placa abre a partição livre.</div>
           <div><b>3 · blocos</b>O firmware vai em blocos de 1 KB, cada um confirmado pela placa.</div>
           <div><b>4 · verificação</b>A placa confere o md5 do que gravou antes de trocar.</div>
           <div><b>5 · troca</b>Só então ela marca a partição nova e reinicia.</div>
         </div>
-        <div class="callout" data-only="smalltv-ultra">No SmallTV-Ultra o OTA vai pelo WiFi: o daemon acha a placa por mDNS e envia o firmware pelo <code>/update</code> dela. Os comandos são os mesmos. Se o firmware novo travar três vezes no boot, a placa sobe só com WiFi e <code>/update</code>, para você mandar outro.</div>
-        <div class="callout">Se algo falhar no meio (cabo, md5 diferente, sem resposta), a placa continua na versão atual e mostra o erro. O <code>flash.sh</code> tenta mais uma vez sozinho quando a falha é por falta de resposta.</div>
+        <div class="callout" data-only="smalltv-ultra">Se o envio falhar no meio, a placa continua na versão atual: o ESP8266 só troca de firmware depois de gravar e conferir a imagem inteira. Se o firmware novo travar três vezes seguidas no boot, a placa sobe só com WiFi e <code>/update</code>, para você mandar outro.</div>
+        <div class="callout" data-not="smalltv-ultra">Se algo falhar no meio (cabo, md5 diferente, sem resposta), a placa continua na versão atual e mostra o erro. O <code>flash.sh</code> tenta mais uma vez sozinho quando a falha é por falta de resposta.</div>
       </div>
     </div>
   </div>

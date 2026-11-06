@@ -219,11 +219,11 @@ baixa o `tokenpulse-<placa>-ota.bin` das que estão atrás e espera cada uma vol
 
 **SmallTV-Ultra, a primeira vez (sem abrir a caixa).** Com o daemon já instalado (`host/install.sh`):
 
-1. Compile: `cd firmware && pio run -e smalltv-ultra`. O `tokenpulse-smalltv-ultra-ota.bin` entra nos releases a
-   partir da próxima versão.
-2. No painel de fábrica, abra `http://<ip-do-smalltv>/update` e envie o
-   `firmware/.pio/build/smalltv-ultra/firmware.bin`. Ele cabe no espaço de OTA do
-   firmware de fábrica (~440 KB). Isso substitui o firmware da GeekMagic, que não volta sem o `.bin` dele.
+1. Baixe o [`tokenpulse-smalltv-ultra-ota.bin`](https://github.com/gilsondev/tokenpulse/releases/latest/download/tokenpulse-smalltv-ultra-ota.bin)
+   do último release. Para compilar: `cd firmware && pio run -e smalltv-ultra`.
+2. No painel de fábrica, abra `http://<ip-do-smalltv>/update` e envie o `.bin` (compilado, é o
+   `firmware/.pio/build/smalltv-ultra/firmware.bin`). Ele cabe no espaço de OTA do
+   firmware de fábrica (~460 KB). Isso substitui o firmware da GeekMagic, que não volta sem o `.bin` dele.
 3. Sem rede salva, a placa abre o WiFi aberto `tokenpulse-XXXXXX`. Conecte nele pelo celular, abra
    `http://192.168.4.1` e informe a rede da casa. Em ~20 s o daemon acha a placa e a tela sai de "sem dados do Mac".
 
