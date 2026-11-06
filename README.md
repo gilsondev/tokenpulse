@@ -40,10 +40,10 @@ em 3 colunas e o detalhe do modelo com os projetos ao lado.
 
 <p align="center"><img src="docs/screenshots/deitada.png" alt="As telas deitadas: principal com o anel à esquerda, sessões em 3 colunas e o detalhe do modelo" width="100%"></p>
 
-**Na placa amarela.** A ESP32-2432S028R (2,8", 240×320, touch resistivo) roda as mesmas telas num layout
+**Na ESP32-2432S028R.** A placa de 2,8" (240×320, touch resistivo) roda as mesmas telas num layout
 menor. No Sobre fica o botão para recalibrar o toque.
 
-<p align="center"><img src="docs/screenshots/amarela.png" alt="A placa amarela: principal, sessões e Sobre com o botão de calibrar o toque" width="75%"></p>
+<p align="center"><img src="docs/screenshots/cyd-2432s028r.png" alt="ESP32-2432S028R: principal, sessões e Sobre com o botão de calibrar o toque" width="75%"></p>
 
 Também tem animações com mola nas barras e no anel, halo na ponta do progresso, transições deslizando entre
 as telas, modo noite (22h–7h) e uma tela de diagnóstico quando o Mac some ("cabo USB / daemon / dados").
@@ -101,7 +101,7 @@ envio da tela em paralelo no segundo núcleo (~30 fps). As ações que a placa p
 | Placa | Tela | Toque | Extras | Env do PlatformIO |
 |---|---|---|---|---|
 | [Guition JC3248W535](https://www.atomic14.com/esp32/boards/guition-jc3248w535/) (ESP32-S3 N16R8) | 3,5" IPS 320×480, AXS15231B QSPI | capacitivo | — | `guition-jc3248w535` (padrão) |
-| [ESP32-2432S028R](https://github.com/witnessmenow/ESP32-Cheap-Yellow-Display), a "placa amarela" (ESP32 sem PSRAM) | 2,8" 240×320, ST7789 | resistivo | LED RGB na cor da faixa | `cyd-2432s028r` |
+| [ESP32-2432S028R](https://github.com/witnessmenow/ESP32-Cheap-Yellow-Display), a "Cheap Yellow Display" (ESP32 sem PSRAM) | 2,8" 240×320, ST7789 | resistivo | LED RGB na cor da faixa | `cyd-2432s028r` |
 | [Waveshare ESP32-S3-LCD-1.47B](https://www.waveshare.com/wiki/ESP32-S3-LCD-1.47B) | 1,47" 172×320, ST7789 | — (botão BOOT) | IMU (gira sozinha), LED RGB na cor da faixa | `waveshare-s3-lcd-147b` |
 
 ### Perfis: o que cada placa libera
@@ -179,7 +179,7 @@ git clone https://github.com/gilsondev/tokenpulse && cd tokenpulse
 
 O `setup.sh` pausa o daemon se ele já roda, acha a porta da placa, grava o firmware do último release pela
 USB (com o `--chip` certo, via `uvx esptool`) e liga o daemon no login do macOS (log em
-`~/Library/Logs/tokenpulse.log`). Em alguns segundos a placa sai de "sem dados do Mac". A placa amarela, de
+`~/Library/Logs/tokenpulse.log`). Em alguns segundos a placa sai de "sem dados do Mac". A ESP32-2432S028R, de
 touch resistivo, pede na primeira vez quatro toques com a caneta para calibrar. Gravar de novo apaga os ajustes
 e a calibração.
 

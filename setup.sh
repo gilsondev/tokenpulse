@@ -35,5 +35,5 @@ echo "3/3 ligando o daemon"
 host/install.sh
 echo "pronto: em alguns segundos a placa sai de \"sem dados do Mac\" e mostra o seu uso."
 if [ "$board" = cyd-2432s028r ]; then
-  echo "na primeira vez a placa amarela pede 4 toques com a caneta, um em cada canto, para calibrar o touch."
+  echo "na primeira vez a ESP32-2432S028R pede 4 toques com a caneta, um em cada canto, para calibrar o touch."
 fi

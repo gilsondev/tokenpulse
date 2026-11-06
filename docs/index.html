@@ -113,14 +113,24 @@
 
   .callout { border-left: 3px solid var(--accent); background: var(--surface); padding: 14px 18px; border-radius: 0 12px 12px 0;
              color: var(--muted); font-size: 14px; margin-top: 20px; }
-  .pick { display: inline-flex; flex-wrap: wrap; gap: 6px; padding: 4px; border: 1px solid var(--line);
+  .pick { display: inline-flex; flex-wrap: nowrap; max-width: 100%; overflow-x: auto; scrollbar-width: none; gap: 6px; padding: 4px; border: 1px solid var(--line);
           border-radius: 999px; background: var(--surface); margin-top: 20px; }
   .pick button { font: inherit; font-size: 14px; color: var(--muted); background: none; border: 0; cursor: pointer;
-                 padding: 8px 14px; border-radius: 999px; }
+                 padding: 8px 14px; border-radius: 999px; white-space: nowrap; }
   .pick button[aria-pressed="true"] { background: var(--accent); color: #fff; font-weight: 600; }
   /* itens de grid encolhem abaixo do conteúdo: sem isto, um comando longo alarga a página no celular */
   .split > *, .steps, .steps li { min-width: 0; }
   #instalar .steps { margin-top: 28px; }
+  .model { margin-top: 24px; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 24px; }
+  .model img { display: block; max-width: 100%; margin: 0 auto 24px; border-radius: 10px; }
+  .model h3 { margin: 0 0 12px; }
+  .model dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 0; font-size: 15px; }
+  .model dt { color: var(--dim); }
+  .model dd { margin: 0; }
+  .model .note { color: var(--muted); font-size: 14px; border-left: 3px solid var(--accent); padding-left: 12px; margin-top: 16px; }
+  .model .tag { font-size: 12px; color: var(--accent); border: 1px solid var(--accent); border-radius: 999px; padding: 2px 8px; vertical-align: middle; }
+  @media (max-width: 600px) { .model dl { grid-template-columns: 1fr; gap: 2px; } .model dd { margin-bottom: 10px; } }
+  .noshot { border: 1px dashed var(--line); border-radius: 10px; color: var(--dim); display: grid; place-items: center; min-height: 120px; font-size: 14px; margin-bottom: 24px; }
   [data-only] { display: none; }
   [data-only].on { display: block; }
   footer { padding: 40px 0 60px; border-top: 1px solid var(--line); color: var(--dim); font-size: 14px; }
@@ -174,7 +184,6 @@
       <div class="shot"><img src="screenshots/00-boot.png" alt="Tela de abertura com o logo" loading="lazy"><div><h3>Abertura</h3><p>E uma tela de diagnóstico que diz o que falta quando o Mac some: cabo, daemon ou dados.</p></div></div>
     </div>
     <div class="strip"><h3>Deitada</h3><p>Em Ajustes → Tela → horizontal, cada tela ganha uma versão deitada: o anel à esquerda, as sessões em 3 colunas e o detalhe do modelo com os projetos ao lado.</p><img src="screenshots/deitada.png" alt="As telas deitadas: principal, sessões em 3 colunas e detalhe do modelo" loading="lazy"></div>
-    <div class="strip"><h3>Na placa amarela</h3><p>A ESP32-2432S028R (2,8", 240×320, touch resistivo) roda as mesmas telas num layout menor. No Sobre fica o botão para recalibrar o toque.</p><img src="screenshots/amarela.png" alt="A placa amarela: principal, sessões e Sobre com o botão de calibrar o toque" loading="lazy" style="max-width: 720px"></div>
   </div>
 </section>
 
@@ -233,13 +242,59 @@ flowchart LR
 <section id="dispositivos">
   <div class="wrap">
     <h2>Dispositivos suportados</h2>
-    <p class="sub">Tudo que muda de uma placa para outra fica num header só, com um perfil do que ela tem (touch, IMU, LED, botão). A interface escolhe o layout pelo tamanho da tela e pelo perfil, nunca pelo nome da placa. Para suportar uma placa nova, copie o header mais parecido e cumpra o <a href="https://github.com/gilsondev/tokenpulse/blob/main/firmware/src/boards/board.h">contrato de placa</a>.</p>
-    <div class="tbl"><table>
-      <tr><th>Placa</th><th>Tela</th><th>Toque</th><th>Extras</th></tr>
-      <tr><td><b>Guition JC3248W535</b><br>ESP32-S3 N16R8</td><td>3,5" IPS 320×480</td><td>capacitivo</td><td>a placa padrão, com todas as telas grandes, em pé ou deitada</td></tr>
-      <tr><td><b>ESP32-2432S028R</b><br>a "placa amarela", ESP32 sem PSRAM</td><td>2,8" 240×320</td><td>resistivo, com caneta</td><td>todas as telas no layout médio, calibração do toque na primeira vez, LED RGB na cor da faixa</td></tr>
-      <tr><td><b>Waveshare ESP32-S3-LCD-1.47B</b></td><td>1,47" 172×320</td><td>botão</td><td>gira sozinha pela IMU, LED RGB na cor da faixa</td></tr>
-    </table></div>
+    <p class="sub">Tudo que muda de uma placa para outra fica num header só, com um perfil do que ela tem (touch, IMU, LED, botão). A interface escolhe o layout pelo tamanho da tela e pelo perfil, nunca pelo nome da placa. Escolha o modelo: a instalação e o OTA, mais abaixo, seguem a escolha.</p>
+    <div class="pick" role="group" aria-label="Modelo">
+      <button type="button" data-board="guition-jc3248w535" aria-pressed="true">Guition JC3248W535</button>
+      <button type="button" data-board="cyd-2432s028r" aria-pressed="false">ESP32-2432S028R</button>
+      <button type="button" data-board="waveshare-s3-lcd-147b" aria-pressed="false">Waveshare ESP32-S3-LCD-1.47B</button>
+    </div>
+
+    <div class="model on" data-only="guition-jc3248w535">
+      <img src="screenshots/guition-jc3248w535.png" alt="Guition JC3248W535: principal, sessões e histórico" loading="lazy">
+      <div>
+        <h3>Guition JC3248W535 <span class="tag">padrão</span></h3>
+        <dl>
+          <dt>Chip</dt><dd>ESP32-S3 N16R8: 16 MB de flash, 8 MB de PSRAM</dd>
+          <dt>Tela</dt><dd>3,5" IPS 320×480, AXS15231B por QSPI</dd>
+          <dt>Toque</dt><dd>capacitivo, com o dedo</dd>
+          <dt>Interface</dt><dd>todas as telas no layout grande, em pé ou deitada</dd>
+          <dt>Atualização</dt><dd>OTA pela USB em ~15 s</dd>
+        </dl>
+        <p class="note">A USB-C dela só passa dados num dos lados do plugue. Se a placa liga mas o Mac não a vê, gire o plugue.</p>
+      </div>
+    </div>
+
+    <div class="model" data-only="cyd-2432s028r">
+      <img src="screenshots/cyd-2432s028r.png" alt="ESP32-2432S028R: principal, sessões e Sobre com o botão de calibrar o toque" loading="lazy">
+      <div>
+        <h3>ESP32-2432S028R</h3>
+        <dl>
+          <dt>Também chamada</dt><dd><a href="https://github.com/witnessmenow/ESP32-Cheap-Yellow-Display">Cheap Yellow Display</a> (CYD)</dd>
+          <dt>Chip</dt><dd>ESP32-D0WD-V3: 4 MB de flash, sem PSRAM (a tela é desenhada em duas faixas)</dd>
+          <dt>Tela</dt><dd>2,8" 240×320, ST7789</dd>
+          <dt>Toque</dt><dd>resistivo XPT2046, com a caneta; calibração na primeira vez</dd>
+          <dt>Interface</dt><dd>todas as telas no layout médio, em pé ou deitada; LED RGB na cor da faixa</dd>
+          <dt>Atualização</dt><dd>OTA pela USB (ponte CH340) em ~40 s</dd>
+        </dl>
+        <p class="note">Na primeira vez a tela pede quatro toques com a caneta, um em cada canto. Para refazer: Ajustes → Sobre → calibrar o toque.</p>
+      </div>
+    </div>
+
+    <div class="model" data-only="waveshare-s3-lcd-147b">
+      <div class="noshot">sem capturas: a placa de teste quebrou</div>
+      <div>
+        <h3>Waveshare ESP32-S3-LCD-1.47B</h3>
+        <dl>
+          <dt>Chip</dt><dd>ESP32-S3R8: 16 MB de flash, 8 MB de PSRAM</dd>
+          <dt>Tela</dt><dd>1,47" 172×320, ST7789</dd>
+          <dt>Toque</dt><dd>sem touch: o botão BOOT troca de tela e, segurado, volta para a principal</dd>
+          <dt>Interface</dt><dd>layout compacto (principal, modelos, projetos); gira sozinha pelo acelerômetro; LED RGB na cor da faixa</dd>
+          <dt>Atualização</dt><dd>OTA pela USB em ~15 s</dd>
+        </dl>
+      </div>
+    </div>
+
+    <p class="sub">Outra placa? Copie o header mais parecido e cumpra o <a href="https://github.com/gilsondev/tokenpulse/blob/main/firmware/src/boards/board.h">contrato de placa</a>.</p>
   </div>
 </section>
 
@@ -248,20 +303,20 @@ flowchart LR
     <div>
       <h2>Instalar</h2>
       <p class="sub">Você precisa de um Mac com <a href="https://docs.astral.sh/uv/">uv</a> e o Claude Code logado. O <a href="https://herdr.dev">herdr</a> e o <a href="https://github.com/realiti4/claude-swap">claude-swap</a> são opcionais e liberam as sessões por workspace e a troca de org.</p>
-      <p class="sub">Escolha a sua placa: os comandos e os avisos abaixo mudam com ela.</p>
+      <p class="sub">Os comandos e os avisos seguem o modelo escolhido.</p>
       <div class="pick" role="group" aria-label="Sua placa">
-        <button type="button" data-board="guition-jc3248w535" data-chip="esp32s3" data-ota="15" aria-pressed="true">Guition 3,5"</button>
-        <button type="button" data-board="cyd-2432s028r" data-chip="esp32" data-ota="40" aria-pressed="false">Placa amarela 2,8"</button>
-        <button type="button" data-board="waveshare-s3-lcd-147b" data-chip="esp32s3" data-ota="15" aria-pressed="false">Waveshare 1,47"</button>
+        <button type="button" data-board="guition-jc3248w535" aria-pressed="true">Guition JC3248W535</button>
+        <button type="button" data-board="cyd-2432s028r" aria-pressed="false">ESP32-2432S028R</button>
+        <button type="button" data-board="waveshare-s3-lcd-147b" aria-pressed="false">Waveshare 1.47B</button>
       </div>
       <div class="callout on" data-only="guition-jc3248w535">A JC3248W535 só passa dados pela USB-C num dos lados do plugue. Se a placa liga mas o Mac não a vê, gire o plugue.</div>
-      <div class="callout" data-only="cyd-2432s028r">A placa amarela (ESP32-2432S028R) tem touch resistivo: use a caneta que vem com ela. Na primeira vez ela pede quatro toques, um em cada canto, para calibrar. Use um cabo USB que passe dados.</div>
+      <div class="callout" data-only="cyd-2432s028r">A ESP32-2432S028R tem touch resistivo: use a caneta que vem com ela. Na primeira vez ela pede quatro toques, um em cada canto, para calibrar. Use um cabo USB que passe dados.</div>
       <div class="callout" data-only="waveshare-s3-lcd-147b">A Waveshare de 1,47" não tem touch: o botão BOOT troca de tela e segurar volta para a principal. Ela gira sozinha pelo acelerômetro.</div>
     </div>
     <ol class="steps">
       <li><h3>Baixe o projeto</h3><pre><code>git clone https://github.com/gilsondev/tokenpulse
 cd tokenpulse</code></pre></li>
-      <li><h3>Rode o instalador, com a placa plugada</h3><p>Ele acha a placa, grava o firmware do <a href="https://github.com/gilsondev/tokenpulse/releases/latest">último release</a> pela USB e liga o daemon no login do macOS. Em alguns segundos a placa sai de "sem dados do Mac" e mostra o seu uso. O log fica em <code>~/Library/Logs/tokenpulse.log</code>.</p><pre><code>./setup.sh <span class="env">guition-jc3248w535</span></code></pre><p data-only="cyd-2432s028r">Na primeira vez a placa amarela abre a calibração: toque com a caneta no centro de cada alvo. Para refazer depois: Ajustes → Sobre → calibrar o toque.</p><p>O daemon roda direto desta pasta: não apague nem mova o <code>tokenpulse</code>. Para mudar de lugar, rode <code>host/install.sh</code> de novo na pasta nova.</p><p>Prefere compilar? <code>firmware/flash.sh <span class="env">guition-jc3248w535</span> --usb</code> e depois <code>host/install.sh</code>.</p></li>
+      <li><h3>Rode o instalador, com a placa plugada</h3><p>Ele acha a placa, grava o firmware do <a href="https://github.com/gilsondev/tokenpulse/releases/latest">último release</a> pela USB e liga o daemon no login do macOS. Em alguns segundos a placa sai de "sem dados do Mac" e mostra o seu uso. O log fica em <code>~/Library/Logs/tokenpulse.log</code>.</p><pre><code>./setup.sh <span class="env">guition-jc3248w535</span></code></pre><p data-only="cyd-2432s028r">Na primeira vez a ESP32-2432S028R abre a calibração: toque com a caneta no centro de cada alvo. Para refazer depois: Ajustes → Sobre → calibrar o toque.</p><p>O daemon roda direto desta pasta: não apague nem mova o <code>tokenpulse</code>. Para mudar de lugar, rode <code>host/install.sh</code> de novo na pasta nova.</p><p>Prefere compilar? <code>firmware/flash.sh <span class="env">guition-jc3248w535</span> --usb</code> e depois <code>host/install.sh</code>.</p></li>
     </ol>
   </div>
 </section>
@@ -306,22 +361,25 @@ cd tokenpulse</code></pre></li>
 </footer>
 
 <script>
-  // seletor de placa: troca o env, o chip e o tempo do OTA nos comandos, e mostra só os avisos da placa
-  const pick = document.querySelectorAll(".pick button");
-  function choose(btn) {
-    const b = btn.dataset.board;
-    pick.forEach(x => x.setAttribute("aria-pressed", x === btn));
+  // um modelo escolhido vale para a página toda: as abas de Dispositivos, os comandos de Instalar e de OTA
+  const BOARDS = {
+    "guition-jc3248w535": { chip: "esp32s3", ota: 15 },
+    "cyd-2432s028r": { chip: "esp32", ota: 40 },
+    "waveshare-s3-lcd-147b": { chip: "esp32s3", ota: 15 },
+  };
+  const buttons = document.querySelectorAll(".pick button");
+  function choose(b, remember) {
+    buttons.forEach(x => x.setAttribute("aria-pressed", x.dataset.board === b));
     document.querySelectorAll(".env").forEach(e => e.textContent = b);
-    document.querySelectorAll(".chip").forEach(e => e.textContent = btn.dataset.chip);
-    document.querySelectorAll(".ota").forEach(e => e.textContent = btn.dataset.ota);
+    document.querySelectorAll(".chip").forEach(e => e.textContent = BOARDS[b].chip);
+    document.querySelectorAll(".ota").forEach(e => e.textContent = BOARDS[b].ota);
     document.querySelectorAll("[data-only]").forEach(e => e.classList.toggle("on", e.dataset.only === b));
-    try { localStorage.setItem("placa", b); } catch (e) {}
+    if (remember) try { localStorage.setItem("placa", b); } catch (e) {}
   }
-  pick.forEach(btn => btn.addEventListener("click", () => choose(btn)));
+  buttons.forEach(btn => btn.addEventListener("click", () => choose(btn.dataset.board, true)));
   let saved = null;
   try { saved = localStorage.getItem("placa"); } catch (e) {}
-  const first = [...pick].find(x => x.dataset.board === saved);
-  if (first) choose(first);
+  if (BOARDS[saved]) choose(saved, false);
 </script>
 <script type="module">
   import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs";

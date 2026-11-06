@@ -1,5 +1,5 @@
 #pragma once
-// ESP32-2432S028R, a "placa amarela" (CYD): ESP32-D0WD-V3 sem PSRAM, 4 MB de flash, TFT 2,8" 240x320
+// ESP32-2432S028R, a "Cheap Yellow Display" (CYD): ESP32-D0WD-V3 sem PSRAM, 4 MB de flash, TFT 2,8" 240x320
 // ST7789 por SPI, touch resistivo XPT2046 num SPI próprio, LED RGB, LDR, SD e saída de alto-falante.
 // USB por CH340: a serial é a UART0, e a velocidade precisa ser a mesma do daemon.
 // https://github.com/witnessmenow/ESP32-Cheap-Yellow-Display
