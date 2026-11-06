@@ -38,6 +38,7 @@ void handleState() {
   d["ip"] = address();
   if (online()) d["ssid"] = WiFi.SSID(), d["rssi"] = WiFi.RSSI();
   d["heap"] = ESP.getFreeHeap();
+  d["ota"] = (ESP.getFreeSketchSpace() - 0x1000) & 0xFFFFF000;  // o maior .bin que o /update aceita
   d["up"] = millis() / 1000;
   d["frame"] = app::lastFrameMs ? (long)((millis() - app::lastFrameMs) / 1000) : -1;
   d["daemon"] = daemonMs ? (long)((millis() - daemonMs) / 1000) : -1;
@@ -143,7 +144,17 @@ void begin() {
   server.on("/wifi", HTTP_POST, handleWifi);
   server.on("/hello", HTTP_GET, handleHello);
   server.on("/frame", HTTP_POST, handleFrame);
+  server.on("/style.css", HTTP_GET, [] {
+    server.sendHeader("Cache-Control", "max-age=3600");
+    server.send_P(200, "text/css", STYLE);
+  });
+  // a página guiada vem antes do updater: o ESP8266WebServer usa a primeira rota que bate, e o POST
+  // /update continua sendo o dele (o mesmo que o tokend usa)
+  server.on("/update", HTTP_GET, [] { server.send_P(200, "text/html", UPDATE_PAGE); });
   updater.setup(&server, "/update");
+  // o total vem do Content-Length do envio: o Updater só sabe o espaço livre, não o tamanho do arquivo
+  server.collectHeaders("Content-Length");
+  if (!app::safe) Update.onProgress([](size_t done, size_t) { screen::otaProgress(done, server.header("Content-Length").toInt()); });
   server.begin();
 }
 

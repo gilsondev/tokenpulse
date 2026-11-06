@@ -238,12 +238,15 @@ void drawSessions() {
   const int act = n[0] | 0, wait = n[1] | 0, idle = n[2] | 0;
   snprintf(buf, sizeof buf, "%d %s · %d %s · %d %s", act, act == 1 ? "ativa" : "ativas", wait,
            wait == 1 ? "espera" : "esperam", idle, idle == 1 ? "parada" : "paradas");
-  text(buf, 8, 32, LABEL, (n[1] | 0) ? ORANGE : MUTED);
+  int blocks = 0;
+  for (JsonArrayConst s : app::frame["ses"].as<JsonArrayConst>()) blocks += !strcmp(s[1] | "", "block");
+  text(buf, 8, 32, LABEL, blocks ? RED : (n[1] | 0) ? YELLOW : MUTED);
   int y = 54;
   for (JsonArrayConst s : app::frame["ses"].as<JsonArrayConst>()) {  // até 8
     const char* st = s[1] | "";
     const bool work = !strcmp(st, "work"), block = !strcmp(st, "block"), turn = !strcmp(st, "turn");
-    const uint16_t c = work ? GREEN : block ? RED : turn ? ORANGE : DIM;
+    // uma cor por estado, sem tons vizinhos: verde trabalha, vermelho pede aprovação, amarelo é sua vez
+    const uint16_t c = work ? GREEN : block ? RED : turn ? YELLOW : DIM;
     ago(when, sizeof when, s[2] | -1);
     // à direita só o essencial, para sobrar nome: a cor e o contador do topo dizem o resto
     snprintf(buf, sizeof buf, "%s", work ? "ativa" : block ? "aprovar" : when);
@@ -403,6 +406,23 @@ void draw(Slot slot) {
   else drawMain();
 }
 
+// OTA pelo /update: progresso vindo do Updater a cada bloco gravado.
+size_t otaDone = 0, otaTotal = 0;
+uint32_t otaMs = 0;  // último bloco: 3 s sem nenhum e sem reiniciar é falha
+
+void drawOta() {
+  char buf[48];
+  band.fillScreen(BG);
+  const bool failed = since(otaMs) > 3000;
+  const float frac = min(1.f, (float)otaDone / max<size_t>(otaTotal, 1));
+  text(failed ? "falhou" : frac >= 1 ? "firmware gravado" : "atualizando firmware", W / 2, 64, NUM, failed ? RED : TEXT, top_center);
+  text(failed ? "a placa continua na versão atual" : frac >= 1 ? "reiniciando…" : "não desligue a placa", W / 2, 96, LABEL, MUTED, top_center);
+  band.fillRoundRect(24, 132 - oy, W - 48, 10, 5, TRACK);
+  if (otaDone) band.fillRoundRect(24, 132 - oy, max(10, (int)((W - 48) * frac)), 10, 5, failed ? RED : frac >= 1 ? GREEN : ACCENT);
+  snprintf(buf, sizeof buf, "%d%% · %u de %u KB", (int)(frac * 100), otaDone / 1024, otaTotal / 1024);
+  text(buf, W / 2, 152, LABEL, DIM, top_center);
+}
+
 void drawWaiting() {
   char buf[64];
   band.fillScreen(BG);
@@ -491,7 +511,8 @@ bool step() {
 void render(int y0, int y1, Slot slot, bool data) {
   for (oy = 0; oy < H; oy += BAND) {
     if (oy + BAND <= y0 || oy >= y1) continue;
-    data ? draw(slot) : drawWaiting();
+    if (otaTotal) drawOta();
+    else data ? draw(slot) : drawWaiting();
     band.pushSprite(0, oy);
     yield();
   }
@@ -523,10 +544,26 @@ void begin() {
   while (!band.createSprite(W, BAND) && BAND > 10) BAND /= 2;
 }
 
+void otaProgress(size_t done, size_t total) {
+  static int lastPct = -1;
+  const bool first = !otaTotal;
+  otaDone = done, otaTotal = total, otaMs = millis();
+  const int pct = done * 100 / max<size_t>(total, 1);
+  if (!first && pct == lastPct) return;  // a barra só muda de 1 em 1%: o resto do tempo vai para a gravação
+  lastPct = pct;
+  if (first) lit = config::v.bright * 255 / 100, backlight(lroundf(lit));
+  render(first ? 0 : 130, first ? H : 170, Slot{MAIN, 0}, true);
+}
+
 void update(bool newFrame) {
   static uint32_t fullMs = 0, animMs = 0, cfg = UINT32_MAX;  // != version: aplica a rotação gravada no primeiro quadro
   static Slot shown{MAIN, 0};
   static bool shownData = false;
+  if (otaTotal) {  // durante o OTA a tela é dele; parou sem reiniciar: mostra a falha e volta em 4 s
+    if (since(otaMs) > 3000 && since(otaMs) < 3200) render(0, H, Slot{MAIN, 0}, true);
+    if (since(otaMs) < 7000) return backlightTick(true);
+    otaTotal = otaDone = 0;
+  }
   if (newFrame) onFrame();
   bool redraw = newFrame || millis() - fullMs >= 1000;
   if (cfg != config::version) cfg = config::version, lcd.setRotation(config::v.rotation), redraw = true;
@@ -550,6 +587,12 @@ void update(bool newFrame) {
 }
 
 bool shot(const String& name, const std::function<void(const uint8_t*, size_t)>& write) {
+  if (name == "ota") {  // a tela do OTA a 42%, para conferir o layout sem gravar nada
+    otaDone = 196608, otaTotal = 468000, otaMs = millis();
+    for (oy = 0; oy < H; oy += BAND) drawOta(), write(reinterpret_cast<const uint8_t*>(band.getBuffer()), min(BAND, H - oy) * W * 2), yield();
+    otaDone = otaTotal = 0;
+    return true;
+  }
   const bool waiting = name == "waiting";
   Slot slot{MAIN, 0};
   if (name == "sessions") slot = {SESSIONS, 0};

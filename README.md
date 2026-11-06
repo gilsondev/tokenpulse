@@ -117,11 +117,13 @@ de tela apaga e acende o backlight.
 
 A configuração fica numa página da própria placa, em `http://tokenpulse-XXXXXX.local` (o nome aparece na tela
 de espera e pode ser trocado lá, por exemplo para `smalltv.local`): brilho, escurecer à noite, tema, rotação,
-tempo em cada tela, quais telas entram na volta, os alertas e esconder o custo, além de reiniciar, esquecer o WiFi e atualizar o
-firmware. `GET /shot?page=main` (ou `sessions`, `models`, `model0`…`model2`, `projects`, `history`, `orgs`, `waiting`) devolve a tela em
+tempo em cada tela, quais telas entram na volta, os alertas e esconder o custo, além de reiniciar e esquecer o WiFi.
+Em `/update` fica a atualização guiada: ela compara a versão da placa com o último release, valida o `.bin`, mostra o
+progresso do envio e espera a placa voltar para confirmar a versão nova. A tela da placa mostra o progresso enquanto
+grava. `GET /shot?page=main` (ou `sessions`, `models`, `model0`…`model2`, `projects`, `history`, `orgs`, `waiting`, `ota`) devolve a tela em
 RGB565 cru, 240×240, para conferir o layout sem foto.
 
-<p align="center"><img src="docs/screenshots/smalltv-ultra.png" alt="SmallTV-Ultra com dados fictícios: principal, sessões, detalhe do modelo e projetos" width="100%"></p>
+<p align="center"><img src="docs/screenshots/smalltv-ultra.png" alt="SmallTV-Ultra com dados fictícios: principal, sessões, detalhe do modelo, projetos, histórico e orgs" width="100%"></p>
 <p align="center"><img src="docs/screenshots/smalltv-config.png" alt="Página de configuração do SmallTV-Ultra, com dados fictícios" width="45%"></p>
 Quem está na mesma rede consegue abrir a página e o `/update`, como no firmware de fábrica. A placa se anuncia por
 mDNS (`_tokenpulse._tcp`) e o daemon manda a cada 2 s um frame enxuto por HTTP (`POST /frame`); o OTA também vai
