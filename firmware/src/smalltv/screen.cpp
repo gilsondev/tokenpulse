@@ -234,13 +234,34 @@ void ago(char* buf, size_t n, int mins) {
 void drawSessions() {
   char buf[48], when[16];
   header("sessões");
+  // o contador é a legenda das cores: cada estado com o número na cor do seu ponto, só os que têm sessão
   JsonArrayConst n = app::frame["sesn"];
-  const int act = n[0] | 0, wait = n[1] | 0, idle = n[2] | 0;
-  snprintf(buf, sizeof buf, "%d %s · %d %s · %d %s", act, act == 1 ? "ativa" : "ativas", wait,
-           wait == 1 ? "espera" : "esperam", idle, idle == 1 ? "parada" : "paradas");
   int blocks = 0;
   for (JsonArrayConst s : app::frame["ses"].as<JsonArrayConst>()) blocks += !strcmp(s[1] | "", "block");
-  text(buf, 8, 32, LABEL, blocks ? RED : (n[1] | 0) ? YELLOW : MUTED);
+  const int act = n[0] | 0, idle = n[2] | 0, turns = max(0, (int)(n[1] | 0) - blocks);
+  struct { int count; const char *one, *many; uint16_t c; } parts[] = {
+      {act, "ativa", "ativas", GREEN}, {blocks, "aprovar", "aprovar", RED},
+      {turns, "sua vez", "sua vez", YELLOW}, {idle, "parada", "paradas", DIM}};
+  char seg[4][24];
+  int shown = 0;
+  for (auto& pt : parts)
+    if (pt.count) snprintf(seg[shown++], sizeof seg[0], "%d %s", pt.count, pt.count == 1 ? pt.one : pt.many);
+  const char* sep = " · ";
+  auto width = [&](int k) {
+    int w = 0;
+    for (int i = 0; i < k; i++) w += textWidth(seg[i], LABEL) + (i ? textWidth(sep, LABEL) : 0);
+    return w;
+  };
+  int k = shown;
+  if (width(k) > W - 16) sep = "  ";
+  if (width(k) > W - 16 && idle) k--;  // ainda não coube: as paradas saem do contador (a lista mostra)
+  int x = 8;
+  for (int i = 0, j = 0; i < 4 && j < k; i++) {
+    if (!parts[i].count) continue;
+    if (j) text(sep, x, 32, LABEL, DIM), x += textWidth(sep, LABEL);
+    text(seg[j], x, 32, LABEL, parts[i].c);
+    x += textWidth(seg[j++], LABEL);
+  }
   int y = 54;
   for (JsonArrayConst s : app::frame["ses"].as<JsonArrayConst>()) {  // até 8
     const char* st = s[1] | "";
