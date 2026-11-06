@@ -2,6 +2,7 @@
 
 #include "../app.h"
 #include "../hostlink.h"
+#include "../webui.h"
 #include "../boards/board.h"
 #include "anim.h"
 #include "gfx.h"
@@ -25,7 +26,7 @@ int detail = -1;   // modelo aberto na tela de modelos
 int histSel = -1;  // dia tocado no histórico (-1: hoje)
 bool settingsOpen = false;  // ajustes abertos pela engrenagem, por cima da tela atual
 bool orgFromHeader = false;  // a lista de orgs veio do título da tela principal, não dos ajustes
-int about = 0;              // dentro dos ajustes: 1 Sobre, 2 Sobre com o reiniciar armado, 3 Conta
+int about = 0;              // dentro dos ajustes: 1 Sobre, 2 Sobre com o reiniciar armado, 3 Conta, 4 página web
 int sessScroll = 0;  // grupo de cartões à mostra
 int sessWs = -1;     // workspace aberto na tela de sessões (-1: a lista)
 // O daemon reordena workspaces e modelos a cada frame: o aberto é lembrado pelo nome e o índice é
@@ -57,7 +58,7 @@ void updateLed() {
   float k = !app::live() || p5 < 0 ? 0 : app::stale() ? 0.3f : 1;
   k *= 0.15f + 0.85f * breath(p5 >= 90 ? 1200 : 3200);
   const uint8_t* c = RGB[level(max(p5, 0))];
-  if (app::blocks > 0) k = breath(800), c = RGB[3];
+  if (app::blocks > 0 && settings::web.alerts) k = breath(800), c = RGB[3];
   uint8_t r = c[0] * k, g = c[1] * k, b = c[2] * k;
   uint32_t packed = r << 16 | g << 8 | b;
   if (packed != last) board::setLed(r, g, b), last = packed;
@@ -357,10 +358,14 @@ void checkApproval() {
   if (app::lastFrameMs == seenFrame) return;
   seenFrame = app::lastFrameMs;
   int n = 0, ws = -1;
-  for (JsonArrayConst r : app::frame["sess"]["rows"].as<JsonArrayConst>())
-    if (!strcmp(r[2] | "", "block") && n++ == 0) ws = r[5] | -1;
+  // a regra do SmallTV: só conta quem espera há até 1 h, e automação do Agent SDK não espera ninguém
+  for (JsonArrayConst r : app::frame["sess"]["rows"].as<JsonArrayConst>()) {
+    const int mins = r[4] | -1;
+    if (strcmp(r[2] | "", "block") || mins < 0 || mins > 60 || !strcmp(r[1] | "", "SDK")) continue;
+    if (n++ == 0) ws = r[5] | -1;
+  }
   app::blocks = n;
-  if (last >= 0 && n > last) {
+  if (last >= 0 && n > last && settings::web.alerts) {
     app::approveMs = millis();
     power::wake();
     if (gfx::full() && !settingsOpen && ws >= 0) {
@@ -372,8 +377,42 @@ void checkApproval() {
   last = n;
 }
 
+// Troca automática (ajuste da página web): passa para a próxima tela ligada depois de N s sem toque nem
+// botão. Não tira a pessoa das sessões enquanto houver sessão pedindo aprovação.
+void autoTurn() {
+  static uint32_t lastMs = 0;
+  const auto& w = settings::web;
+  if (!w.interval || settingsOpen || (w.alerts && app::blocks > 0 && page == 1)) return;
+  if (millis() - max(power::lastActiveMs(), lastMs) < w.interval * 1000UL) return;
+  lastMs = millis();
+  // tela cheia: 0 principal, 1 sessões, 2 modelos, 3 histórico; compacta: 0 principal, 1 modelos, 2 projetos
+  auto on = [&](int p) {
+    if (p == 0) return true;
+    if (gfx::full()) return (bool)(w.pages & (p == 1 ? 1 : p == 2 ? 2 : 4));
+    return (bool)(w.pages & (p == 1 ? 2 : 1));
+  };
+  for (int i = 1; i < count(); i++)
+    if (on((page + i) % count())) return go((page + i) % count(), -1);
+}
+
+// Conectou pelo WiFi da placa com a página web aberta: mostra o QR do endereço por 20 s e volta para a principal.
+void webDone() {
+  static bool viaAp = false;
+  static uint32_t closeAt = 0;
+  if (!settingsOpen || about != 4) {
+    viaAp = false, closeAt = 0;
+    return;
+  }
+  if (webui::apOn() && !webui::online()) viaAp = true;
+  if (!viaAp || !webui::online()) return;
+  if (!closeAt) closeAt = millis() + 20000;
+  if (millis() > closeAt) settingsOpen = false, about = 0, viaAp = false, closeAt = 0, gfx::slide(1), anim::reset();
+}
+
 void render() {
   checkApproval();
+  autoTurn();
+  webDone();
   if (millis() < holdUntil) return;
   power::update();
   const bool dark = settings::v.theme == 0 ? (bool)(app::frame["dark"] | true) : settings::v.theme == 2;
@@ -394,6 +433,7 @@ void render() {
   gfx::frame([live] {
     if (gfx::full() && settingsOpen) {
       if (about == 3) tall::drawAccount(live);
+      else if (about == 4) tall::drawWeb(live);
       else if (about) tall::drawAbout(live, about == 2);
       else tall::drawSettings(live);
     } else if (gfx::full()) {
@@ -448,8 +488,13 @@ void tap(int x, int y) {
       }
       return;
     }
+    if (about == 4) return void(about = 1);  // a página web volta para o Sobre
     if (about) {
       const int b = tall::aboutButtonAt(x, y);
+      if (b == 3) {  // página web: sem rede, abre o WiFi da placa para configurá-la
+        if (!webui::online()) webui::openAp();
+        return void(about = 4);
+      }
       if (b == 0) return void(about = 0);
       if (b == 2) {  // calibrar o toque: some o Sobre e volta para os ajustes
         if (!calibrateTouch()) Serial.println("calibração: desistiu ou toques fora dos alvos");

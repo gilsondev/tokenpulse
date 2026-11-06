@@ -2,6 +2,7 @@
 
 #include "../app.h"
 #include "../hostlink.h"
+#include "../webui.h"
 #include "../settings.h"
 #include "anim.h"
 #include "gfx.h"
@@ -343,6 +344,34 @@ void drawModels(bool live, int page) {
     i++;
   }
   dots(page);
+}
+
+// Página web: com WiFi, o QR do endereço .local; sem, o QR que coloca o celular no WiFi da placa, onde o
+// portal abre a configuração da rede. Toque em qualquer lugar volta para o Sobre.
+void drawWeb(bool) {
+  char qr[64];
+  gfx::clear();
+  // só o título: modelo e contadores de sessão não dizem nada nesta tela
+  text("página web", M(), u(22), gfx::TITLE, TEXT, middle_left);
+  text("toque para voltar", W() - M(), u(22), gfx::SMALL, DIM, middle_right);
+  const bool net = webui::online();
+  if (net) snprintf(qr, sizeof qr, "http://%s.local/", webui::host());
+  else snprintf(qr, sizeof qr, "WIFI:T:nopass;S:%s;;", webui::apName());
+  const int top = u(48), textH = below(gfx::SMALL, 22) * 3 + below(gfx::LABEL, 24) + u(8);
+  const int side = min(W() - 2 * M(), gfx::height() - top - textH - u(8));
+  fb().qrcode(qr, (W() - side) / 2, top, side);
+  int y = top + side + u(14);
+  if (net) {
+    text("escaneie, ou abra no celular ou no Mac:", W() / 2, y, gfx::SMALL, MUTED, middle_center);
+    snprintf(qr, sizeof qr, "%s.local", webui::host());
+    text(qr, W() / 2, y + below(gfx::SMALL, 22), gfx::LABEL, ACCENT, middle_center);
+  } else {
+    text("1. escaneie para entrar no WiFi", W() / 2, y, gfx::SMALL, MUTED, middle_center);
+    text(webui::apName(), W() / 2, y + below(gfx::SMALL, 20), gfx::LABEL, ACCENT, middle_center);
+    const int y2 = y + below(gfx::SMALL, 20) + below(gfx::LABEL, 22);
+    text("2. a página abre sozinha; senão,", W() / 2, y2, gfx::SMALL, MUTED, middle_center);
+    text("abra 192.168.4.1", W() / 2, y2 + below(gfx::SMALL, 18), gfx::SMALL, MUTED, middle_center);
+  }
 }
 
 // Falta instalar o daemon: título, QR code da página /comecar e o endereço curto, em coluna nas duas orientações.
@@ -827,9 +856,12 @@ void drawAbout(bool live, bool armed) {
   String link = buf;
   snprintf(buf, sizeof buf, "atualizado há %d min", app::dataAge() / 60);
   String pct = app::stale() ? String(buf) : String("em dia");
+  // a entrada da página web: o endereço, ou o convite para ligar o WiFi (toque no item)
+  String web = webui::online() ? String(webui::host()) + ".local" : webui::apOn() ? String("WiFi ") + webui::apName()
+                                                                                  : String("toque para ligar o WiFi");
   const char* items[][2] = {
       {"placa", board::NAME},          {"firmware", hostlink::firmware()}, {"ligada há", upTxt.c_str()},
-      {"PSRAM", psram.c_str()}, {"RAM interna", ram.c_str()},  {"recursos", hw.c_str()},
+      {"PSRAM", psram.c_str()}, {"RAM interna", ram.c_str()},  {"página web", web.c_str()},
       {"conexão", link.c_str()},          {"% de uso", pct.c_str()},
   };
   // tela grande: rótulo em cima, valor embaixo. Na média em pé 8 pares não cabem empilhados: um por linha.
@@ -839,9 +871,13 @@ void drawAbout(bool live, bool armed) {
   int k = 0;
   for (auto& it : items) {
     const int x = M() + (k / 4 % cols) * (colW + u(16)), y = u(66) + (cols == 2 ? k % 4 : k) * step;
+    // o item da página web é o único que se toca: na cor de destaque e com "›", como os botões
+    const bool link = k == 5;
+    const String val = link ? String(it[1]) + " ›" : String(it[1]);
+    const uint16_t c = link ? ACCENT : TEXT;
     text(it[0], x, y, gfx::SMALL, DIM);
-    if (stacked) text(fit(it[1], gfx::LABEL, colW).c_str(), x, y + below(gfx::SMALL, 18), gfx::LABEL, TEXT);
-    else text(fit(it[1], gfx::LABEL, W() - 2 * M() - u(110)).c_str(), W() - M(), y, gfx::LABEL, TEXT, top_right);
+    if (stacked) text(fit(val.c_str(), gfx::LABEL, colW).c_str(), x, y + below(gfx::SMALL, 18), gfx::LABEL, c);
+    else text(fit(val.c_str(), gfx::LABEL, W() - 2 * M() - u(110)).c_str(), W() - M(), y, gfx::LABEL, c, top_right);
     k++;
   }
   // touch resistivo: calibrar o toque divide a linha com o reiniciar
@@ -862,6 +898,10 @@ void drawAbout(bool live, bool armed) {
 }
 
 int aboutButtonAt(int x, int y) {
+  // o item "página web" (o 6º, k = 5): a mesma conta de posição do drawAbout
+  const int cols = L() ? 2 : 1, colW = (W() - 2 * M() - (cols - 1) * u(16)) / cols, k = 5;
+  const int ix = M() + (k / 4 % cols) * (colW + u(16)), iy = u(66) + (cols == 2 ? k % 4 : k) * aboutStep();
+  if (x >= ix && x < ix + colW && y >= iy - u(4) && y < iy + aboutStep()) return 3;
   if (y < RESTART_Y() || y >= RESTART_Y() + u(48)) return 0;
   return board::PROFILE.calibrate && x < W() / 2 ? 2 : 1;
 }

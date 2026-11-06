@@ -14,6 +14,11 @@ namespace {
 // O daemon manda {"ota": tamanho, "md5": "..."} e depois o .bin em blocos de 1 KB;
 // a placa confirma cada bloco com "OK" e mostra o progresso na tela.
 void runOta(size_t size, const char* md5) {
+  // o Update é um só na placa: o progresso que a página web registrou nele também seria chamado aqui
+  struct Busy {
+    Busy() { app::serialOta = true; }
+    ~Busy() { app::serialOta = false; }
+  } busy;
   static uint8_t chunk[1024];
   char status[48];
   if (!md5 || !Update.begin(size)) return (void)Serial.printf("ERRO ota begin: %s\n", Update.errorString());

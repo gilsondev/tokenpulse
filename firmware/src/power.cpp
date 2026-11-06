@@ -38,4 +38,6 @@ bool dimmed() { return level < settings::brightness() * 0.8f; }
 
 void wake() { lastWakeMs = millis(); }
 
+uint32_t lastActiveMs() { return lastWakeMs; }
+
 }  // namespace power

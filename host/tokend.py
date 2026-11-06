@@ -1255,7 +1255,7 @@ def main():
                 usage.poll()
             org_name = org()  # antes de limits(), que depende de saber se a org mudou
             frame = (usage.snapshot() | limits() | account_frame()
-                     | {"clk": datetime.now().strftime("%H:%M"), "org": org_name, "dark": dark_mode()})
+                     | {"clk": datetime.now().strftime("%H:%M"), "org": org_name, "dark": dark_mode(), "agv": AGENT})
         _latest["frame"] = frame
         if "--once" in sys.argv:
             print(json.dumps(frame, ensure_ascii=False))

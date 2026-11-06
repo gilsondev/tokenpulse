@@ -15,6 +15,18 @@ struct Values {
 
 extern Values v;
 
+// Ajustes que só a página web muda, numa chave própria da NVS: os Values gravados continuam valendo.
+struct Web {
+  uint8_t interval = 0;  // s em cada tela antes de passar sozinha para a próxima; 0 só troca pelo toque
+  uint8_t pages = 7;     // telas na volta automática: 1 sessões, 2 modelos, 4 histórico (a principal sempre)
+  uint8_t alerts = 1;    // 1: sessão nova pedindo aprovação abre as sessões e pulsa o brilho
+  uint8_t wifi = 0;      // 1: a pessoa configurou o WiFi pela placa; ela entra na rede ao ligar
+  char host[32] = "";    // nome na rede (<host>.local); vazio: tokenpulse-<id do chip>
+};
+extern Web web;
+void saveWeb();
+bool validHost(const String& h);  // letras minúsculas, dígitos e hífen, até 31
+
 // Calibração do touch resistivo: a leitura crua nas bordas da tela (x = 0 e x = largura, y = 0 e
 // y = altura, no retrato nativo) e se os eixos crus andam trocados em relação aos da tela. Fica fora de
 // Values: recalibrar não mexe nos ajustes, e os ajustes não perdem a calibração.

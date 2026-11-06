@@ -6,6 +6,7 @@
 #include "hostlink.h"
 #include "power.h"
 #include "settings.h"
+#include "webui.h"
 #include "ui/anim.h"
 #include "ui/gfx.h"
 #include "ui/screens.h"
@@ -94,6 +95,7 @@ void setup() {
   screens::bootSplash();
   // touch resistivo sem calibração gravada: calibra antes de tudo, senão os toques caem longe da caneta
   if (board::PROFILE.calibrate && !settings::cal.ok) screens::calibrateTouch();
+  webui::begin();
 }
 
 void loop() {
@@ -102,6 +104,7 @@ void loop() {
   if (board::PROFILE.button) checkButton();
   if (board::PROFILE.touch) checkTouch();
   hostlink::poll();
+  webui::loop();
   if (millis() - lastRenderMs >= 33) {  // ~30 fps; o envio do quadro anterior corre no outro núcleo
     lastRenderMs = millis();
     screens::render();

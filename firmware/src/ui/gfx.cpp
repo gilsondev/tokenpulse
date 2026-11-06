@@ -1,10 +1,14 @@
 #include "gfx.h"
 
+// UI_MEDIUM_ONLY: placa de tela de 240 px (ESP32-2432S028R), que nunca usa a UI grande. O jogo de fontes dela
+// fica de fora (~130 KB), e o espaço vai para o WiFi e o que vier depois.
+#ifndef UI_MEDIUM_ONLY
 #include "fonts/inter_hero.h"
 #include "fonts/inter_label.h"
 #include "fonts/inter_num.h"
 #include "fonts/inter_small.h"
 #include "fonts/inter_title.h"
+#endif
 #include "fonts/inter_hero_m.h"
 #include "fonts/inter_label_m.h"
 #include "fonts/inter_num_m.h"
@@ -62,8 +66,12 @@ struct Vlw {
   lgfx::PointerWrapper wrap;
   lgfx::VLWfont font;
 };
-Vlw vlw[] = {{inter_small}, {inter_label}, {inter_title}, {inter_num}, {inter_hero}};
 Vlw vlwM[] = {{inter_small_m}, {inter_label_m}, {inter_title_m}, {inter_num_m}, {inter_hero_m}};  // UI média
+#ifdef UI_MEDIUM_ONLY
+Vlw* const vlw = vlwM;
+#else
+Vlw vlw[] = {{inter_small}, {inter_label}, {inter_title}, {inter_num}, {inter_hero}};
+#endif
 bool vlwOk = false;
 
 // O canvas tem largura × altura × 2 bytes. Tenta a PSRAM, depois a RAM interna, depois duas faixas.
@@ -113,7 +121,11 @@ void begin() {
   xTaskCreatePinnedToCore(pushTask, "push", 4096, nullptr, 2, nullptr, 0);
   setRotation(board::DEFAULT_ROTATION);
   vlwOk = true;
+#ifdef UI_MEDIUM_ONLY
+  for (auto* set : {vlwM})
+#else
   for (auto* set : {vlw, vlwM})
+#endif
     for (int i = 0; i < 5; i++) {
       set[i].wrap.set(set[i].data);
       vlwOk &= set[i].font.loadFont(&set[i].wrap);

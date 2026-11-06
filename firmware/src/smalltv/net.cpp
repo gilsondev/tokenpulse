@@ -226,6 +226,10 @@ void begin() {
   server.on("/wifi", HTTP_POST, handleWifi);
   server.on("/hello", HTTP_GET, handleHello);
   server.on("/frame", HTTP_POST, handleFrame);
+  server.on("/favicon.ico", HTTP_GET, [] {  // pedido pelos navegadores por conta própria
+    server.sendHeader("Location", "/logo.svg");
+    server.send(301, "text/plain", "");
+  });
   server.on("/logo.svg", HTTP_GET, [] {
     server.sendHeader("Cache-Control", "max-age=86400");
     server.send_P(200, "image/svg+xml", LOGO);
