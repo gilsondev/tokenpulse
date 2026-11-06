@@ -15,6 +15,7 @@ namespace board {
 
 constexpr const char* NAME = "cyd-2432s028r";
 constexpr uint8_t DEFAULT_ROTATION = 0;  // retrato
+constexpr uint8_t ROTATIONS = 4;  // o cabo USB pode sair por qualquer lado: em pé e deitada, nos dois sentidos
 constexpr uint8_t ROT_FOR[4] = {0, 0, 0, 0};
 constexpr Profile PROFILE{.touch = true, .calibrate = true, .imu = false, .led = true, .button = true};
 constexpr uint32_t SERIAL_BAUD = 460800;  // o CH340 desta placa perde bytes acima disso
@@ -63,8 +64,8 @@ inline void displayBegin() {
   lcd.setBrightness(255);
 }
 inline void setBrightness(uint8_t v) { lcd.setBrightness(v); }
-inline bool landscape = false;
-inline void displaySetRotation(uint8_t rot) { lcd.setRotation(rot), landscape = rot & 1; }
+inline uint8_t rotation = 0;
+inline void displaySetRotation(uint8_t rot) { lcd.setRotation(rot), rotation = rot & 3; }
 inline int displayWidth() { return lcd.width(); }
 inline int displayHeight() { return lcd.height(); }
 inline void displayPush(const uint16_t* px, int y, int w, int h) {
@@ -139,7 +140,11 @@ inline bool touch(int16_t& x, int16_t& y) {
     const int a = c.ok && c.swap ? ry : rx, b = c.ok && c.swap ? rx : ry;
     const int px = constrain(map(a, c.ok ? c.x0 : RAW_X0, c.ok ? c.x1 : RAW_X1, 0, 240), 0, 239);
     const int py = constrain(map(b, c.ok ? c.y0 : RAW_Y0, c.ok ? c.y1 : RAW_Y1, 0, 320), 0, 319);
-    lx = landscape ? py : px, ly = landscape ? 239 - px : py;  // deitada: o retrato girado 90° no sentido horário
+    // o retrato girado: 1 deitada (90° horário), 2 em pé de cabeça para baixo, 3 deitada no outro sentido
+    if (rotation == 1) lx = py, ly = 239 - px;
+    else if (rotation == 2) lx = 239 - px, ly = 319 - py;
+    else if (rotation == 3) lx = 319 - py, ly = px;
+    else lx = px, ly = py;
     lastMs = millis();
   } else if (millis() - lastMs > 50) {
     return false;  // a caneta perde contato por instantes no meio do arrasto: até 50 ms ainda é o mesmo toque

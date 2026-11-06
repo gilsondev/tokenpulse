@@ -91,7 +91,7 @@ void setup() {
   settings::begin();
   gfx::begin();
   board::begin();
-  if (settings::v.orient) gfx::setRotation(1);
+  if (settings::v.orient) gfx::setRotation(settings::v.orient);
   screens::bootSplash();
   // touch resistivo sem calibração gravada: calibra antes de tudo, senão os toques caem longe da caneta
   if (board::PROFILE.calibrate && !settings::cal.ok) screens::calibrateTouch();

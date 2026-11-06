@@ -55,6 +55,7 @@ void handleState() {
   d["ap"] = ap_on;
   d["apName"] = ap;
   d["imu"] = board::PROFILE.imu;  // a tela gira sozinha: sem escolha de em pé ou deitada
+  d["rotations"] = board::ROTATIONS;
   JsonObject c = d["cfg"].to<JsonObject>();
   const auto& v = settings::v;
   const auto& w = settings::web;
@@ -85,14 +86,14 @@ void handleConfig() {
   num("bright", 0, 3, v.bright);
   num("idle", 0, 3, v.idle);
   num("theme", 0, 2, v.theme);
-  num("orient", 0, 1, v.orient);
+  num("orient", 0, board::ROTATIONS - 1, v.orient);
   num("hideCost", 0, 1, v.hideCost);
   num("interval", 0, 120, w.interval);
   num("pages", 0, 7, w.pages);
   num("alerts", 0, 1, w.alerts);
   settings::save();
   settings::saveWeb();
-  if (v.orient != orient) gfx::setRotation(v.orient ? 1 : 0), anim::reset();
+  if (v.orient != orient) gfx::setRotation(v.orient), anim::reset();
   server.send(200, "application/json", String("{\"host\":\"") + host() + "\"}");
 }
 

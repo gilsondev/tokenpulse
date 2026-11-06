@@ -2,6 +2,8 @@
 
 #include <Preferences.h>
 
+#include "boards/board.h"
+
 namespace settings {
 
 Values v;
@@ -39,7 +41,7 @@ void begin() {
   if (v.bright > 3) v.bright = d.bright;
   if (v.idle > 3) v.idle = d.idle;
   if (v.theme > 2) v.theme = d.theme;
-  if (v.orient > 1) v.orient = d.orient;
+  if (v.orient >= board::ROTATIONS) v.orient = d.orient;
   if (v.hideCost > 1) v.hideCost = d.hideCost;
 }
 

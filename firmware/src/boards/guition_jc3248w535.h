@@ -11,6 +11,7 @@ namespace board {
 
 constexpr const char* NAME = "guition-jc3248w535";
 constexpr uint8_t DEFAULT_ROTATION = 0;  // retrato, a orientação nativa do painel
+constexpr uint8_t ROTATIONS = 2;  // o quadro deitado é girado no envio; as viradas de 180° não foram feitas
 constexpr uint8_t ROT_FOR[4] = {0, 0, 0, 0};
 constexpr Profile PROFILE{.touch = true, .calibrate = false, .imu = false, .led = false, .button = true};
 constexpr uint32_t SERIAL_BAUD = 115200;

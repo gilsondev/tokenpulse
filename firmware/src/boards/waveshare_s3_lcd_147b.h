@@ -11,6 +11,7 @@ namespace board {
 
 constexpr const char* NAME = "waveshare-s3-lcd-147b";
 constexpr uint8_t DEFAULT_ROTATION = 1;  // paisagem, USB à direita
+constexpr uint8_t ROTATIONS = 2;  // gira sozinha pelo IMU; o ajuste não vale nela
 // Calibrado segurando a placa nas 4 posições. Se uma ficar de cabeça para baixo, troque o valor dela.
 constexpr uint8_t ROT_FOR[4] = {3, 1, 2, 0};
 constexpr Profile PROFILE{.touch = false, .calibrate = false, .imu = true, .led = true, .button = true};

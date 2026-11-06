@@ -6,6 +6,7 @@
 //
 //   constexpr const char* NAME           nome do env no platformio.ini; o daemon usa para achar o .bin do OTA
 //   constexpr uint8_t DEFAULT_ROTATION
+//   constexpr uint8_t ROTATIONS          2: em pé e deitada; 4: também as duas viradas de 180° (Ajustes → Tela)
 //   constexpr uint8_t ROT_FOR[4]         rotação quando a gravidade aponta para +X, -X, +Y, -Y
 //   constexpr Profile PROFILE            o hardware que a placa tem (profile.h); a UI decide por ele
 //   constexpr uint32_t SERIAL_BAUD       velocidade da serial; só conta em placa com conversor USB-UART

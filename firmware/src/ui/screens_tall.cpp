@@ -759,7 +759,10 @@ Row settingRows[] = {
     {"Brilho", &settings::v.bright, {"25%", "50%", "75%", "100%"}, 4},
     {"Escurecer quando parada", &settings::v.idle, {"5 min", "10 min", "30 min", "nunca"}, 4},
     {"Tema", &settings::v.theme, {"auto", "claro", "escuro"}, 3},
-    {"Tela", &settings::v.orient, {"vertical", "horizontal"}, 2},
+    // 4 rotações (ESP32-2432S028R): o cabo pode sair por qualquer lado. Em graus, porque "vertical invertida"
+    // não cabe no botão
+    board::ROTATIONS == 4 ? Row{"Tela", &settings::v.orient, {"0°", "90°", "180°", "270°"}, 4}
+                          : Row{"Tela", &settings::v.orient, {"vertical", "horizontal"}, 2},
     {"Custo em US$", &settings::v.hideCost, {"mostrar", "ocultar"}, 2},
 };
 constexpr int ROWS = sizeof settingRows / sizeof *settingRows;
@@ -821,7 +824,7 @@ int settingsTap(int x, int y) {
     const bool turned = r.value == &settings::v.orient && *r.value != k;
     *r.value = k;
     settings::save();
-    if (turned) gfx::setRotation(k ? 1 : 0), anim::reset();
+    if (turned) gfx::setRotation(k), anim::reset();
     return 0;
   }
   return -1;

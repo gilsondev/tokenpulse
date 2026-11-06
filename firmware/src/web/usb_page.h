@@ -15,7 +15,7 @@ static const char USB_PAGE[] PROGMEM = R"HTML(<!doctype html>
 <label>Brilho <select name=bright><option value=0>25%<option value=1>50%<option value=2>75%<option value=3>100%</select></label>
 <label>Escurecer quando ninguém toca <select name=idle><option value=0>depois de 5 min<option value=1>depois de 10 min<option value=2>depois de 30 min<option value=3>nunca</select></label>
 <label>Tema <select name=theme><option value=0>segue o macOS<option value=1>claro<option value=2>escuro</select></label>
-<label id=orow>Tela <select name=orient><option value=0>em pé<option value=1>deitada</select></label>
+<label id=orow>Tela <select name=orient><option value=0>em pé<option value=1>deitada<option value=2 hidden>em pé, de cabeça para baixo<option value=3 hidden>deitada, virada</select></label>
 <label>Esconder o custo em US$ <input type=checkbox name=hideCost></label>
 </section>
 <section><h2>Telas</h2>
@@ -49,6 +49,7 @@ async function state(){
   const s=await(await fetch('/api/state',{cache:'no-store'})).json();
   $('sub').textContent=s.board+' em http://'+s.host+'.local';
   $('orow').hidden=s.imu;
+  for(const o of f.orient.options)if(o.value>1)o.hidden=s.rotations<4;
   const rows=[['Firmware',s.fw],['Agente (tokend)',s.agent||'ainda não falou com a placa'],['Endereço','http://'+s.host+'.local'],
     ['IP',s.ip||'—'],['Rede',s.ssid?s.ssid+' ('+s.rssi+' dBm)':'sem WiFi'],['Último dado',ago(s.frame)],
     ['Memória livre',Math.round(s.heap/1024)+' KB'],['Ligada há',Math.floor(s.up/60)+' min']];
