@@ -18,6 +18,7 @@ jobs:
           - {board: guition-jc3248w535, chip: esp32s3, boot: "0x0"}
           - {board: waveshare-s3-lcd-147b, chip: esp32s3, boot: "0x0"}
           - {board: cyd-2432s028r, chip: esp32, boot: "0x1000"}
+          - {board: smalltv-ultra, chip: esp8266}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -35,6 +36,7 @@ jobs:
           PLATFORMIO_BUILD_FLAGS: '-DFW_VERSION=\"${{ github.ref_type == ''tag'' && github.ref_name || github.sha }}\"'
         run: pio run -e ${{ matrix.board }}
       - name: Imagem completa (bootloader + partições + app)
+        if: matrix.chip != 'esp8266'
         working-directory: firmware
         run: |
           B=.pio/build/${{ matrix.board }}
@@ -45,6 +47,12 @@ jobs:
           mkdir -p ../dist
           cp "$B/firmware.bin" "../dist/tokenpulse-${{ matrix.board }}-ota.bin"
           cp "$B/factory.bin" "../dist/tokenpulse-${{ matrix.board }}-factory.bin"
+      - name: Imagem do ESP8266 (o firmware.bin já traz o bootloader; a placa só se grava pelo WiFi)
+        if: matrix.chip == 'esp8266'
+        working-directory: firmware
+        run: |
+          mkdir -p ../dist
+          cp .pio/build/${{ matrix.board }}/firmware.bin "../dist/tokenpulse-${{ matrix.board }}-ota.bin"
       - uses: actions/upload-artifact@v4
         with:
           name: firmware-${{ matrix.board }}

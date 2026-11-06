@@ -56,7 +56,7 @@ def main():
         rows = ",\n".join(", ".join(f"0x{b:02x}" for b in data[i:i + 24]) for i in range(0, len(data), 24))
         (OUT / f"{name}.h").write_text(
             f"// Gerado por tools/mkvlw.py: Inter {size} px, peso {weight}. Licença OFL em tools/fonts/OFL.txt.\n"
-            f"#pragma once\n#include <stdint.h>\n\nconst uint8_t {name}[] = {{\n{rows}}};\n")
+            f"#pragma once\n#include <pgmspace.h>\n#include <stdint.h>\n\n// PROGMEM: no ESP8266 um const sem ele vai para a RAM; no ESP32 não muda nada\nconst uint8_t {name}[] PROGMEM = {{\n{rows}}};\n")
         print(f"{name}: {len(data)} bytes")
 
 

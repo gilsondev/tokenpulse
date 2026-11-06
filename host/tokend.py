@@ -10,6 +10,7 @@ import json
 import os
 import re
 import shutil
+import socket
 import subprocess
 import sys
 import threading
@@ -227,7 +228,8 @@ def models(events):
     for name, es in rows:
         per_proj = {}
         for e in es:
-            per_proj[e.project] = per_proj.get(e.project, 0) + e.total
+            proj = e.project if e.project != "?" else first_prompt(e.session)[:40] or "?"
+            per_proj[proj] = per_proj.get(proj, 0) + e.total
         top = sorted(per_proj.items(), key=lambda kv: -kv[1])[:3]
         out.append([name, fmt_tokens(t := sum(e.total for e in es)), round(100 * t / day),
                     *(fmt_tokens(sum(getattr(e, f) for e in es)) for f in ("inp", "out", "cread", "cwrite")),
@@ -241,7 +243,8 @@ def projects(events, now):
     for e in events:
         by.setdefault(e.session, []).append(e)
     rows = sorted(by.values(), key=lambda es: -max(e.ts for e in es))[:8]
-    return [[es[0].project, "Desk" if es[-1].entry == "claude-desktop" else "CLI",
+    return [[es[0].project if es[0].project != "?" else first_prompt(es[0].session)[:40] or "?",
+             "Desk" if es[-1].entry == "claude-desktop" else "CLI",
              fmt_tokens(sum(e.total for e in es)), int((now - max(e.ts for e in es)) // 60)]
             for es in rows]
 
@@ -339,6 +342,44 @@ def session_title(sid):
     return _title_cache[sid]
 
 
+_prompt_cache = {}
+_log_path = {}  # sessão -> o .jsonl dela ("" se não achou); o caminho não muda, a data sim
+
+
+def log_age(sid, now):
+    """Segundos desde a última escrita no .jsonl da sessão. Serve de idade para painel do herdr sem
+    atividade recente lida pelo daemon: sem ela, uma sessão esperando você ficaria sem "há N min"."""
+    if sid not in _log_path:
+        _log_path[sid] = next(iter(glob.glob(os.path.join(HOME, f".claude/projects/*/{sid}.jsonl"))), "")
+    try:
+        return now - os.path.getmtime(_log_path[sid]) if _log_path[sid] else None
+    except OSError:
+        return None
+
+
+def first_prompt(sid):
+    """Começo do primeiro prompt: nome de reserva para sessão sem título nem pasta, como as do Agent SDK,
+    que rodam a partir de / (as coletas automáticas, por exemplo)."""
+    if sid not in _prompt_cache:
+        text = ""
+        for path in glob.glob(os.path.join(HOME, f".claude/projects/*/{sid}.jsonl")):
+            try:
+                with open(path) as f:
+                    for raw in f:
+                        d = json.loads(raw)
+                        if d.get("type") != "user":
+                            continue
+                        c = (d.get("message") or {}).get("content")
+                        text = c if isinstance(c, str) else next(
+                            (b.get("text", "") for b in c or [] if isinstance(b, dict) and b.get("type") == "text"), "")
+                        if text.strip():
+                            break
+            except (OSError, ValueError):
+                pass
+        _prompt_cache[sid] = " ".join(text.split())
+    return _prompt_cache[sid]
+
+
 MAX_SESSIONS = 40   # o frame fica em ~5 KB, abaixo do buffer serial de 8 KB da placa
 MAX_PER_WS = 12
 OUTSIDE = (1000, "fora do herdr")  # Desktop e terminais sem herdr, depois dos workspaces
@@ -359,7 +400,7 @@ def sessions(state, titles, herdr, events, now):
     groups = {}
     for sid in set(state) | set(herdr):
         s, h = state.get(sid), herdr.get(sid)
-        age = now - s["ts"] if s else None
+        age = now - s["ts"] if s else log_age(sid, now) if h else None
         if not h and age > 3600:
             continue
         if h and h["status"] in HERDR_STATE:
@@ -372,8 +413,10 @@ def sessions(state, titles, herdr, events, now):
             st = "idle"
         folder = s["project"] if s else os.path.basename((h["cwd"] if h else "").rstrip("/")) or "?"
         # o nome da aba no herdr é o que você escolheu; depois o título da sessão; por último a pasta
-        name = (h and h["tab"]) or titles.get(sid) or (h and h["title"]) or (h and session_title(sid)) or folder
-        origin = "Desk" if s and s["entry"] == "claude-desktop" else "CLI"
+        name = ((h and h["tab"]) or titles.get(sid) or (h and h["title"]) or (h and session_title(sid))
+                or (folder if folder != "?" else first_prompt(sid) or folder))
+        entry = s["entry"] if s else ""
+        origin = "Desk" if entry == "claude-desktop" else "SDK" if entry == "sdk-cli" else "CLI"
         row = [cut(name, 48), origin, st, fmt_tokens(tokens[sid]) if sid in tokens else "--",
                int(age // 60) if age is not None else -1]
         _known_sessions[sid[:8]] = {"pane": h["pane"] if h else None, "desk": origin == "Desk"}
@@ -958,12 +1001,21 @@ def encode_frame(frame):
     return line
 
 
-def save_boards(boards):
-    """As placas conectadas agora, com o firmware de cada uma: o update.sh decide por elas quem atualizar."""
-    data = {b.name: {"fw": b.fw, "port": b.path} for b in boards.values()}
-    with open(BOARDS + ".tmp", "w") as f:
-        json.dump(data, f)
-    os.replace(BOARDS + ".tmp", BOARDS)  # quem lê nunca pega o arquivo pela metade
+_serial_boards = {}
+_save_lock = threading.Lock()  # o laço serial e o do WiFi gravam o mesmo arquivo
+
+
+def save_boards(boards=None):
+    """As placas conectadas agora, com o firmware de cada uma: o update.sh decide por elas quem atualizar.
+    O laço serial passa as dele; o do WiFi chama sem argumento e mantém as da serial."""
+    global _serial_boards
+    with _save_lock:
+        if boards is not None:
+            _serial_boards = dict(boards)
+        data = {b.name: {"fw": b.fw, "port": b.path} for b in [*_serial_boards.values(), *net_boards.values()]}
+        with open(BOARDS + ".tmp", "w") as f:
+            json.dump(data, f)
+        os.replace(BOARDS + ".tmp", BOARDS)  # quem lê nunca pega o arquivo pela metade
 
 
 def in_background(board, job):
@@ -1021,6 +1073,142 @@ def serve(board, frame):
         return False
 
 
+# Placas pelo WiFi (o SmallTV-Ultra, que só tem USB de energia). Elas se anunciam por mDNS como
+# _tokenpulse._tcp e recebem um frame enxuto por HTTP, com só o que a tela principal delas mostra.
+NET_KEYS = ("p5", "r5", "pw", "rw", "tot", "rate", "sp", "m", "org", "clk", "dark", "age", "mods", "projs")
+NET_EVERY = 2  # s entre frames: pelo WiFi, 1 por segundo só gastaria a placa
+net_boards = {}  # host -> NetBoard
+_latest = {}     # o último frame montado pelo laço principal
+
+
+class NetBoard:
+    def __init__(self, host, ip, name, fw):
+        self.host, self.ip, self.name, self.fw = host, ip, name, fw
+        self.path = f"http://{host}"
+        self.fails = 0
+
+    def log(self, msg):
+        log(f"[{self.name}] {msg}")
+
+
+def http(url, data=None, headers=None, timeout=4):
+    with urllib.request.urlopen(urllib.request.Request(url, data=data, headers=headers or {}), timeout=timeout) as r:
+        return r.read()
+
+
+def browse_mdns(seconds=3):
+    """Nomes das placas anunciadas na rede, pelo dns-sd do macOS (ele não termina sozinho)."""
+    try:
+        p = subprocess.Popen(["dns-sd", "-B", "_tokenpulse._tcp", "local."], stdout=subprocess.PIPE,
+                             stderr=subprocess.DEVNULL, text=True)
+    except OSError:
+        return set()
+    time.sleep(seconds)
+    p.terminate()
+    out = p.communicate(timeout=5)[0]
+    return {line.split()[-1] for line in out.splitlines() if " Add " in line}
+
+
+def resolve4(host):
+    """IPv4 do nome .local. Sem pedir só IPv4, o macOS espera 5 s por um AAAA que o mDNS do ESP8266 não responde."""
+    try:
+        return socket.getaddrinfo(host, 80, socket.AF_INET, socket.SOCK_STREAM)[0][4][0]
+    except (OSError, IndexError):
+        return None
+
+
+def net_hello(ip):
+    try:
+        h = json.loads(http(f"http://{ip}/hello", timeout=3))
+        return h["board"], h.get("fw", "")
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+
+
+def net_ota(board, path):
+    """POST multipart no /update da placa (ESP8266HTTPUpdateServer, campo "firmware")."""
+    data = open(path, "rb").read()
+    boundary = "tokenpulse" + hashlib.md5(data).hexdigest()
+    body = (f'--{boundary}\r\nContent-Disposition: form-data; name="firmware"; filename="firmware.bin"\r\n'
+            "Content-Type: application/octet-stream\r\n\r\n").encode() + data + f"\r\n--{boundary}--\r\n".encode()
+    try:
+        reply = http(f"http://{board.ip}/update", body,
+                     {"Content-Type": f"multipart/form-data; boundary={boundary}"}, timeout=120)
+    except OSError as e:
+        return str(e)
+    reply = reply.decode(errors="replace")
+    return None if "Update Success" in reply else reply.strip()[:120]
+
+
+def session_list(frame, limit=8):
+    """Sessões para a placa sem toque, que não navega pelos workspaces: [[nome, estado, minutos]] e a contagem
+    [trabalhando, esperando você, paradas]. A ordem é trabalhando, esperando você (aprovar antes de sua vez) e
+    paradas, as mais recentes primeiro em cada grupo. Espera de mais de 1 h conta como parada, e automação do
+    Agent SDK também: ninguém espera a sua resposta nela."""
+    rows = []
+    for r in (frame.get("sess") or {}).get("rows") or []:
+        st, mins = r[2], r[4]
+        if st in ("block", "turn") and not (0 <= mins <= 60 and r[1] != "SDK"):
+            st = "idle"
+        rows.append([r[0][:28], st, mins])
+    group = {"work": 0, "block": 1, "turn": 1}
+    rows.sort(key=lambda r: (group.get(r[1], 2), r[1] != "block", r[2] if r[2] >= 0 else 10 ** 9))
+    count = [sum(1 for r in rows if r[1] == "work"), sum(1 for r in rows if r[1] in ("block", "turn")),
+             sum(1 for r in rows if r[1] == "idle")]
+    return rows[:limit], count
+
+
+def net_loop():
+    pending = {}  # host -> até quando insistir no /hello (placa achada no mDNS, ou reiniciando do OTA)
+    last_browse = 0
+
+    def drop(host):
+        net_boards.pop(host, None)
+        save_boards()
+
+    while True:
+        if time.time() - last_browse > 20:
+            last_browse = time.time()
+            for name in browse_mdns():
+                if f"{name}.local" not in net_boards:
+                    pending.setdefault(f"{name}.local", time.time() + 10)
+        for host, until in list(pending.items()):
+            if (ip := resolve4(host)) and (h := net_hello(ip)):
+                del pending[host]
+                net_boards[host] = board = NetBoard(host, ip, *h)
+                save_boards()
+                board.log(f"conectada em http://{host}")
+            elif time.time() > until:
+                del pending[host]
+        frame = _latest.get("frame")
+        body = None
+        if frame:
+            slim = {k: frame[k] for k in NET_KEYS if k in frame}
+            # o detalhe por modelo usa tudo: tokens, %, entrada, saída, cache lido e escrito, custo e projetos
+            slim["mods"] = slim.get("mods", [])[:3]
+            slim["ses"], slim["sesn"] = session_list(frame)
+            body = json.dumps(slim, ensure_ascii=False).encode()
+        for host, board in list(net_boards.items()):
+            if path := pending_ota(board.name):
+                t0 = time.time()
+                err = net_ota(board, path)
+                board.log(f"ota: {err or 'ok'} ({path}, {time.time() - t0:.0f} s)")
+                drop(host)
+                pending[host] = time.time() + 90  # volta pelo /hello assim que o firmware novo subir
+                continue
+            if not body:
+                continue
+            try:
+                http(f"http://{board.ip}/frame", body, {"Content-Type": "application/json"})
+                board.fails = 0
+            except OSError as e:
+                board.fails += 1
+                if board.fails >= 3:  # 6 s sem resposta: some até o mDNS achar de novo
+                    board.log(f"sem resposta: {e}")
+                    drop(host)
+        time.sleep(NET_EVERY)
+
+
 DEMO = "--demo" in sys.argv
 DEMO_P5 = int(os.environ.get("TOKENPULSE_DEMO_P5", "42"))  # para mostrar as faixas: 42, 74, 86, 95
 
@@ -1035,6 +1223,8 @@ def main():
         threading.Thread(target=usage_loop, daemon=True).start()
         threading.Thread(target=history_loop, daemon=True).start()
         threading.Thread(target=herdr_events, daemon=True).start()
+    if "--once" not in sys.argv:
+        threading.Thread(target=net_loop, daemon=True).start()
     if "--once" in sys.argv:
         time.sleep(3)  # dá tempo da primeira busca na API
     while True:
@@ -1048,6 +1238,7 @@ def main():
             org_name = org()  # antes de limits(), que depende de saber se a org mudou
             frame = (usage.snapshot() | limits() | account_frame()
                      | {"clk": datetime.now().strftime("%H:%M"), "org": org_name, "dark": dark_mode()})
+        _latest["frame"] = frame
         if "--once" in sys.argv:
             print(json.dumps(frame, ensure_ascii=False))
             return

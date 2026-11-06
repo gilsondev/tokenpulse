@@ -103,6 +103,23 @@ envio da tela em paralelo no segundo núcleo (~30 fps). As ações que a placa p
 | [Guition JC3248W535](https://www.atomic14.com/esp32/boards/guition-jc3248w535/) (ESP32-S3 N16R8) | 3,5" IPS 320×480, AXS15231B QSPI | capacitivo | — | `guition-jc3248w535` (padrão) |
 | [ESP32-2432S028R](https://github.com/witnessmenow/ESP32-Cheap-Yellow-Display), a "Cheap Yellow Display" (ESP32 sem PSRAM) | 2,8" 240×320, ST7789 | resistivo | LED RGB na cor da faixa | `cyd-2432s028r` |
 | [Waveshare ESP32-S3-LCD-1.47B](https://www.waveshare.com/wiki/ESP32-S3-LCD-1.47B) | 1,47" 172×320, ST7789 | — (botão BOOT) | IMU (gira sozinha), LED RGB na cor da faixa | `waveshare-s3-lcd-147b` |
+| GeekMagic SmallTV-Ultra (ESP8266, 4 MB, sem PSRAM) | 1,54" 240×240, ST7789 | — | só a tela principal, dados pelo WiFi | `smalltv-ultra` |
+
+**SmallTV-Ultra.** O USB-C dele só alimenta, e o ESP8266 tem ~40 KB de heap: roda uma versão mínima à parte
+([`firmware/src/smalltv/`](firmware/src/smalltv/)), sem toque. Ela alterna sozinha entre a tela principal (anel
+de 5 h, semana, tokens, ritmo e a última hora), as sessões trabalhando ou esperando você (aprovar ou sua vez,
+há até 1 h; depois delas, as paradas), os modelos do dia, o detalhe de cada modelo e os projetos da última hora, e mostra o
+diagnóstico "WiFi / daemon / dados" quando o Mac some.
+
+A configuração fica numa página da própria placa, em `http://tokenpulse-XXXXXX.local` (o nome aparece na tela
+de espera e pode ser trocado lá, por exemplo para `smalltv.local`): brilho, escurecer à noite, tema, rotação,
+tempo em cada tela, quais telas entram na volta e esconder o custo, além de reiniciar, esquecer o WiFi e atualizar o
+firmware. `GET /shot?page=main` (ou `sessions`, `models`, `model0`…`model2`, `projects`, `waiting`) devolve a tela em
+RGB565 cru, 240×240, para conferir o layout sem foto.
+Quem está na mesma rede consegue abrir a página e o `/update`, como no firmware de fábrica. A placa se anuncia por
+mDNS (`_tokenpulse._tcp`) e o daemon manda a cada 2 s um frame enxuto por HTTP (`POST /frame`); o OTA também vai
+pela rede (`/update`). Três travamentos seguidos no boot fazem ela subir só com WiFi e `/update`, sem a tela:
+sem serial, esse é o caminho de volta.
 
 ### Perfis: o que cada placa libera
 
@@ -196,6 +213,17 @@ firmware/flash.sh cyd-2432s028r --usb          # primeira gravação compilando 
 
 O `update.sh` lê a versão de cada placa no que o daemon registrou (`~/.claude/esp-tokens-boards.json`),
 baixa o `tokenpulse-<placa>-ota.bin` das que estão atrás e espera cada uma voltar na versão nova.
+
+**SmallTV-Ultra, a primeira vez (sem abrir a caixa).** Com o daemon já instalado (`host/install.sh`):
+
+1. Compile com `pio run -e smalltv-ultra` (ou baixe o `tokenpulse-smalltv-ultra-ota.bin` do release).
+2. No painel de fábrica, abra `http://<ip-do-smalltv>/update` e envie o `.bin`. Ele cabe no espaço de OTA do
+   firmware de fábrica (~440 KB). Isso substitui o firmware da GeekMagic, que não volta sem o `.bin` dele.
+3. Sem rede salva, a placa abre o WiFi aberto `tokenpulse-XXXXXX`. Conecte nele pelo celular, abra
+   `http://192.168.4.1` e informe a rede da casa. Em ~20 s o daemon acha a placa e a tela sai de "sem dados do Mac".
+
+Depois disso o `update.sh` e o `firmware/flash.sh smalltv-ultra` atualizam pelo WiFi. Não use o WiFi do Mac
+para entrar no `tokenpulse-XXXXXX`: sem cabo de rede, o Mac fica sem internet enquanto estiver nele.
 
 Opcional: aponte o `statusLine` do `~/.claude/settings.json` para `host/statusline.sh` (passe a sua statusline
 atual como argumento para encadear). Ela serve de reserva do % quando a API de uso responde 429.
