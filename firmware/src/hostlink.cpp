@@ -64,6 +64,7 @@ void handle(const String& line) {
     else Serial.println("sem IMU");
   } else if (line == "shot") {
     // o último quadro mostrado, cru: cabeçalho em texto e w × h × 2 bytes RGB565 (byte alto primeiro)
+    if (!gfx::shown()) return gfx::captureNext();  // desenhando em faixas: sai no próximo quadro
     const int w = gfx::width(), h = gfx::height();
     Serial.printf("SHOT %d %d %d\n", w, h, w * h * 2);
     const uint8_t* px = reinterpret_cast<const uint8_t*>(gfx::shown());
@@ -94,7 +95,7 @@ void handle(const String& line) {
     // parse num documento à parte: uma linha cortada não pode apagar o frame que está na tela
     JsonDocument next;
     if (DeserializationError err = deserializeJson(next, line)) {
-      Serial.printf("frame inválido (%u B): %s\n", line.length(), err.c_str());
+      Serial.printf("frame inválido (%u B): %s; RAM livre %u, maior bloco %u\n", line.length(), err.c_str(), ESP.getFreeHeap(), ESP.getMaxAllocHeap());
       return;
     }
     app::frame = std::move(next);
@@ -109,7 +110,7 @@ void handle(const String& line) {
 
 void begin() {
   Serial.setRxBufferSize(8192);  // o padrão de 256 B é menor que um frame (~4 KB com as sessões)
-  Serial.begin(115200);
+  Serial.begin(board::SERIAL_BAUD);
   Serial.setTimeout(50);
 }
 
@@ -118,6 +119,15 @@ void poll() {
 }
 
 uint32_t lastIdMs() { return idMs; }
+
+#if ARDUINO_USB_CDC_ON_BOOT
+bool usbPlugged() { return HWCDC::isPlugged(); }
+bool portOpen() { return HWCDC::isConnected(); }
+#else
+// pelo conversor USB-UART a placa não sabe do cabo nem da porta: ligada já é cabo, e o daemon se apresenta
+bool usbPlugged() { return true; }
+bool portOpen() { return idMs != 0; }
+#endif
 #ifndef FW_VERSION
 #define FW_VERSION "dev " __DATE__ " " __TIME__  // build local; o CI passa a tag (v1.2.0) em -DFW_VERSION
 #endif

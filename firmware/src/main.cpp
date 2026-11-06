@@ -74,10 +74,12 @@ void checkTouch() {
   const int dx = x - x0, dy = y - y0;
   Serial.printf("toque: %d,%d -> %d,%d em %lu ms\n", x0, y0, x, y, millis() - downMs);
   if (held) return;
+  // o swipe mínimo acompanha o lado menor: 40 px em 320, 30 px em 240 (com caneta o gesto sai mais curto)
+  const int swipe = min(gfx::width(), gfx::height()) / 8;
   // arrastar para cima a partir da borda de baixo: volta para a principal de qualquer lugar, como no celular
-  if (y0 > gfx::height() - 36 && dy < -50 && abs(dy) > abs(dx)) screens::homeUp();
-  else if (abs(dx) > 40 && abs(dx) > 2 * abs(dy)) dx < 0 ? screens::next() : screens::prev();
-  else if (abs(dy) > 40 && abs(dy) > 2 * abs(dx)) screens::scroll(dy < 0 ? 1 : -1);
+  if (y0 > gfx::height() - gfx::height() * 3 / 40 && dy < -gfx::height() * 5 / 48 && abs(dy) > abs(dx)) screens::homeUp();
+  else if (abs(dx) > swipe && abs(dx) > 2 * abs(dy)) dx < 0 ? screens::next() : screens::prev();
+  else if (abs(dy) > swipe && abs(dy) > 2 * abs(dx)) screens::scroll(dy < 0 ? 1 : -1);
   else if (abs(dx) < 24 && abs(dy) < 24) screens::tap(x0, y0);
 }
 
@@ -88,15 +90,17 @@ void setup() {
   settings::begin();
   gfx::begin();
   board::begin();
-  if (settings::v.flip) gfx::setRotation(2);
+  if (settings::v.orient) gfx::setRotation(1);
   screens::bootSplash();
+  // touch resistivo sem calibração gravada: calibra antes de tudo, senão os toques caem longe da caneta
+  if (board::PROFILE.calibrate && !settings::cal.ok) screens::calibrateTouch();
 }
 
 void loop() {
   static uint32_t lastRenderMs = 0;
-  checkOrientation();
-  checkButton();
-  checkTouch();
+  if (board::PROFILE.imu) checkOrientation();
+  if (board::PROFILE.button) checkButton();
+  if (board::PROFILE.touch) checkTouch();
   hostlink::poll();
   if (millis() - lastRenderMs >= 33) {  // ~30 fps; o envio do quadro anterior corre no outro núcleo
     lastRenderMs = millis();

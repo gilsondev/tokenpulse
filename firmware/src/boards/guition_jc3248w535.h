@@ -5,25 +5,29 @@
 #include <Arduino.h>
 #include <Wire.h>
 
+#include "profile.h"
+
 namespace board {
 
 constexpr const char* NAME = "guition-jc3248w535";
 constexpr uint8_t DEFAULT_ROTATION = 0;  // retrato, a orientação nativa do painel
 constexpr uint8_t ROT_FOR[4] = {0, 0, 0, 0};
+constexpr Profile PROFILE{.touch = true, .calibrate = false, .imu = false, .led = false, .button = true};
+constexpr uint32_t SERIAL_BAUD = 115200;
 
 constexpr int PIN_BACKLIGHT = 1;
 constexpr int PIN_BUTTON = 0;  // BOOT
 constexpr uint8_t TOUCH_ADDR = 0x3B;
 
 void displayBegin();  // guition_jc3248w535.cpp
-void displayPush(const uint16_t* px, int w, int h);
+void displayPush(const uint16_t* px, int y, int w, int h);  // tem PSRAM: sempre o quadro inteiro, y = 0
 void setBrightness(uint8_t v);
-// O AXS15231B não gira por hardware: o retrato de cabeça para baixo (rot 2) é feito no displayPush e
-// no touch. ponytail: paisagem (rot 1/3) não é suportada; girar 90° pede outro layout de qualquer jeito.
-inline bool flipped = false;
-void displaySetRotation(uint8_t rot);  // rot 2 só vale com o buffer de faixas (é ele que gira a imagem)
-inline int displayWidth() { return 320; }
-inline int displayHeight() { return 480; }
+// O AXS15231B não gira por hardware: deitada (rot 1), o displayPush gira o quadro de 480x320 e o
+// toque gira junto. Retrato (rot 0) é o nativo.
+inline bool landscape = false;
+void displaySetRotation(uint8_t rot);
+inline int displayWidth() { return landscape ? 480 : 320; }
+inline int displayHeight() { return landscape ? 320 : 480; }
 
 inline void begin() {
   pinMode(PIN_BUTTON, INPUT_PULLUP);
@@ -53,10 +57,11 @@ inline bool touch(int16_t& x, int16_t& y) {
       ly = (buf[4] & 0x0F) << 8 | buf[5];
     }
   }
-  x = flipped ? 319 - lx : lx, y = flipped ? 479 - ly : ly;
+  x = landscape ? ly : lx, y = landscape ? 319 - lx : ly;  // deitada: o retrato girado 90° no sentido horário
   return down;
 }
 
 inline bool buttonPressed() { return digitalRead(PIN_BUTTON) == LOW; }
+inline bool touchRaw(int16_t&, int16_t&) { return false; }  // capacitivo: já sai em pixels
 
 }  // namespace board

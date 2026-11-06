@@ -1,6 +1,7 @@
 #include "screens.h"
 
 #include "../app.h"
+#include "../hostlink.h"
 #include "../boards/board.h"
 #include "anim.h"
 #include "gfx.h"
@@ -45,7 +46,7 @@ void resolveOpen() {
   if (sessWsName.length() && (sessWs = indexOf(app::frame["sess"]["ws"], sessWsName)) < 0) sessWsName = "", sessScroll = 0;
 }
 
-int count() { return gfx::large() ? tall::PAGES : COUNT; }
+int count() { return gfx::full() ? tall::PAGES : COUNT; }
 
 // LED de status na cor da faixa da janela de 5h, sempre respirando; acima de 90% respira mais rápido.
 void updateLed() {
@@ -246,6 +247,80 @@ void bootSplash() {
 uint32_t holdUntil = 0;
 void holdFor(uint32_t ms) { holdUntil = millis() + ms; }
 
+// Calibração do touch resistivo: um alvo perto de cada canto, a leitura crua média de cada toque e, dos
+// quatro, a leitura nas bordas da tela. Sem toque em 60 s desiste e fica a calibração que havia.
+bool calibrateNative();
+
+bool calibrateTouch() {
+  // a calibração é do painel, em retrato: deitada, gira para calibrar e volta no fim
+  const uint8_t rot = gfx::rotation();
+  if (rot) gfx::setRotation(0);
+  const bool ok = calibrateNative();
+  if (rot) gfx::setRotation(rot);
+  return ok;
+}
+
+bool calibrateNative() {
+  const int W = gfx::width(), H = gfx::height(), in = 24;
+  // alvos: sup-esq, sup-dir, inf-esq, inf-dir
+  const int nx[4] = {in, W - 1 - in, in, W - 1 - in}, ny[4] = {in, in, H - 1 - in, H - 1 - in};
+  long rx[4], ry[4];
+  auto draw = [&](int i, const char* status, uint16_t c) {
+    const int x = nx[i], y = ny[i];
+    gfx::frame([&] {
+      gfx::clear();
+      gfx::text("calibrar o toque", W / 2, H / 2 - 30, gfx::TITLE, TEXT, middle_center);
+      gfx::text(status, W / 2, H / 2, gfx::SMALL, c, middle_center);
+      char step[16];
+      snprintf(step, sizeof step, "%d de 4", i + 1);
+      gfx::text(step, W / 2, H / 2 + 22, gfx::SMALL, DIM, middle_center);
+      fb().drawCircle(x, y, 10, ACCENT);
+      fb().drawFastHLine(x - 16, y, 33, ACCENT);
+      fb().drawFastVLine(x, y - 16, 33, ACCENT);
+      fb().fillCircle(x, y, 3, ACCENT);
+    });
+  };
+  for (int i = 0; i < 4; i++) {
+    draw(i, "toque no centro do alvo com a caneta", MUTED);
+    int16_t x, y;
+    uint32_t t0 = millis(), quiet = millis();
+    while (millis() - quiet < 300) {  // espera soltar o toque anterior
+      if (board::touchRaw(x, y)) quiet = millis();
+      hostlink::poll();
+    }
+    long sx = 0, sy = 0, n = 0;
+    uint32_t lastHit = 0;
+    while (!n || millis() - lastHit < 150) {  // amostra enquanto a caneta está no alvo
+      if (millis() - t0 > 60000) return false;
+      hostlink::poll();
+      if (!board::touchRaw(x, y)) continue;
+      sx += x, sy += y, n++, lastHit = millis();
+      delay(5);
+    }
+    if (n < 4) {  // encostou e tirou rápido demais: não conta, pede de novo
+      i--;
+      continue;
+    }
+    rx[i] = sx / n, ry[i] = sy / n;
+    draw(i, "ok", GREEN);
+    delay(250);
+  }
+  // o eixo cru que mais anda da esquerda para a direita é o x da tela
+  const long dx = labs(rx[1] - rx[0]) + labs(rx[3] - rx[2]), dy = labs(ry[1] - ry[0]) + labs(ry[3] - ry[2]);
+  const bool swap = dy > dx;
+  long a[4], b[4];
+  for (int i = 0; i < 4; i++) a[i] = swap ? ry[i] : rx[i], b[i] = swap ? rx[i] : ry[i];
+  const float left = (a[0] + a[2]) / 2.f, right = (a[1] + a[3]) / 2.f, top = (b[0] + b[1]) / 2.f, bottom = (b[2] + b[3]) / 2.f;
+  if (fabsf(right - left) < 500 || fabsf(bottom - top) < 500) return false;  // toques fora dos alvos
+  const float kx = (right - left) / (nx[1] - nx[0]), ky = (bottom - top) / (ny[2] - ny[0]);  // leitura crua por pixel
+  settings::cal = {(int16_t)lroundf(left - kx * nx[0]), (int16_t)lroundf(left + kx * (W - nx[0])),
+                   (int16_t)lroundf(top - ky * ny[0]), (int16_t)lroundf(top + ky * (H - ny[0])), (uint8_t)swap, 1};
+  settings::saveCal();
+  Serial.printf("calibração: x %d..%d y %d..%d troca %d\n", settings::cal.x0, settings::cal.x1, settings::cal.y0,
+                settings::cal.y1, swap);
+  return true;
+}
+
 void render() {
   if (millis() < holdUntil) return;
   power::update();
@@ -253,22 +328,22 @@ void render() {
   if (dark != color::dark) color::apply(dark);
   if (!gfx::ready()) return board::setLed(breath(800) > 0.5f ? 40 : 0, 0, 0);  // sem canvas: LED vermelho piscando
   // sem dados há mais de 1 min a tela grande troca os números velhos pelo diagnóstico da conexão
-  const bool lost = gfx::large() && app::hasData() && millis() - app::lastFrameMs > 60000;
+  const bool lost = gfx::full() && app::hasData() && millis() - app::lastFrameMs > 60000;
   if (!app::hasData() || lost) {
     board::setLed(0, 0, 0);
-    if (gfx::large()) tall::drawWaiting();
-    else drawWaiting();
-  } else {
-    anim::step();
-    updateLed();
-    const bool live = app::live();
-    resolveOpen();
-    if (gfx::large()) tall::setGearActive(settingsOpen);
-    if (gfx::large() && settingsOpen) {
+    return gfx::frame([] { gfx::full() ? tall::drawWaiting() : drawWaiting(); });
+  }
+  anim::step();
+  updateLed();
+  const bool live = app::live();
+  resolveOpen();
+  if (gfx::full()) tall::setGearActive(settingsOpen);
+  gfx::frame([live] {
+    if (gfx::full() && settingsOpen) {
       if (about == 3) tall::drawAccount(live);
       else if (about) tall::drawAbout(live, about == 2);
       else tall::drawSettings(live);
-    } else if (gfx::large()) {
+    } else if (gfx::full()) {
       if (page == 1) tall::drawSessions(live, page, sessWs, sessScroll);
       else if (page == 2 && detail >= 0) tall::drawModelDetail(live, page, detail);
       else if (page == 2) tall::drawModels(live, page);
@@ -277,16 +352,15 @@ void render() {
     } else if (page == 1) drawModels(live);
     else if (page == 2) drawProjects(live);
     else drawMain(live);
-  }
-  gfx::present();
+  });
 }
 
 void next() { go((page + 1) % count(), -1); }
 void prev() { go((page + count() - 1) % count(), 1); }
 
 void scroll(int dir) {
-  if (!gfx::large() || page != 1) return;
-  int items = app::frame["sess"]["ws"].size(), per = 10;
+  if (!gfx::full() || page != 1) return;
+  int items = app::frame["sess"]["ws"].size(), per = tall::wsPerPage();
   if (sessWs >= 0) {
     items = 0, per = 6;
     for (JsonArrayConst r : app::frame["sess"]["rows"].as<JsonArrayConst>()) items += (int)r[5] == sessWs;
@@ -299,7 +373,7 @@ void scroll(int dir) {
 }
 
 void tap(int x, int y) {
-  if (!gfx::large()) return next();
+  if (!gfx::full()) return next();
   if (page == 0 && !settingsOpen && (tall::orgTitleAt(x, y) || tall::suggestionAt(x, y))) {  // lista de orgs
     gfx::slide(-1);
     settingsOpen = true, about = 3, orgFromHeader = true;
@@ -322,7 +396,13 @@ void tap(int x, int y) {
       return;
     }
     if (about) {
-      if (!tall::aboutRestartAt(y)) return void(about = 0);
+      const int b = tall::aboutButtonAt(x, y);
+      if (b == 0) return void(about = 0);
+      if (b == 2) {  // calibrar o toque: some o Sobre e volta para os ajustes
+        if (!calibrateTouch()) Serial.println("calibração: desistiu ou toques fora dos alvos");
+        about = 0;
+        return;
+      }
       if (about == 2) ESP.restart();
       about = 2;
       return;
@@ -333,7 +413,7 @@ void tap(int x, int y) {
     return;
   }
   if (page == 2) {
-    const int m = detail >= 0 ? -1 : tall::modelAt(y);
+    const int m = detail >= 0 ? -1 : tall::modelAt(x, y);
     gfx::slide(m >= 0 ? -1 : 1);
     detail = m;
     detailName = m >= 0 ? String(app::frame["mods"][m][0] | "") : "";

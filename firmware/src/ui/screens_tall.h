@@ -17,11 +17,12 @@ void drawAbout(bool live, bool armed);
 void drawAccount(bool live);
 
 int workspaceAt(int x, int y, int scroll);  // workspace sob o toque, ou -1
-int modelAt(int y);              // linha de modelo sob o toque, ou -1
+int wsPerPage();                 // workspaces por página: 10 em pé, 9 deitada
+int modelAt(int x, int y);       // modelo sob o toque, ou -1
 int historyBarAt(int x, int y);  // dia do histórico sob o toque, ou -1
 int settingsTap(int x, int y);   // 0 trocou um ajuste, 1 abriu o Sobre, 2 abriu a Conta, -1 nada
 bool accountTap(int x, int y);   // pediu uma troca de conta ao Mac; false: fechar o painel
-bool aboutRestartAt(int y);      // o toque caiu no botão de reiniciar
+int aboutButtonAt(int x, int y); // botão do Sobre sob o toque: 1 reiniciar, 2 calibrar o toque, 0 nenhum
 bool gearAt(int x, int y);       // o toque caiu na engrenagem do cabeçalho
 bool orgTitleAt(int x, int y);   // o toque caiu no nome da org (tela principal)
 bool suggestionAt(int x, int y); // o toque caiu no botão "esgotado · trocar para…" (tela principal)

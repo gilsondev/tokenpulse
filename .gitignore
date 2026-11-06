@@ -16,3 +16,6 @@ hardware/stand/berco-encaixe.scad
 
 # configuração local do Claude Code
 .claude/
+
+# prints com dados reais, só para uso interno
+prints-slack/

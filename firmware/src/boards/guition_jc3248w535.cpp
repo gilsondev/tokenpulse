@@ -30,24 +30,22 @@ void displayBegin() {
 
 void setBrightness(uint8_t v) { ledcWrite(BACKLIGHT_CH, v); }
 
-void displaySetRotation(uint8_t rot) { flipped = rot == 2 && band; }
+void displaySetRotation(uint8_t rot) { landscape = rot & 1 && band; }
 
-void displayPush(const uint16_t* px, int w, int h) {
+void displayPush(const uint16_t* px, int, int w, int h) {
   if (!band) return panel.draw16bitBeRGBBitmap(0, 0, const_cast<uint16_t*>(px), w, h);
+  constexpr int NW = 320, NH = 480;  // o painel, sempre em retrato
   panel.startWrite();
-  panel.writeAddrWindow(0, 0, w, h);
-  for (int y = 0; y < h; y += BAND_ROWS) {
-    const int rows = min(BAND_ROWS, h - y);
-    if (!flipped) {
+  panel.writeAddrWindow(0, 0, NW, NH);
+  for (int y = 0; y < NH; y += BAND_ROWS) {
+    const int rows = min(BAND_ROWS, NH - y);
+    if (!landscape) {
       memcpy(band, px + y * w, rows * w * 2);
-    } else {  // girado 180°: a linha h-1-y, de trás para frente
-      for (int r = 0; r < rows; r++) {
-        const uint16_t* src = px + (h - 1 - y - r) * w + w - 1;
-        uint16_t* dst = band + r * w;
-        for (int i = 0; i < w; i++) dst[i] = src[-i];
-      }
+    } else {  // o pixel (x, y) do retrato vem do (y, 319 - x) do quadro deitado
+      for (int r = 0; r < rows; r++)
+        for (int x = 0; x < NW; x++) band[r * NW + x] = px[(NW - 1 - x) * w + y + r];
     }
-    qspi.writeBytes(reinterpret_cast<uint8_t*>(band), rows * w * 2);
+    qspi.writeBytes(reinterpret_cast<uint8_t*>(band), rows * NW * 2);
   }
   panel.endWrite();
 }

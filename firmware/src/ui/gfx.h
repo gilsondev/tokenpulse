@@ -1,7 +1,9 @@
 #pragma once
-// Canvas e primitivas de desenho. As telas desenham no canvas e chamam present(), que entrega o
-// quadro para board::displayPush. O LovyanGFX aqui só desenha em memória: a tela pode ter outro driver.
+// Canvas e primitivas de desenho. As telas desenham dentro de frame(), que entrega o quadro para
+// board::displayPush. O LovyanGFX aqui só desenha em memória: a tela pode ter outro driver.
 #include <LovyanGFX.hpp>
+
+#include <functional>
 
 #include "../boards/board.h"
 #include "theme.h"
@@ -20,8 +22,19 @@ inline bool wide() { return width() > height(); }
 // Posições e tamanhos fixos das telas passam por s(); as fontes trocam de tamanho junto.
 float scale();
 inline int s(int v) { return lroundf(v * scale()); }
-bool large();  // tela grande: fontes suaves (Inter) e formas com anti-aliasing
-void present();
+// Classe da UI, pela tela já girada e pelo perfil da placa: compacta (fontes bitmap, navegação por
+// swipe ou botão), média ou grande (Inter com anti-aliasing, touch e todas as telas).
+enum Ui : uint8_t { COMPACT, MEDIUM, LARGE };
+Ui ui();
+inline bool full() { return ui() != COMPACT; }
+// Desenha e mostra um quadro. Sem memória para o quadro inteiro, `draw` roda uma vez por faixa da
+// tela: ela não pode mudar estado, só desenhar. Escrita direta no buffer respeita rows().
+void frame(const std::function<void()>& draw);
+void rows(int& lo, int& hi);  // linhas que existem no canvas agora: a tela toda ou a faixa atual
+void captureNext();           // o próximo quadro sai também pela serial, como no comando shot
+// Linha com anti-aliasing. Use esta e não fb().drawWideLine: a da LovyanGFX troca o recorte pelo
+// dela e depois o apaga, e num canvas em faixas escreveria fora da faixa.
+void wideLine(float x0, float y0, float x1, float y1, float r, uint16_t c);
 // Tira do fim da String um caractere UTF-8 inteiro (não só o último byte de um "ã").
 inline void dropLastChar(String& t) {
   while (t.length() && ((uint8_t)t[t.length() - 1] & 0xC0) == 0x80) t.remove(t.length() - 1);
@@ -38,6 +51,7 @@ enum Font : uint8_t { SMALL, LABEL, TITLE, NUM, HERO };
 // bg: a cor sob o texto (o texto pronto fica guardado já misturado com ela)
 void text(const char* s, int x, int y, Font f, uint16_t c, uint8_t datum = top_left, uint16_t bg = color::BG);
 int textWidth(const char* s, Font f);
+int lineHeight(Font f);  // altura de uma linha da fonte, em pixels
 inline void label(const char* s, int x, int y, uint16_t c, uint8_t datum = top_left) { text(s, x, y, LABEL, c, datum); }
 inline void big(const char* s, int x, int y, uint16_t c = color::TEXT, uint8_t datum = top_left) { text(s, x, y, NUM, c, datum); }
 

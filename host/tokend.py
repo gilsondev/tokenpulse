@@ -100,9 +100,9 @@ def parse_reset(v):
     return None
 
 
-def countdown(dt, now):
-    secs = max(0, int((dt - now).total_seconds()))
-    return f"{secs // 3600}h{secs % 3600 // 60:02d}"
+def clock(dt):
+    """3h, 14h30: o horário local do jeito que se fala."""
+    return f"{dt.hour}h{dt.minute:02d}".replace("h00", "h")
 
 
 class Usage:
@@ -725,14 +725,14 @@ def limits():
     # depois do reset o % gravado é da janela anterior: vira "--" até chegar um dado novo
     out["p5"] = round(five.get("used_percentage") if five.get("used_percentage") is not None else -1)
     r5 = parse_reset(five.get("resets_at"))
-    out["r5"] = f"reset em {countdown(r5, now)}" if r5 else ""
+    out["r5"] = f"reset às {clock(r5)}" if r5 else ""  # horário, como o uso no app do Claude
     if r5 and r5 <= now:  # a janela virou e o % gravado é da anterior: até chegar o novo, é "janela nova"
         start = r5
         out["p5"], out["r5"] = -1, "aguardando o 1º dado"
     else:
         start = r5 - timedelta(hours=5) if r5 else None
     if start and out["p5"] <= 0:  # 0% ou "--" parece erro: o rótulo diz que a janela acabou de começar
-        out["s5"] = f"janela nova · {start.hour}h{start.minute:02d}".replace("h00", "h")
+        out["s5"] = f"janela nova · {clock(start)}"
     out["pw"] = round(week.get("used_percentage") if week.get("used_percentage") is not None else -1)
     rw = parse_reset(week.get("resets_at"))
     out["rw"] = f"{WEEKDAYS[rw.weekday()]} {rw.hour}h" if rw else ""
@@ -749,21 +749,29 @@ class Board:
     def __init__(self, path, ser, name):
         self.path, self.ser, self.name = path, ser, name
         self.buf = b""  # linha da placa ainda sem o \n
+        self.busy = False  # OTA ou screenshot rodando numa thread: o laço principal não mexe na porta
+        self.gone = False  # a thread acabou com a porta (OTA reiniciou a placa, ou deu erro): reconectar
 
     def log(self, msg):
         print(f"[{self.name}] {msg}", file=sys.stderr, flush=True)
 
 
-def connect(path):
+BAUD = 460800  # placas com ponte USB-serial (CH340, CP210x) usam esta; a USB nativa do ESP ignora
+
+
+def connect(path, vid):
     """Abre a porta e pergunta quem é. Devolve None se nada responder como placa do monitor."""
     ser = serial.Serial()
-    ser.port, ser.baudrate, ser.timeout = path, 115200, 0
+    ser.port, ser.baudrate, ser.timeout = path, BAUD, 0
     ser.write_timeout = 2  # se a placa parar de ler, o write falha e o daemon reconecta em vez de travar
     ser.dtr = ser.rts = False  # não aciona o reset do USB-Serial/JTAG nem o auto-reset das pontes USB-serial
     ser.open()
     time.sleep(0.5)
-    ser.dtr = True  # sem DTR o USB CDC do Arduino descarta o que o ESP imprime
-    deadline, buf = time.time() + 6, b""  # a placa pode estar reiniciando e mostrando o boot
+    if vid == ESPRESSIF_VID:
+        ser.dtr = True  # sem DTR o USB CDC do Arduino descarta o que o ESP imprime; na ponte, DTR mexe no reset
+    # a placa pode estar reiniciando: pela ponte USB-serial, abrir a porta reinicia o ESP32 clássico, que só
+    # responde depois do boot e da abertura (~4 s). Como a ponte só é testada uma vez, a janela é maior.
+    deadline, buf = time.time() + (6 if vid == ESPRESSIF_VID else 12), b""
     while time.time() < deadline:
         ser.write(b"id\n")
         time.sleep(0.5)
@@ -855,10 +863,19 @@ def screenshot(port, req, frame):
         while time.time() < deadline:
             port.write(line)
             time.sleep(0.5)
+    # pela ponte CH340 o macOS às vezes perde bytes da placa para o Mac, e às vezes o pedido seguinte
+    # some: tenta de novo, a tela é a mesma
+    for _ in range(5):
+        if not (err := capture(port, req)):
+            return None
+    return err
+
+
+def capture(port, req):
     port.reset_input_buffer()
     port.write(b"shot\n")
     port.timeout = 0.05  # sem isso o read(max(1, in_waiting)) gira a 100% de CPU enquanto espera
-    deadline, buf = time.time() + 10, b""
+    deadline, buf = time.time() + 8, b""
     while time.time() < deadline and b"SHOT " not in buf:
         buf += port.read(max(1, port.in_waiting))
     head, _, rest = buf.partition(b"SHOT ")
@@ -870,8 +887,10 @@ def screenshot(port, req, frame):
     except ValueError:
         port.timeout = 0
         return f"cabeçalho do quadro inválido: {line[:40]!r}"
-    while time.time() < deadline and len(data) < n:
-        data += port.read(max(1, port.in_waiting))
+    last = time.time()
+    while time.time() < deadline and len(data) < n and time.time() - last < 0.8:  # parou de chegar: perdeu bytes
+        got = port.read(max(1, port.in_waiting))
+        data, last = data + got, time.time() if got else last
     port.timeout = 0
     if len(data) < n:
         return f"quadro incompleto: {len(data)} de {n} bytes"
@@ -912,7 +931,7 @@ def demo_frame():
         "sess": {"n": len(sessions), "ws": [["Produto", 4, 1, 1, 1, 1], ["Infra", 3, 0, 0, 1, 0], ["Pessoal", 1, 0, 0, 0, 0]],
                  "rows": sessions},
         "hist": hist,
-        "p5": DEMO_P5, "r5": "reset em 2h18", "pw": 38, "rw": "seg 6h", "wf": 49, "age": 30,
+        "p5": DEMO_P5, "r5": "reset às 17h", "pw": 38, "rw": "seg 6h", "wf": 49, "age": 30,
         "clk": now.strftime("%H:%M"), "org": "Acme Labs", "dark": dark_mode(),
         "accts": [[1, "Acme Labs", 1, 0, DEMO_P5, 38, 0], [2, "Side Project", 0, 0, 7, 12, 180]], "act": ["", "", ""],
     }
@@ -932,21 +951,45 @@ def encode_frame(frame):
     return line
 
 
+def in_background(board, job):
+    """OTA e screenshot levam de segundos a quase um minuto: rodam numa thread, e o laço principal pula
+    esta placa enquanto isso, para as outras seguirem recebendo frames."""
+    def run():
+        try:
+            job()
+        except (OSError, ValueError, serial.SerialException) as e:
+            board.log(f"serial: {e}")
+            board.gone = True
+        finally:
+            board.busy = False
+
+    board.busy = True
+    threading.Thread(target=run, daemon=True).start()
+
+
 def serve(board, frame):
     """Um ciclo de uma placa: OTA se houver pedido, senão o frame. Devolve False se a placa saiu."""
+    if board.gone:
+        board.ser.close()
+        return False
+    if board.busy:
+        return True
     try:
         if path := pending_ota(board.name):
-            t0 = time.time()
-            err = ota(board.ser, path)
-            board.log(f"ota: {err or 'ok'} ({path}, {time.time() - t0:.0f} s)")
-            board.ser.close()
-            return False  # a placa reinicia; volta pelo handshake
+            def ota_job():
+                t0 = time.time()
+                err = ota(board.ser, path)
+                board.log(f"ota: {err or 'ok'} ({path}, {time.time() - t0:.0f} s)")
+                board.gone = True  # a placa reinicia; volta pelo handshake
+            in_background(board, ota_job)
+            return True
         if req := pending_shot(board.name):
             # captura com dados reais só se o pedido disser (shot.sh com REAL=1): uma captura para o
             # README feita sem --demo exporia org, títulos de sessão e custos
-            err = screenshot(board.ser, req, frame) if DEMO or req.get("real") else (
-                "recusado: daemon sem --demo; rode com REAL=1 para capturar dados reais")
-            board.log(f"shot: {err or 'ok'} ({req.get('out')})")
+            if DEMO or req.get("real"):
+                in_background(board, lambda: board.log(f"shot: {screenshot(board.ser, req, frame) or 'ok'} ({req.get('out')})"))
+                return True
+            board.log(f"shot: recusado: daemon sem --demo; rode com REAL=1 para capturar dados reais ({req.get('out')})")
         board.ser.write(encode_frame(frame))
         board.buf += board.ser.read(4096)  # lê sempre para não encher o buffer
         *lines, board.buf = board.buf.split(b"\n")  # só linhas completas: "ACTION switch 12" não vira "1"
@@ -998,13 +1041,15 @@ def main():
             if path in boards or ignored.get(path, 0) > time.time():
                 continue
             try:
-                board = connect(path)
+                board = connect(path, info.vid)
             except (OSError, serial.SerialException):
                 board = None
             if board:
                 boards[path] = board
                 board.log(f"conectada em {path}")
-            else:  # ESP32 pode estar reiniciando: tenta de novo em 60 s; ponte USB-serial só no próximo plug
+            else:
+                # ESP32 com USB nativa pode estar reiniciando: tenta de novo em 60 s. Abrir uma ponte USB-serial
+                # (CH340, CP210x) reinicia o aparelho do outro lado, que pode ser outro projeto: uma vez por plug
                 ignored[path] = time.time() + (60 if info.vid == ESPRESSIF_VID else 10 ** 9)
         for path, board in list(boards.items()):
             if not serve(board, frame):

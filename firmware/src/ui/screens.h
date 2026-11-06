@@ -14,8 +14,9 @@ void next();               // clique, toque ou arrastar para a esquerda
 void prev();               // arrastar para a direita
 void home();               // clique longo ou toque segurado: volta para a principal
 void homeUp();             // arrastar da borda de baixo: volta para a principal subindo a tela
-void tap(int x, int y);
-void goTo(int page);
-void scroll(int dir);      // arrastar na vertical: +1 próximas sessões, -1 anteriores       // vai direto para uma tela (comando remoto)    // toque curto: abre o detalhe do que foi tocado; fora disso, próxima tela
+void tap(int x, int y);    // toque curto: abre o detalhe do que foi tocado; fora disso, próxima tela
+void goTo(int page);       // vai direto para uma tela (comando remoto)
+void scroll(int dir);      // arrastar na vertical: +1 próximas sessões, -1 anteriores
+bool calibrateTouch();     // touch resistivo: 4 alvos, grava na NVS; false se desistiu ou errou os alvos
 
 }  // namespace screens

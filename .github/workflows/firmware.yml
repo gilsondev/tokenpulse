@@ -14,7 +14,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        board: [guition-jc3248w535, waveshare-s3-lcd-147b]
+        include:  # o ESP32 clássico tem o bootloader em 0x1000; o S3, em 0x0
+          - {board: guition-jc3248w535, chip: esp32s3, boot: "0x0"}
+          - {board: waveshare-s3-lcd-147b, chip: esp32s3, boot: "0x0"}
+          - {board: cyd-2432s028r, chip: esp32, boot: "0x1000"}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -35,8 +38,8 @@ jobs:
         working-directory: firmware
         run: |
           B=.pio/build/${{ matrix.board }}
-          python ~/.platformio/packages/tool-esptoolpy/esptool.py --chip esp32s3 merge_bin -o "$B/factory.bin" \
-            0x0 "$B/bootloader.bin" 0x8000 "$B/partitions.bin" \
+          python ~/.platformio/packages/tool-esptoolpy/esptool.py --chip ${{ matrix.chip }} merge_bin -o "$B/factory.bin" \
+            ${{ matrix.boot }} "$B/bootloader.bin" 0x8000 "$B/partitions.bin" \
             0xe000 ~/.platformio/packages/framework-arduinoespressif32/tools/partitions/boot_app0.bin \
             0x10000 "$B/firmware.bin"
           mkdir -p ../dist

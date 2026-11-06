@@ -28,7 +28,7 @@ fazendo e quanto esse uso custaria pela API. Tudo ao vivo, pela USB, sem Wi-Fi.
 | ![Modelos](docs/screenshots/04-modelos.png) | ![Detalhe do modelo](docs/screenshots/05-modelo.png) | ![Histórico](docs/screenshots/06-historico.png) |
 | **Modelos** usados hoje e a fatia de cada um. | **Detalhe do modelo**: entrada, saída e cache, custo equivalente na API e os projetos que mais usaram. | **Histórico** de 14 dias; toque numa barra para ver o dia. |
 | ![Ajustes](docs/screenshots/07-ajustes.png) | ![Trocar de org](docs/screenshots/08-org.png) | ![Sobre](docs/screenshots/09-sobre.png) |
-| **Ajustes** pela engrenagem: brilho, escurecer quando parada, tema (segue o macOS), girar 180°, ocultar custo. | **Trocar de org** pelo nome no topo, com o último % de cada uma. Usa o [claude-swap](https://github.com/realiti4/claude-swap) e pede dois toques, porque troca o login de todas as sessões do Mac. | **Sobre**: placa, firmware, memória, conexão e reiniciar. |
+| **Ajustes** pela engrenagem: brilho, escurecer quando parada, tema (segue o macOS), tela em pé ou deitada, ocultar custo. | **Trocar de org** pelo nome no topo, com o último % de cada uma. Usa o [claude-swap](https://github.com/realiti4/claude-swap) e pede dois toques, porque troca o login de todas as sessões do Mac. | **Sobre**: placa, firmware, memória, conexão e reiniciar. |
 
 <p align="center"><img src="docs/screenshots/10-esgotado.png" alt="Janela de 5 h esgotada, com o botão para trocar de org" width="32%"></p>
 
@@ -91,29 +91,54 @@ envio da tela em paralelo no segundo núcleo (~30 fps). As ações que a placa p
 | Placa | Tela | Toque | Extras | Env do PlatformIO |
 |---|---|---|---|---|
 | [Guition JC3248W535](https://www.atomic14.com/esp32/boards/guition-jc3248w535/) (ESP32-S3 N16R8) | 3,5" IPS 320×480, AXS15231B QSPI | capacitivo | — | `guition-jc3248w535` (padrão) |
+| [ESP32-2432S028R](https://github.com/witnessmenow/ESP32-Cheap-Yellow-Display), a "placa amarela" (ESP32 sem PSRAM) | 2,8" 240×320, ST7789 | resistivo | LED RGB na cor da faixa | `cyd-2432s028r` |
 | [Waveshare ESP32-S3-LCD-1.47B](https://www.waveshare.com/wiki/ESP32-S3-LCD-1.47B) | 1,47" 172×320, ST7789 | — (botão BOOT) | IMU (gira sozinha), LED RGB na cor da faixa | `waveshare-s3-lcd-147b` |
 
-A tela de 320×480 em retrato usa as telas grandes (as das capturas). Telas pequenas usam layouts compactos;
-outras resoluções caem no layout compacto escalado, que serve de ponto de partida.
+### Perfis: o que cada placa libera
+
+A UI não pergunta o nome da placa. Ela decide por duas coisas:
+
+- **A classe da tela**, pelo lado menor já girado. Abaixo de 220 px, ou sem touch, a UI é compacta: fontes
+  bitmap e navegação por swipe ou botão. De 220 a 299 px é média e acima disso é grande. As duas têm todas
+  as telas, os toques e a engrenagem; a média escala o layout pela altura e usa fontes de 12 a 40 px.
+- **O perfil** (`board::PROFILE`, em [`boards/profile.h`](firmware/src/boards/profile.h)): `touch`, `calibrate`
+  (touch resistivo), `imu` (gira sozinha), `led` (alerta de faixa) e `button`. A PSRAM é lida em tempo de execução: sem ela, a tela é
+  desenhada em duas faixas de meia altura, a troca de tela não desliza e o texto não fica em cache.
+
+| Placa | Classe | touch | calibrate | imu | led | button | PSRAM |
+|---|---|---|---|---|---|---|---|
+| Guition JC3248W535 | grande | sim | — | — | — | sim | 8 MB |
+| ESP32-2432S028R | média | sim | sim | — | sim | sim | — |
+| Waveshare 1,47" | compacta | — | — | sim | sim | sim | 8 MB |
+
+Touch resistivo (`calibrate`): na primeira vez a placa pede quatro toques com a caneta, um em cada canto, e
+guarda a calibração na memória dela, que sobrevive a reinício e OTA. Para refazer: Ajustes → Sobre →
+**calibrar o toque**. A leitura só vale com pressão firme e é a mediana de 5 amostras, para tirar os pulos.
+
+A tela Sobre mostra a placa, o perfil e a memória de quem está rodando.
+
+**Em pé ou deitada** (Ajustes → Tela): as placas com touch têm uma versão horizontal de cada tela. O anel
+vai para a esquerda, as sessões ficam em 3 colunas e os ajustes, o Sobre e a troca de org em 2. O toque gira
+junto. A Guition não gira no painel: o quadro deitado é girado no envio, ainda na PSRAM.
 
 ### Como adicionar uma placa
 
 Tudo que muda de um ESP para outro mora num header em `firmware/src/boards/`. O resto do firmware não sabe
 qual placa está rodando.
 
-1. Copie o header mais parecido (`guition_jc3248w535.h` para telas grandes com touch,
-   `waveshare_s3_lcd_147b.h` para LovyanGFX) para `boards/<sua_placa>.h`.
+1. Copie o header mais parecido para `boards/<sua_placa>.h`: `cyd_2432s028r.h` para LovyanGFX com touch,
+   `waveshare_s3_lcd_147b.h` para LovyanGFX sem touch, `guition_jc3248w535.h` para outro driver.
 2. Cumpra o contrato descrito em [`boards/board.h`](firmware/src/boards/board.h), dentro de `namespace board`:
-   - `NAME` (igual ao env do PlatformIO; o daemon usa para achar o firmware no OTA), `DEFAULT_ROTATION`, `ROT_FOR`.
+   - `NAME` (igual ao env do PlatformIO; o daemon usa para achar o firmware no OTA), `DEFAULT_ROTATION`,
+     `ROT_FOR`, `PROFILE` e `SERIAL_BAUD` (só conta com ponte USB-serial, como o CH340; use 460800).
    - Tela: `displayBegin`, `displaySetRotation`, `displayWidth/Height`, `setBrightness` e `displayPush`, que
-     recebe o quadro inteiro em RGB565 com o byte alto primeiro. Use o driver que quiser (LovyanGFX,
-     Arduino_GFX, esp_lcd).
+     recebe linhas em RGB565 com o byte alto primeiro (o quadro inteiro com PSRAM, faixas sem). Use o driver
+     que quiser (LovyanGFX, Arduino_GFX, esp_lcd).
    - Periféricos: `begin`, `gravity` (IMU), `setLed`, `buttonPressed`, `touch`. Recurso que a placa não tem vira
-     função vazia (`return false`).
+     função vazia (`return false`) e `false` no perfil.
 3. Inclua o header no `#if` do `board.h`, com uma flag `-DBOARD_<SUA_PLACA>`.
-4. Crie o env no `firmware/platformio.ini` com a flag, a memória da placa e uma tabela de partições com duas
-   partições de app (`default.csv` em 4 MB, `default_16MB.csv` em 16 MB), que o OTA precisa. Tela acima de
-   ~240×240 pede PSRAM: o canvas usa largura × altura × 2 bytes, em dobro.
+4. Crie o env no `firmware/platformio.ini` com a flag e uma tabela de partições com duas partições de app,
+   que o OTA precisa (`min_spiffs.csv` em 4 MB, `default_16MB.csv` em 16 MB).
 5. Grave a primeira vez pela USB: `firmware/flash.sh <sua-placa> --usb`. Depois disso, o OTA pelo daemon.
 
 ## Releases do firmware
@@ -123,6 +148,7 @@ placa, `tokenpulse-<placa>-ota.bin` (para o OTA) e `tokenpulse-<placa>-factory.b
 
 ```bash
 esptool.py --chip esp32s3 write_flash 0x0 tokenpulse-guition-jc3248w535-factory.bin
+esptool.py --chip esp32 write_flash 0x0 tokenpulse-cyd-2432s028r-factory.bin   # a imagem já começa no 0x0
 ```
 
 ## Instalação
@@ -139,8 +165,9 @@ Recomendados:
 
 ```bash
 host/install.sh                                # daemon no login do macOS (log em ~/Library/Logs/tokenpulse.log)
-firmware/flash.sh --usb                        # primeira gravação, pela USB
-firmware/flash.sh                              # as próximas: OTA pela serial, ~15 s
+firmware/flash.sh --usb                        # primeira gravação, pela USB (a Guition; outra placa: o env antes)
+firmware/flash.sh cyd-2432s028r --usb          # primeira gravação da placa amarela
+firmware/flash.sh                              # as próximas: OTA pela serial (~15 s na Guition, ~40 s na CYD)
 firmware/flash.sh guition-jc3248w535 --bin tokenpulse-guition-jc3248w535-ota.bin   # OTA de um release
 ```
 
@@ -170,6 +197,24 @@ Waveshare de 1,47", em OpenSCAD, inspirado no
 ## Problemas conhecidos
 
 - **A placa liga mas o Mac não a vê:** o USB-C da JC3248W535 só passa dados num dos lados. Gire o plugue.
+- **Mais de uma placa plugada:** o `flash.sh --usb` grava na porta que já roda aquela placa ou na única sem o
+  tokenpulse. Com duas placas novas, passe `--port /dev/cu.…`.
+- **Outros aparelhos seriais plugados (Arduino, outro ESP32):** o daemon abre uma vez cada porta CH340 ou
+  CP210x para perguntar se é uma placa do tokenpulse, e abrir a porta reinicia muitas dessas placas. Isso
+  acontece quando a porta aparece e quando o daemon reinicia (`install.sh`, fim do `flash.sh --usb`). Para
+  mexer em outro projeto serial sem interferência, pare o daemon:
+  `launchctl bootout gui/$UID/com.gilsondev.tokenpulse` (e `host/install.sh` para religar).
+- **Placa com ponte USB-serial plugada antes de ter o firmware:** pelo motivo acima, o daemon não pergunta de
+  novo até ela ser replugada. O `flash.sh --usb` reinicia o daemon no fim, então o fluxo normal não esbarra nisso.
+- **Placa não volta depois do OTA:** o `flash.sh` avisa quando ela não se apresenta em 75 s. Um firmware que
+  trava no boot do S3 pode travar também o reset pela USB, e aí nem o `--usb` grava. O JTAG embutido na USB
+  do S3 ainda funciona, sem botão e sem abrir o case:
+  `pio pkg install -g -t platformio/tool-openocd-esp32` e depois
+  `openocd -f board/esp32s3-builtin.cfg -c "program_esp firmware.bin 0x10000 verify reset exit"`
+  (grave também `bootloader.bin` em 0x0, `partitions.bin` em 0x8000 e o `boot_app0.bin` em 0xe000 para voltar à
+  partição de app 0).
+- **Screenshot da CYD falha às vezes:** pelo CH340 o macOS perde alguns bytes da placa para o Mac. O daemon
+  tenta de novo; o OTA e os frames vão no outro sentido e não sofrem com isso.
 - **"atualizado há N min" no anel:** a API de uso respondeu 429. O daemon respeita o `Retry-After` (ou dobra a
   espera, até 30 min) e guarda o último % em `~/.claude/esp-tokens-usage.json`.
 - **"janela nova · 17h" com 0%:** a janela de 5 h acabou de virar; o primeiro % aparece em alguns minutos.

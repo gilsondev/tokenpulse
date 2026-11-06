@@ -22,6 +22,12 @@ FONTS = [
     ("inter_title", 20, 600, TEXT),
     ("inter_num", 30, 700, TEXT),
     ("inter_hero", 58, 700, DIGITS),  # 58 e não 64: "100%" cabe dentro do anel
+    # UI média (240x320): menores, mas sem descer de 12 px, o mínimo legível numa tela de 2,8"
+    ("inter_small_m", 12, 500, TEXT),
+    ("inter_label_m", 13, 500, TEXT),
+    ("inter_title_m", 16, 600, TEXT),
+    ("inter_num_m", 22, 700, TEXT),
+    ("inter_hero_m", 40, 700, DIGITS),
 ]
 
 

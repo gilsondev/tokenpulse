@@ -5,6 +5,7 @@
 #include <LovyanGFX.hpp>
 
 #include "../drivers/qmi8658.h"
+#include "profile.h"
 
 namespace board {
 
@@ -12,6 +13,8 @@ constexpr const char* NAME = "waveshare-s3-lcd-147b";
 constexpr uint8_t DEFAULT_ROTATION = 1;  // paisagem, USB à direita
 // Calibrado segurando a placa nas 4 posições. Se uma ficar de cabeça para baixo, troque o valor dela.
 constexpr uint8_t ROT_FOR[4] = {3, 1, 2, 0};
+constexpr Profile PROFILE{.touch = false, .calibrate = false, .imu = true, .led = true, .button = true};
+constexpr uint32_t SERIAL_BAUD = 115200;
 
 class Lcd : public lgfx::LGFX_Device {
   lgfx::Panel_ST7789 panel_;
@@ -59,8 +62,8 @@ inline void setBrightness(uint8_t v) { lcd.setBrightness(v * 160 / 255); }
 inline void displaySetRotation(uint8_t rot) { lcd.setRotation(rot); }
 inline int displayWidth() { return lcd.width(); }
 inline int displayHeight() { return lcd.height(); }
-inline void displayPush(const uint16_t* px, int w, int h) {
-  lcd.pushImage(0, 0, w, h, reinterpret_cast<const lgfx::swap565_t*>(px));
+inline void displayPush(const uint16_t* px, int y, int w, int h) {
+  lcd.pushImage(0, y, w, h, reinterpret_cast<const lgfx::swap565_t*>(px));
 }
 
 constexpr int PIN_BUTTON = 0;  // BOOT
@@ -84,5 +87,6 @@ inline void setLed(uint8_t r, uint8_t g, uint8_t b) {
 
 inline bool buttonPressed() { return digitalRead(PIN_BUTTON) == LOW; }
 inline bool touch(int16_t&, int16_t&) { return false; }
+inline bool touchRaw(int16_t&, int16_t&) { return false; }
 
 }  // namespace board

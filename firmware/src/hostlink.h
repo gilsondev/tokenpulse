@@ -16,6 +16,8 @@ namespace hostlink {
 void begin();
 void poll();  // lê e trata o que chegou na serial; chamado a cada volta do loop
 uint32_t lastIdMs();  // quando o daemon perguntou "id" pela última vez (0: nunca)
+bool usbPlugged();    // o Mac reconheceu a placa (sem USB nativa: sempre true)
+bool portOpen();      // alguém abriu a porta serial
 const char* firmware();  // data e hora da compilação
 
 }  // namespace hostlink
