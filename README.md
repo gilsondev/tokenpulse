@@ -176,13 +176,16 @@ e a calibração.
 O daemon roda direto da pasta clonada: mantenha a pasta onde está. Se mover ou apagar, a placa fica em "sem
 dados do Mac"; para mudar de lugar, rode `host/install.sh` de novo a partir da pasta nova.
 
-Atualizações depois disso vão por OTA, pelo mesmo cabo:
+Atualizações depois disso vão por OTA, pelo mesmo cabo, e mantêm os ajustes e a calibração:
 
 ```bash
-firmware/flash.sh cyd-2432s028r --bin tokenpulse-cyd-2432s028r-ota.bin   # .bin de um release (~40 s; Guition ~15 s)
-firmware/flash.sh                              # ou compila com o PlatformIO e manda (placa padrão; outra: o env antes)
+./update.sh                                    # todas as placas plugadas que estão atrás do último release
+firmware/flash.sh cyd-2432s028r                # ou compila com o PlatformIO e manda (~40 s; Guition ~15 s)
 firmware/flash.sh cyd-2432s028r --usb          # primeira gravação compilando da fonte, sem o release
 ```
+
+O `update.sh` lê a versão de cada placa no que o daemon registrou (`~/.claude/esp-tokens-boards.json`),
+baixa o `tokenpulse-<placa>-ota.bin` das que estão atrás e espera cada uma voltar na versão nova.
 
 Opcional: aponte o `statusLine` do `~/.claude/settings.json` para `host/statusline.sh` (passe a sua statusline
 atual como argumento para encadear). Ela serve de reserva do % quando a API de uso responde 429.

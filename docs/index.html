@@ -267,8 +267,7 @@ cd tokenpulse</code></pre></li>
     <p class="sub">Depois da primeira gravação, você nunca mais precisa do bootloader nem de botões. O daemon que já está rodando manda o firmware novo pelo mesmo cabo USB, enquanto a placa mostra o progresso na tela. Sem Wi-Fi e sem abrir o case.</p>
     <div class="split">
       <ol class="steps">
-        <li><h3>Firmware de um release</h3><p>Baixe o <code>*-ota.bin</code> da sua placa e mande:</p><pre><code>firmware/flash.sh <span class="env">guition-jc3248w535</span> \
-  --bin tokenpulse-<span class="env">guition-jc3248w535</span>-ota.bin</code></pre></li>
+        <li><h3>Atualize para o último release</h3><p>Um comando para todas as placas plugadas: ele vê a versão de cada uma, baixa o <code>*-ota.bin</code> das que estão atrás e manda pelo OTA. Os ajustes e a calibração do toque ficam.</p><pre><code>./update.sh</code></pre></li>
         <li><h3>Ou compile da fonte</h3><p>Compila com o PlatformIO e manda na sequência:</p><pre><code>firmware/flash.sh <span class="env">guition-jc3248w535</span></code></pre></li>
         <li><h3>Pronto em ~<span class="ota">15</span> segundos</h3><p>A placa reinicia na versão nova, que aparece em Ajustes → Sobre.</p></li>
       </ol>

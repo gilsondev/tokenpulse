@@ -27,6 +27,7 @@ STATUS = os.path.join(HOME, ".claude/esp-tokens-status.json")
 ACCOUNT = os.path.join(HOME, ".claude.json")
 SHOT_DIR = os.path.join(HOME, ".claude/esp-tokens-shot")  # o shot.sh grava <placa> com {"cmds": [...], "out": "x.png"}
 OTA_DIR = os.path.join(HOME, ".claude/esp-tokens-ota")  # o flash.sh grava <placa> com o caminho do .bin
+BOARDS = os.path.join(HOME, ".claude/esp-tokens-boards.json")  # placas conectadas e o firmware de cada uma (update.sh)
 # placas com USB nativo (usbmodem) e com ponte USB-serial CP210x/CH34x
 # placas: USB nativo do ESP32 (Espressif) e pontes USB-serial CP210x/CH34x; outros seriais nem são abertos
 ESPRESSIF_VID = 0x303A
@@ -746,8 +747,8 @@ def limits():
 class Board:
     """Uma placa conectada: a porta serial e o nome que ela informou no handshake."""
 
-    def __init__(self, path, ser, name):
-        self.path, self.ser, self.name = path, ser, name
+    def __init__(self, path, ser, name, fw=""):
+        self.path, self.ser, self.name, self.fw = path, ser, name, fw
         self.buf = b""  # linha da placa ainda sem o \n
         self.busy = False  # OTA ou screenshot rodando numa thread: o laço principal não mexe na porta
         self.gone = False  # a thread acabou com a porta (OTA reiniciou a placa, ou deu erro): reconectar
@@ -779,7 +780,8 @@ def connect(path, vid):
         for line in buf.decode(errors="replace").splitlines():
             if line.startswith("hello "):
                 try:
-                    return Board(path, ser, json.loads(line[6:])["board"])
+                    hello = json.loads(line[6:])
+                    return Board(path, ser, hello["board"], hello.get("fw", ""))
                 except (ValueError, KeyError, TypeError):
                     continue  # hello partido: tenta de novo até o prazo
     ser.close()
@@ -951,6 +953,14 @@ def encode_frame(frame):
     return line
 
 
+def save_boards(boards):
+    """As placas conectadas agora, com o firmware de cada uma: o update.sh decide por elas quem atualizar."""
+    data = {b.name: {"fw": b.fw, "port": b.path} for b in boards.values()}
+    with open(BOARDS + ".tmp", "w") as f:
+        json.dump(data, f)
+    os.replace(BOARDS + ".tmp", BOARDS)  # quem lê nunca pega o arquivo pela metade
+
+
 def in_background(board, job):
     """OTA e screenshot levam de segundos a quase um minuto: rodam numa thread, e o laço principal pula
     esta placa enquanto isso, para as outras seguirem recebendo frames."""
@@ -1013,6 +1023,7 @@ DEMO_P5 = int(os.environ.get("TOKENPULSE_DEMO_P5", "42"))  # para mostrar as fai
 def main():
     usage = Usage()
     boards = {}   # caminho da porta -> Board
+    save_boards(boards)  # o arquivo da execução anterior não vale mais
     ignored = {}  # caminho da porta -> quando tentar de novo (não respondeu como placa)
     if not DEMO:
         threading.Thread(target=usage_loop, daemon=True).start()
@@ -1046,6 +1057,7 @@ def main():
                 board = None
             if board:
                 boards[path] = board
+                save_boards(boards)
                 board.log(f"conectada em {path}")
             else:
                 # ESP32 com USB nativa pode estar reiniciando: tenta de novo em 60 s. Abrir uma ponte USB-serial
@@ -1054,6 +1066,7 @@ def main():
         for path, board in list(boards.items()):
             if not serve(board, frame):
                 del boards[path]
+                save_boards(boards)
         if _wake.wait(1):
             time.sleep(0.1)  # junta uma rajada de eventos do herdr num frame só
 
