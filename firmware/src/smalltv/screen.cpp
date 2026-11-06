@@ -450,9 +450,9 @@ void drawInstall() {
   band.fillScreen(BG);
   text("falta o tokenpulse no Mac", W / 2, 4, LABEL, TEXT, top_center);
   band.qrcode("https://gilsondev.github.io/tokenpulse/comecar/", (W - 148) / 2, 22 - oy, 148);
-  text("escaneie, ou abra no Mac:", W / 2, 174, LABEL, MUTED, top_center);
-  text("gilsondev.github.io", W / 2, 192, LABEL, ACCENT, top_center);
-  text("/tokenpulse/comecar", W / 2, 208, LABEL, ACCENT, top_center);
+  // o QR leva ao github.io, que não depende do encurtador; o endereço escrito é o curto, para digitar no Mac
+  text("escaneie, ou abra no Mac:", W / 2, 178, LABEL, MUTED, top_center);
+  text("tokenpulse.s.gy/comecar", W / 2, 198, LABEL, ACCENT, top_center);  // na fonte de 22 px não cabe em 240
 }
 
 // Sem rede: a placa abriu o próprio WiFi. O QR code de WiFi faz a câmera do celular oferecer a conexão; no
