@@ -103,7 +103,7 @@ envio da tela em paralelo no segundo núcleo (~30 fps). As ações que a placa p
 | [Guition JC3248W535](https://www.atomic14.com/esp32/boards/guition-jc3248w535/) (ESP32-S3 N16R8) | 3,5" IPS 320×480, AXS15231B QSPI | capacitivo | — | `guition-jc3248w535` (padrão) |
 | [ESP32-2432S028R](https://github.com/witnessmenow/ESP32-Cheap-Yellow-Display), a "Cheap Yellow Display" (ESP32 sem PSRAM) | 2,8" 240×320, ST7789 | resistivo | LED RGB na cor da faixa | `cyd-2432s028r` |
 | [Waveshare ESP32-S3-LCD-1.47B](https://www.waveshare.com/wiki/ESP32-S3-LCD-1.47B) | 1,47" 172×320, ST7789 | — (botão BOOT) | IMU (gira sozinha), LED RGB na cor da faixa | `waveshare-s3-lcd-147b` |
-| GeekMagic SmallTV-Ultra (ESP8266, 4 MB, sem PSRAM) | 1,54" 240×240, ST7789 | — | só a tela principal, dados pelo WiFi | `smalltv-ultra` |
+| GeekMagic SmallTV-Ultra (ESP8266, 4 MB, sem PSRAM) | 1,54" 240×240, ST7789 | — | telas que passam sozinhas, dados e OTA pelo WiFi, página de configuração | `smalltv-ultra` |
 
 **SmallTV-Ultra.** O USB-C dele só alimenta, e o ESP8266 tem ~40 KB de heap: roda uma versão mínima à parte
 ([`firmware/src/smalltv/`](firmware/src/smalltv/)), sem toque. Ela alterna sozinha entre a tela principal (anel
@@ -116,6 +116,9 @@ de espera e pode ser trocado lá, por exemplo para `smalltv.local`): brilho, esc
 tempo em cada tela, quais telas entram na volta e esconder o custo, além de reiniciar, esquecer o WiFi e atualizar o
 firmware. `GET /shot?page=main` (ou `sessions`, `models`, `model0`…`model2`, `projects`, `waiting`) devolve a tela em
 RGB565 cru, 240×240, para conferir o layout sem foto.
+
+<p align="center"><img src="docs/screenshots/smalltv-ultra.png" alt="SmallTV-Ultra com dados fictícios: principal, sessões, detalhe do modelo e projetos" width="100%"></p>
+<p align="center"><img src="docs/screenshots/smalltv-config.png" alt="Página de configuração do SmallTV-Ultra, com dados fictícios" width="45%"></p>
 Quem está na mesma rede consegue abrir a página e o `/update`, como no firmware de fábrica. A placa se anuncia por
 mDNS (`_tokenpulse._tcp`) e o daemon manda a cada 2 s um frame enxuto por HTTP (`POST /frame`); o OTA também vai
 pela rede (`/update`). Três travamentos seguidos no boot fazem ela subir só com WiFi e `/update`, sem a tela:
@@ -216,8 +219,10 @@ baixa o `tokenpulse-<placa>-ota.bin` das que estão atrás e espera cada uma vol
 
 **SmallTV-Ultra, a primeira vez (sem abrir a caixa).** Com o daemon já instalado (`host/install.sh`):
 
-1. Compile com `pio run -e smalltv-ultra` (ou baixe o `tokenpulse-smalltv-ultra-ota.bin` do release).
-2. No painel de fábrica, abra `http://<ip-do-smalltv>/update` e envie o `.bin`. Ele cabe no espaço de OTA do
+1. Compile: `cd firmware && pio run -e smalltv-ultra`. O `tokenpulse-smalltv-ultra-ota.bin` entra nos releases a
+   partir da próxima versão.
+2. No painel de fábrica, abra `http://<ip-do-smalltv>/update` e envie o
+   `firmware/.pio/build/smalltv-ultra/firmware.bin`. Ele cabe no espaço de OTA do
    firmware de fábrica (~440 KB). Isso substitui o firmware da GeekMagic, que não volta sem o `.bin` dele.
 3. Sem rede salva, a placa abre o WiFi aberto `tokenpulse-XXXXXX`. Conecte nele pelo celular, abra
    `http://192.168.4.1` e informe a rede da casa. Em ~20 s o daemon acha a placa e a tela sai de "sem dados do Mac".

@@ -133,6 +133,8 @@
   .noshot { border: 1px dashed var(--line); border-radius: 10px; color: var(--dim); display: grid; place-items: center; min-height: 120px; font-size: 14px; margin-bottom: 24px; }
   [data-only] { display: none; }
   [data-only].on { display: block; }
+  [data-not].off { display: none; }
+  .model img.cfg { max-width: 270px; margin: 20px 0 0; border: 1px solid var(--line); }
   footer { padding: 40px 0 60px; border-top: 1px solid var(--line); color: var(--dim); font-size: 14px; }
   footer .wrap { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: center; }
 </style>
@@ -247,6 +249,7 @@ flowchart LR
       <button type="button" data-board="guition-jc3248w535" aria-pressed="true">Guition JC3248W535</button>
       <button type="button" data-board="cyd-2432s028r" aria-pressed="false">ESP32-2432S028R</button>
       <button type="button" data-board="waveshare-s3-lcd-147b" aria-pressed="false">Waveshare ESP32-S3-LCD-1.47B</button>
+      <button type="button" data-board="smalltv-ultra" aria-pressed="false">GeekMagic SmallTV-Ultra</button>
     </div>
 
     <div class="model on" data-only="guition-jc3248w535">
@@ -294,6 +297,23 @@ flowchart LR
       </div>
     </div>
 
+    <div class="model" data-only="smalltv-ultra">
+      <img src="screenshots/smalltv-ultra.png" alt="SmallTV-Ultra com dados fictícios: principal, sessões, detalhe do modelo e projetos" loading="lazy">
+      <div>
+        <h3>GeekMagic SmallTV-Ultra</h3>
+        <dl>
+          <dt>Chip</dt><dd>ESP8266 (ESP-12F): 4 MB de flash, ~80 KB de RAM e sem PSRAM (a tela sai em faixas de 30 linhas)</dd>
+          <dt>Tela</dt><dd>1,54" 240×240, ST7789</dd>
+          <dt>Toque</dt><dd>nenhum: as telas passam sozinhas (principal, sessões, modelos, detalhe de cada modelo e projetos)</dd>
+          <dt>Conexão</dt><dd>só WiFi, porque o USB-C dele só alimenta. A placa se anuncia por mDNS e o daemon manda os dados por HTTP</dd>
+          <dt>Configuração</dt><dd>página da própria placa em <code>http://&lt;nome&gt;.local</code>: brilho, noite, tema, rotação, tempo e telas da volta, nome na rede</dd>
+          <dt>Atualização</dt><dd>OTA pelo WiFi em ~10 s</dd>
+        </dl>
+        <p class="note">Roda uma versão mínima do firmware, sem os ajustes por toque. A primeira gravação vai pelo atualizador do firmware de fábrica, sem abrir a caixa, e substitui o firmware da GeekMagic.</p>
+        <img class="cfg" src="screenshots/smalltv-config.png" alt="Página de configuração do SmallTV-Ultra, com dados fictícios" loading="lazy">
+      </div>
+    </div>
+
     <p class="sub">Outra placa? Copie o header mais parecido e cumpra o <a href="https://github.com/gilsondev/tokenpulse/blob/main/firmware/src/boards/board.h">contrato de placa</a>.</p>
   </div>
 </section>
@@ -308,15 +328,19 @@ flowchart LR
         <button type="button" data-board="guition-jc3248w535" aria-pressed="true">Guition JC3248W535</button>
         <button type="button" data-board="cyd-2432s028r" aria-pressed="false">ESP32-2432S028R</button>
         <button type="button" data-board="waveshare-s3-lcd-147b" aria-pressed="false">Waveshare 1.47B</button>
+        <button type="button" data-board="smalltv-ultra" aria-pressed="false">SmallTV-Ultra</button>
       </div>
       <div class="callout on" data-only="guition-jc3248w535">A JC3248W535 só passa dados pela USB-C num dos lados do plugue. Se a placa liga mas o Mac não a vê, gire o plugue.</div>
       <div class="callout" data-only="cyd-2432s028r">A ESP32-2432S028R tem touch resistivo: use a caneta que vem com ela. Na primeira vez ela pede quatro toques, um em cada canto, para calibrar. Use um cabo USB que passe dados.</div>
       <div class="callout" data-only="waveshare-s3-lcd-147b">A Waveshare de 1,47" não tem touch: o botão BOOT troca de tela e segurar volta para a principal. Ela gira sozinha pelo acelerômetro.</div>
+      <div class="callout" data-only="smalltv-ultra">O SmallTV-Ultra não tem USB de dados: tudo vai pelo WiFi, e o <code>setup.sh</code> não serve para ele. O firmware de fábrica da GeekMagic é substituído e só volta com o <code>.bin</code> dele.</div>
     </div>
     <ol class="steps">
       <li><h3>Baixe o projeto</h3><pre><code>git clone https://github.com/gilsondev/tokenpulse
 cd tokenpulse</code></pre></li>
-      <li><h3>Rode o instalador, com a placa plugada</h3><p>Ele acha a placa, grava o firmware do <a href="https://github.com/gilsondev/tokenpulse/releases/latest">último release</a> pela USB e liga o daemon no login do macOS. Em alguns segundos a placa sai de "sem dados do Mac" e mostra o seu uso. O log fica em <code>~/Library/Logs/tokenpulse.log</code>.</p><pre><code>./setup.sh <span class="env">guition-jc3248w535</span></code></pre><p data-only="cyd-2432s028r">Na primeira vez a ESP32-2432S028R abre a calibração: toque com a caneta no centro de cada alvo. Para refazer depois: Ajustes → Sobre → calibrar o toque.</p><p>O daemon roda direto desta pasta: não apague nem mova o <code>tokenpulse</code>. Para mudar de lugar, rode <code>host/install.sh</code> de novo na pasta nova.</p><p>Prefere compilar? <code>firmware/flash.sh <span class="env">guition-jc3248w535</span> --usb</code> e depois <code>host/install.sh</code>.</p></li>
+      <li data-not="smalltv-ultra"><h3>Rode o instalador, com a placa plugada</h3><p>Ele acha a placa, grava o firmware do <a href="https://github.com/gilsondev/tokenpulse/releases/latest">último release</a> pela USB e liga o daemon no login do macOS. Em alguns segundos a placa sai de "sem dados do Mac" e mostra o seu uso. O log fica em <code>~/Library/Logs/tokenpulse.log</code>.</p><pre><code>./setup.sh <span class="env">guition-jc3248w535</span></code></pre><p data-only="cyd-2432s028r">Na primeira vez a ESP32-2432S028R abre a calibração: toque com a caneta no centro de cada alvo. Para refazer depois: Ajustes → Sobre → calibrar o toque.</p><p>O daemon roda direto desta pasta: não apague nem mova o <code>tokenpulse</code>. Para mudar de lugar, rode <code>host/install.sh</code> de novo na pasta nova.</p><p>Prefere compilar? <code>firmware/flash.sh <span class="env">guition-jc3248w535</span> --usb</code> e depois <code>host/install.sh</code>.</p></li>
+      <li data-only="smalltv-ultra"><h3>Compile, ligue o daemon e envie pelo WiFi</h3><p>O <code>.bin</code> do SmallTV entra nos releases a partir da próxima versão. Até lá, compile com o <a href="https://platformio.org/">PlatformIO</a>:</p><pre><code>cd firmware &amp;&amp; pio run -e smalltv-ultra &amp;&amp; cd ..
+host/install.sh</code></pre><p>No painel de fábrica, abra <code>http://&lt;ip-do-smalltv&gt;/update</code> e envie <code>firmware/.pio/build/smalltv-ultra/firmware.bin</code> (~460 KB, cabe no espaço de OTA de fábrica). Sem rede salva, a placa abre o WiFi <code>tokenpulse-XXXXXX</code>: conecte pelo celular, abra <code>http://192.168.4.1</code> e informe a sua rede. Em ~20 s o daemon acha a placa e a tela sai de "sem dados do Mac".</p></li>
     </ol>
   </div>
 </section>
@@ -339,6 +363,7 @@ cd tokenpulse</code></pre></li>
           <div><b>4 · verificação</b>A placa confere o md5 do que gravou antes de trocar.</div>
           <div><b>5 · troca</b>Só então ela marca a partição nova e reinicia.</div>
         </div>
+        <div class="callout" data-only="smalltv-ultra">No SmallTV-Ultra o OTA vai pelo WiFi: o daemon acha a placa por mDNS e envia o firmware pelo <code>/update</code> dela. Os comandos são os mesmos. Se o firmware novo travar três vezes no boot, a placa sobe só com WiFi e <code>/update</code>, para você mandar outro.</div>
         <div class="callout">Se algo falhar no meio (cabo, md5 diferente, sem resposta), a placa continua na versão atual e mostra o erro. O <code>flash.sh</code> tenta mais uma vez sozinho quando a falha é por falta de resposta.</div>
       </div>
     </div>
@@ -366,6 +391,7 @@ cd tokenpulse</code></pre></li>
     "guition-jc3248w535": { chip: "esp32s3", ota: 15 },
     "cyd-2432s028r": { chip: "esp32", ota: 40 },
     "waveshare-s3-lcd-147b": { chip: "esp32s3", ota: 15 },
+    "smalltv-ultra": { chip: "esp8266", ota: 10 },
   };
   const buttons = document.querySelectorAll(".pick button");
   function choose(b, remember) {
@@ -374,6 +400,7 @@ cd tokenpulse</code></pre></li>
     document.querySelectorAll(".chip").forEach(e => e.textContent = BOARDS[b].chip);
     document.querySelectorAll(".ota").forEach(e => e.textContent = BOARDS[b].ota);
     document.querySelectorAll("[data-only]").forEach(e => e.classList.toggle("on", e.dataset.only === b));
+    document.querySelectorAll("[data-not]").forEach(e => e.classList.toggle("off", e.dataset.not === b));
     if (remember) try { localStorage.setItem("placa", b); } catch (e) {}
   }
   buttons.forEach(btn => btn.addEventListener("click", () => choose(btn.dataset.board, true)));
