@@ -128,6 +128,9 @@ mDNS (`_tokenpulse._tcp`) e o daemon manda a cada 2 s um frame enxuto por HTTP (
 pela rede (`/update`). Três travamentos seguidos no boot fazem ela subir só com WiFi e `/update`, sem a tela:
 sem serial, esse é o caminho de volta.
 
+O que falta levar do SmallTV-Ultra para as outras placas está no projeto
+[tokenpulse roadmap](https://github.com/users/gilsondev/projects/3).
+
 ### Perfis: o que cada placa libera
 
 A UI não pergunta o nome da placa. Ela decide por duas coisas:
