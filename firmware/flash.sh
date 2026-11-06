@@ -53,7 +53,7 @@ echo "$bin" > "$req.tmp" && mv "$req.tmp" "$req"  # o daemon nunca lê pela meta
 # uma falha por falta de resposta tenta mais uma vez: a placa só troca o firmware se o md5 bater
 for attempt in 1 2; do
   for _ in $(seq 1 90); do
-    result=$(tail -n +"$((start + 1))" "$log" | grep -m1 "^\[$board\] ota:" || true)
+    result=$(tail -n +"$((start + 1))" "$log" | grep -m1 "\[$board\] ota:" || true)
     [ -n "$result" ] && break
     sleep 1
   done
@@ -63,7 +63,7 @@ for attempt in 1 2; do
     # gravou não é o mesmo que bootou: espera a placa voltar e se apresentar ao daemon
     start=$(wc -l < "$log")
     for _ in $(seq 1 75); do
-      tail -n +"$((start + 1))" "$log" | grep -q "^\[$board\] conectada" && { echo "a placa voltou com o firmware novo"; exit 0; }
+      tail -n +"$((start + 1))" "$log" | grep -q "\[$board\] conectada" && { echo "a placa voltou com o firmware novo"; exit 0; }
       sleep 1
     done
     echo "a placa não voltou em 75 s: o firmware novo pode estar travando no boot. Veja \"Placa não volta depois do OTA\" no README." >&2

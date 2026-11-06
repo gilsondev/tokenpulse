@@ -368,7 +368,7 @@ void drawWaiting() {
     const char *name, *ok, *wait;
     bool done;
   } steps[] = {
-      {"cabo USB", "o Mac reconheceu a placa", "use uma porta USB de dados do Mac", usb},
+      {"cabo USB", "o Mac reconheceu a placa", "gire o plugue USB-C ou troque o cabo", usb},
       {"daemon tokend", "abriu a porta e se apresentou", "rode: launchctl kickstart -k gui/$UID/com.gilsondev.tokenpulse", daemon},
       {"dados", "chegando", "esperando o primeiro envio", false},
   };

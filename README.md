@@ -227,7 +227,9 @@ Waveshare de 1,47", em OpenSCAD, inspirado no
   tokenpulse. Com duas placas novas, passe `--port /dev/cu.…`.
 - **Outros aparelhos seriais plugados (Arduino, outro ESP32):** o daemon abre uma vez cada porta CH340 ou
   CP210x para perguntar se é uma placa do tokenpulse, e abrir a porta reinicia muitas dessas placas. Isso
-  acontece quando a porta aparece e quando o daemon reinicia (`install.sh`, fim do `flash.sh --usb`). Para
+  acontece quando a porta aparece e quando o daemon reinicia (`install.sh`, fim do `flash.sh --usb`). Uma
+  ESP32 com USB nativa (S3) de outro projeto não reinicia, mas a porta dela é aberta de 5 em 5 s no primeiro
+  minuto depois do plug e de 60 em 60 s depois disso, o que pode atrapalhar uma gravação. Para
   mexer em outro projeto serial sem interferência, pare o daemon:
   `launchctl bootout gui/$UID/com.gilsondev.tokenpulse` (e `host/install.sh` para religar).
 - **Placa com ponte USB-serial plugada antes de ter o firmware:** pelo motivo acima, o daemon não pergunta de

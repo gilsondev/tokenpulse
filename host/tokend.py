@@ -21,6 +21,10 @@ from datetime import datetime, timedelta
 import serial
 from serial.tools import list_ports
 
+
+def log(msg):
+    print(f"{datetime.now():%d/%m %H:%M:%S} {msg}", file=sys.stderr, flush=True)
+
 HOME = os.path.expanduser("~")
 PROJECTS = os.path.join(HOME, ".claude/projects/**/*.jsonl")  # ** inclui <sessão>/subagents/
 STATUS = os.path.join(HOME, ".claude/esp-tokens-status.json")
@@ -149,7 +153,7 @@ class Usage:
             self._track_session(d)
             self._ingest_line(d)
         except (ValueError, TypeError, KeyError, AttributeError) as e:
-            print(f"linha ignorada: {e!r}", file=sys.stderr)
+            log(f"linha ignorada: {e!r}")
 
     def _track_session(self, d):
         sid, kind = d.get("sessionId"), d.get("type")
@@ -275,7 +279,7 @@ def herdr_events():
                                           "params": {"subscriptions": subs}}) + "\n").encode())
                 for line in sock.makefile("rb"):
                     if b'"error"' in line:
-                        print(f"herdr: assinatura recusada: {line[:160]!r}", file=sys.stderr, flush=True)
+                        log(f"herdr: assinatura recusada: {line[:160]!r}")
                         break
                     _herdr["at"] = 0
                     _wake.set()
@@ -426,7 +430,7 @@ def history_loop():
             global _history
             _history = days  # troca a referência: nunca há um frame com o histórico vazio no meio
         except Exception as e:  # o histórico é extra: sem ele a tela só fica sem as barras antigas
-            print(f"histórico falhou: {e!r}", file=sys.stderr, flush=True)
+            log(f"histórico falhou: {e!r}")
         now = datetime.now()
         to_midnight = (now.replace(hour=0, minute=0, second=0) + timedelta(days=1) - now).total_seconds()
         time.sleep(min(1800, to_midnight + 60))  # depois da meia-noite, ontem entra no histórico na hora
@@ -580,7 +584,7 @@ def run_action(cmd):
         except (OSError, subprocess.TimeoutExpired) as e:
             _action.update(state="error", msg=type(e).__name__, at=time.time())
         _accounts["at"] = 0  # relê a lista na próxima volta
-        print(f"conta: {_action['state']} {org_name} {_action['msg']}", file=sys.stderr, flush=True)
+        log(f"conta: {_action['state']} {org_name} {_action['msg']}")
 
     threading.Thread(target=work, daemon=True).start()
 
@@ -683,7 +687,7 @@ def usage_loop():
                 wait = min(USAGE_MAX_WAIT, max(int(retry) if retry.isdigit() else 0, wait * 2))
             err = f"{type(e).__name__}: {getattr(e, 'code', '') or e}"[:120]
             if err != _api["err"]:
-                print(f"uso via API falhou: {err}; próxima tentativa em {wait} s", file=sys.stderr, flush=True)
+                log(f"uso via API falhou: {err}; próxima tentativa em {wait} s")
             _api["err"] = err
         next_at = time.time() + wait
         try:
@@ -754,7 +758,7 @@ class Board:
         self.gone = False  # a thread acabou com a porta (OTA reiniciou a placa, ou deu erro): reconectar
 
     def log(self, msg):
-        print(f"[{self.name}] {msg}", file=sys.stderr, flush=True)
+        log(f"[{self.name}] {msg}")
 
 
 BAUD = 460800  # placas com ponte USB-serial (CH340, CP210x) usam esta; a USB nativa do ESP ignora
@@ -1026,6 +1030,7 @@ def main():
     boards = {}   # caminho da porta -> Board
     save_boards(boards)  # o arquivo da execução anterior não vale mais
     ignored = {}  # caminho da porta -> quando tentar de novo (não respondeu como placa)
+    first_fail = {}  # caminho da porta -> a primeira falha desde que plugou
     if not DEMO:
         threading.Thread(target=usage_loop, daemon=True).start()
         threading.Thread(target=history_loop, daemon=True).start()
@@ -1049,6 +1054,7 @@ def main():
         ports = {p.device: p for p in list_ports.comports() if p.vid in BOARD_VIDS}
         for path in [p for p in ignored if p not in ports]:
             del ignored[path]  # desplugou: na próxima vez que aparecer, pergunta de novo
+            first_fail.pop(path, None)
         for path, info in sorted(ports.items()):
             if path in boards or ignored.get(path, 0) > time.time():
                 continue
@@ -1057,13 +1063,20 @@ def main():
             except (OSError, serial.SerialException):
                 board = None
             if board:
+                first_fail.pop(path, None)
                 boards[path] = board
                 save_boards(boards)
                 board.log(f"conectada em {path}")
             else:
-                # ESP32 com USB nativa pode estar reiniciando: tenta de novo em 60 s. Abrir uma ponte USB-serial
-                # (CH340, CP210x) reinicia o aparelho do outro lado, que pode ser outro projeto: uma vez por plug
-                ignored[path] = time.time() + (60 if info.vid == ESPRESSIF_VID else 10 ** 9)
+                # ESP32 com USB nativa pode estar no boot (abrir a porta não a reinicia): de 5 em 5 s no primeiro
+                # minuto do plug, depois de 60 em 60 s, para não disputar a porta de uma S3 de outro projeto.
+                # Abrir uma ponte USB-serial (CH340, CP210x) reinicia o aparelho do outro lado: uma vez por plug
+                native = info.vid == ESPRESSIF_VID
+                if path not in first_fail:
+                    first_fail[path] = time.time()
+                    log(f"{path}: sem resposta ao id; " + ("tento de novo" if native else "só testo de novo se replugar"))
+                retry = 5 if time.time() - first_fail[path] < 60 else 60
+                ignored[path] = time.time() + (retry if native else 10 ** 9)
         for path, board in list(boards.items()):
             if not serve(board, frame):
                 del boards[path]
