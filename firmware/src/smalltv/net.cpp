@@ -46,7 +46,7 @@ void handleState() {
   JsonObject c = d["cfg"].to<JsonObject>();
   const auto& v = config::v;
   c["bright"] = v.bright, c["night"] = v.night, c["theme"] = v.theme, c["rotation"] = v.rotation;
-  c["interval"] = v.interval, c["pages"] = v.pages, c["host"] = hostName(), c["hideCost"] = v.hideCost;
+  c["interval"] = v.interval, c["pages"] = v.pages, c["host"] = hostName(), c["hideCost"] = v.hideCost, c["alerts"] = v.alerts;
   String out;
   serializeJson(d, out);
   server.send(200, "application/json", out);
@@ -72,7 +72,8 @@ void handleConfig() {
   num("theme", 0, 2, v.theme);
   num("rotation", 0, 3, v.rotation);
   num("interval", 0, 120, v.interval);
-  num("pages", 0, 15, v.pages);
+  num("pages", 0, 63, v.pages);
+  num("alerts", 0, 3, v.alerts);
   num("hideCost", 0, 1, v.hideCost);
   config::save();
   server.send(200, "application/json", String("{\"host\":\"") + hostName() + "\"}");

@@ -42,7 +42,13 @@ button,.btn{font:inherit;padding:6px 12px;border-radius:8px;border:1px solid var
 <label>Modelos de hoje <input type=checkbox name=models></label>
 <label>Detalhe de cada modelo <input type=checkbox name=detail></label>
 <label>Projetos da última hora <input type=checkbox name=projects></label>
+<label>Histórico de 14 dias <input type=checkbox name=history></label>
+<label>Outras orgs (com mais de uma) <input type=checkbox name=orgs></label>
 <label>Esconder o custo em US$ <input type=checkbox name=hideCost></label>
+</section>
+<section><h2>Alertas</h2>
+<label>Sessão pedindo aprovação: segurar a tela de sessões e pulsar <input type=checkbox name=approve></label>
+<label>Ao cruzar 70/80/90% da janela de 5 h: piscar e segurar a principal <input type=checkbox name=band></label>
 </section>
 <section><h2>Rede</h2>
 <label>Nome na rede <span><input type=text name=host size=14 pattern="[a-z0-9\-]{1,31}">.local</span></label>
@@ -70,13 +76,13 @@ async function state(){
 state().then(s=>{
   const c=s.cfg;host=c.host;
   f.bright.value=c.bright;f.night.checked=!!c.night;f.theme.value=c.theme;f.rotation.value=c.rotation;
-  f.interval.value=c.interval;f.models.checked=!!(c.pages&1);f.projects.checked=!!(c.pages&2);f.sessions.checked=!!(c.pages&4);f.detail.checked=!!(c.pages&8);f.hideCost.checked=!!c.hideCost;f.host.value=c.host;
+  f.interval.value=c.interval;f.models.checked=!!(c.pages&1);f.projects.checked=!!(c.pages&2);f.sessions.checked=!!(c.pages&4);f.detail.checked=!!(c.pages&8);f.hideCost.checked=!!c.hideCost;f.history.checked=!!(c.pages&16);f.orgs.checked=!!(c.pages&32);f.approve.checked=!!(c.alerts&1);f.band.checked=!!(c.alerts&2);f.host.value=c.host;
 });
 setInterval(state,5000);
 f.addEventListener('change',async e=>{
   if(e.target.name==='host'&&!f.host.checkValidity())return say('Nome: letras minúsculas, números e hífen.');
   const b=new URLSearchParams({bright:f.bright.value,night:+f.night.checked,theme:f.theme.value,rotation:f.rotation.value,
-    interval:f.interval.value,pages:(f.models.checked?1:0)|(f.projects.checked?2:0)|(f.sessions.checked?4:0)|(f.detail.checked?8:0),hideCost:+f.hideCost.checked,host:f.host.value});
+    interval:f.interval.value,pages:(f.models.checked?1:0)|(f.projects.checked?2:0)|(f.sessions.checked?4:0)|(f.detail.checked?8:0)|(f.history.checked?16:0)|(f.orgs.checked?32:0),hideCost:+f.hideCost.checked,alerts:(f.approve.checked?1:0)|(f.band.checked?2:0),host:f.host.value});
   const r=await fetch('/api/config',{method:'POST',body:b});
   if(!r.ok)return say(await r.text());
   const j=await r.json();

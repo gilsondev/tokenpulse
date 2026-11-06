@@ -108,13 +108,17 @@ envio da tela em paralelo no segundo núcleo (~30 fps). As ações que a placa p
 **SmallTV-Ultra.** O USB-C dele só alimenta, e o ESP8266 tem ~40 KB de heap: roda uma versão mínima à parte
 ([`firmware/src/smalltv/`](firmware/src/smalltv/)), sem toque. Ela alterna sozinha entre a tela principal (anel
 de 5 h, semana, tokens, ritmo e a última hora), as sessões trabalhando ou esperando você (aprovar ou sua vez,
-há até 1 h; depois delas, as paradas), os modelos do dia, o detalhe de cada modelo e os projetos da última hora, e mostra o
-diagnóstico "WiFi / daemon / dados" quando o Mac some.
+há até 1 h; depois delas, as paradas), os modelos do dia, o detalhe de cada modelo, os projetos da última hora,
+o histórico de 14 dias e o % das outras orgs, e mostra o
+diagnóstico "WiFi / daemon / dados" quando o Mac some. Sem som nem toque, ele chama atenção pela tela: uma sessão pedindo
+aprovação segura a tela de sessões e faz o backlight pulsar, e cruzar 70/80/90% da janela de 5 h pisca o anel e
+segura a principal por 2 min. O anel e as barras andam com mola, o número de tokens acende quando sobe e a troca
+de tela apaga e acende o backlight.
 
 A configuração fica numa página da própria placa, em `http://tokenpulse-XXXXXX.local` (o nome aparece na tela
 de espera e pode ser trocado lá, por exemplo para `smalltv.local`): brilho, escurecer à noite, tema, rotação,
-tempo em cada tela, quais telas entram na volta e esconder o custo, além de reiniciar, esquecer o WiFi e atualizar o
-firmware. `GET /shot?page=main` (ou `sessions`, `models`, `model0`…`model2`, `projects`, `waiting`) devolve a tela em
+tempo em cada tela, quais telas entram na volta, os alertas e esconder o custo, além de reiniciar, esquecer o WiFi e atualizar o
+firmware. `GET /shot?page=main` (ou `sessions`, `models`, `model0`…`model2`, `projects`, `history`, `orgs`, `waiting`) devolve a tela em
 RGB565 cru, 240×240, para conferir o layout sem foto.
 
 <p align="center"><img src="docs/screenshots/smalltv-ultra.png" alt="SmallTV-Ultra com dados fictícios: principal, sessões, detalhe do modelo e projetos" width="100%"></p>

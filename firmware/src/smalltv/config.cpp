@@ -35,9 +35,10 @@ void begin() {
   if (v.theme > 2) v.theme = d.theme;
   if (v.rotation > 3) v.rotation = d.rotation;
   if (v.interval > 120) v.interval = d.interval;
-  if (v.pages > 15) v.pages = d.pages;
+  if (v.pages > 63) v.pages = d.pages;
   if (v.host[0] && !validHost(v.host)) v.host[0] = 0;
-  if (v.hideCost > 1) v.hideCost = d.hideCost;  // o byte além do layout antigo vem com o que havia na flash
+  if (v.hideCost > 1) v.hideCost = d.hideCost;
+  if (v.alerts > 3) v.alerts = d.alerts;  // o byte além do layout antigo vem com o que havia na flash
 }
 
 void save() {

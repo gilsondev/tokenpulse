@@ -74,6 +74,18 @@ int textWidth(const char* s, Vlw& f) {
   return band.textWidth(s);
 }
 
+// Estado do que está na tela: valores que andam até os do frame (a mola), e quando cada alerta começou.
+struct Ui {
+  float p5 = -1, pw = -1;
+  uint32_t tokMs = 0, bandMs = 0, approveMs = 0;
+  int level = -1, blocks = -1;  // -1 até o primeiro frame: o boot não dispara alerta
+  String tot;
+  int dotX = 0;
+} ui;
+
+uint32_t since(uint32_t t) { return t ? millis() - t : UINT32_MAX; }
+bool bandBlink() { return (config::v.alerts & 2) && since(ui.bandMs) < 1500 && since(ui.bandMs) / 250 % 2; }
+
 void drawMain() {
   const auto& f = app::frame;
   char buf[48];
@@ -88,15 +100,17 @@ void drawMain() {
   text(f["m"] | "Claude", 8, 22, LABEL, MUTED);
   const char* st = live ? "ao vivo" : "offline";
   text(st, W - 8, 22, LABEL, live ? GREEN : RED, top_right);
-  band.fillCircle(W - 16 - textWidth(st, LABEL), 30 - oy, 3, live ? GREEN : RED);
+  ui.dotX = W - 16 - textWidth(st, LABEL);
+  band.fillCircle(ui.dotX, 30 - oy, 3, live ? GREEN : RED);
   band.drawFastHLine(8, 42 - oy, W - 16, TRACK);
 
   // anel da janela de 5 h
   const int p5 = f["p5"] | -1, cx = 64, cy = 100, r = 54;
-  const uint16_t ring = stale ? DIM : levelColor(p5);
+  const float shown = ui.p5 < 0 ? p5 : ui.p5;  // o anel anda até o valor novo
+  const uint16_t ring = stale ? DIM : bandBlink() ? TEXT : levelColor(p5);
   band.fillArc(cx, cy - oy, r - 9, r, 0, 360, TRACK);
-  if (p5 > 0) band.fillArc(cx, cy - oy, r - 9, r, 270, 270 + 3.6f * min(p5, 100), ring);
-  snprintf(buf, sizeof buf, p5 < 0 ? "--" : "%d%%", p5);
+  if (shown >= 0.5f) band.fillArc(cx, cy - oy, r - 9, r, 270, 270 + 3.6f * min(shown, 100.f), ring);
+  snprintf(buf, sizeof buf, p5 < 0 ? "--" : "%d%%", (int)lroundf(shown));
   Vlw& pf = textWidth(buf, HERO) <= 2 * (r - 9) - 12 ? HERO : NUM;  // "42%" na fonte grande não cabe no anel
   text(buf, cx, cy - (&pf == &HERO ? 18 : 12), pf, p5 < 0 ? TEXT : ring, top_center);
   text("sessão 5h", cx, 162, LABEL, MUTED, top_center);
@@ -113,10 +127,12 @@ void drawMain() {
   snprintf(buf, sizeof buf, pw < 0 ? "--" : "%d%%", pw);
   text(buf, x + w, 50, LABEL, stale ? DIM : TEXT, top_right);
   band.fillRoundRect(x, 68 - oy, w, 6, 3, TRACK);
-  if (pw > 0) band.fillRoundRect(x, 68 - oy, max(6, w * min(pw, 100) / 100), 6, 3, stale ? DIM : levelColor(pw));
+  const float pwShown = ui.pw < 0 ? pw : ui.pw;
+  if (pwShown >= 0.5f) band.fillRoundRect(x, 68 - oy, max(6, (int)(w * min(pwShown, 100.f) / 100)), 6, 3, stale ? DIM : levelColor(pw));
   text(f["rw"] | "", x, 80, LABEL, DIM);
   text("tokens hoje", x, 104, LABEL, MUTED);
-  text(f["tot"] | "0", x, 120, NUM, ACCENT);
+  const uint32_t glow = since(ui.tokMs);  // subiu: o número acende em branco e volta à cor em 0,9 s
+  text(f["tot"] | "0", x, 120, NUM, glow < 900 ? blend(TEXT, ACCENT, glow / 900.f) : ACCENT);
   text("ritmo/min", x, 150, LABEL, MUTED);
   text(f["rate"] | "0", x, 166, NUM, TEXT);
 
@@ -273,9 +289,69 @@ void drawModel(int i) {
   }
 }
 
+// Decimal com vírgula, como o daemon escreve nos outros números.
+void comma(char* s) {
+  for (; *s; s++)
+    if (*s == '.') *s = ',';
+}
+
+// Histórico: [dia da semana, dia do mês, tokens em milhões, custo em US$], hoje por último.
+void drawHistory() {
+  char buf[48];
+  header("histórico · 14 dias");
+  JsonArrayConst hist = app::frame["hist"];
+  const int n = hist.size();
+  if (!n) return;
+  float peak = 0.1f, sum = 0;
+  int cost = 0;
+  for (JsonArrayConst d : hist) peak = max(peak, (float)(d[2] | 0.f)), sum += d[2] | 0.f, cost += d[3] | 0;
+  snprintf(buf, sizeof buf, "hoje %.1fM", (float)(hist[n - 1][2] | 0.f));
+  comma(buf);
+  text(buf, 8, 34, LABEL, TEXT);
+  snprintf(buf, sizeof buf, "média %.0fM/dia", sum / n);
+  text(buf, W - 8, 34, LABEL, MUTED, top_right);
+  const int top = 58, base = 188, gap = 4, bw = (W - 16 - gap * (n - 1)) / n;
+  for (int i = 0; i < n; i++) {
+    const int x = 8 + i * (bw + gap), h = max(2, (int)((base - top) * (float)(hist[i][2] | 0.f) / peak));
+    band.fillRect(x, base - h - oy, bw, h, i == n - 1 ? ACCENT : MUTED);
+    if ((n - 1 - i) % 2 == 0) {  // um dia sim, um não: dois dígitos não cabem embaixo de cada barra
+      snprintf(buf, sizeof buf, "%d", (int)(hist[i][1] | 0));
+      text(buf, x + bw / 2, base + 4, LABEL, i == n - 1 ? TEXT : DIM, top_center);
+    }
+  }
+  if (sum >= 1000) snprintf(buf, sizeof buf, "14 dias: %.1fB tokens", sum / 1000);
+  else snprintf(buf, sizeof buf, "14 dias: %.0fM tokens", sum);
+  comma(buf);
+  if (!config::v.hideCost) snprintf(buf + strlen(buf), sizeof buf - strlen(buf), " · US$ %d", cost);
+  text(buf, 8, 214, LABEL, MUTED);
+}
+
+// Orgs do claude-swap: [número, org, ativa, precisa de login, % 5h, % semana, minutos desde a leitura].
+// Só leitura: trocar de org pede toque, que esta placa não tem.
+void drawOrgs() {
+  char buf[48];
+  header("orgs");
+  int y = 36;
+  for (JsonArrayConst a : app::frame["accts"].as<JsonArrayConst>()) {
+    if (y > 190) break;
+    const bool active = a[2] | 0, relogin = a[3] | 0;
+    const int p5 = a[4] | -1, pw = a[5] | -1;
+    text(fit(a[1] | "?", 150, LABEL).c_str(), 8, y, LABEL, active ? TEXT : MUTED);
+    if (active) text("ativa", W - 8, y, LABEL, ACCENT, top_right);
+    else if (relogin) text("precisa de login", W - 8, y, LABEL, AMBER, top_right);
+    band.fillRoundRect(8, y + 20 - oy, 96, 6, 3, TRACK);
+    if (p5 > 0) band.fillRoundRect(8, y + 20 - oy, max(6, 96 * min(p5, 100) / 100), 6, 3, levelColor(p5));
+    snprintf(buf, sizeof buf, p5 < 0 ? "5h --" : "5h %d%%", p5);
+    text(buf, 112, y + 15, LABEL, p5 < 0 ? DIM : levelColor(p5));
+    snprintf(buf, sizeof buf, pw < 0 ? "sem --" : "sem %d%%", pw);
+    text(buf, W - 8, y + 15, LABEL, MUTED, top_right);
+    y += 46;
+  }
+}
+
 // Sem toque nem botão, as telas passam sozinhas a cada config::v.interval s. Tela sem conteúdo
 // (nenhum projeto na última hora) fica de fora da volta.
-enum Page : uint8_t { MAIN, SESSIONS, MODELS, MODEL, PROJECTS };
+enum Page : uint8_t { MAIN, SESSIONS, MODELS, MODEL, PROJECTS, HISTORY, ORGS };
 struct Slot {
   Page page;
   uint8_t sub;  // qual modelo, no detalhe
@@ -292,17 +368,23 @@ int slots(Slot* out) {
   if (on & 8)
     for (int i = 0; i < (int)min<size_t>(f["mods"].size(), 3); i++) out[n++] = {MODEL, (uint8_t)i};
   if ((on & 2) && f["projs"].size()) out[n++] = {PROJECTS, 0};
+  if ((on & 16) && f["hist"].size()) out[n++] = {HISTORY, 0};
+  if ((on & 32) && f["accts"].size() > 1) out[n++] = {ORGS, 0};  // com uma org só, a tela não diz nada
   return n;
 }
 
 Slot pageNow() {
   static Slot cur = {MAIN, 0};
   static uint32_t sinceMs = 0;
-  Slot list[8];
+  Slot list[10];
   const int n = slots(list);
   int at = -1;
   for (int i = 0; i < n; i++)
     if (list[i].page == cur.page && list[i].sub == cur.sub) at = i;
+  // alertas passam na frente da volta: sessão pedindo aprovação segura a tela de sessões enquanto durar,
+  // e cruzar 70/80/90% segura a principal por 2 min
+  if ((config::v.alerts & 1) && ui.blocks > 0) return sinceMs = millis(), cur = {SESSIONS, 0};
+  if ((config::v.alerts & 2) && since(ui.bandMs) < 120000) return sinceMs = millis(), cur = {MAIN, 0};
   if (!config::v.interval) return cur = {MAIN, 0};
   if (at < 0 || millis() - sinceMs >= config::v.interval * 1000UL) {  // passou o tempo, ou a tela sumiu
     sinceMs = millis();
@@ -316,6 +398,8 @@ void draw(Slot slot) {
   else if (slot.page == MODELS) drawModels();
   else if (slot.page == MODEL) drawModel(slot.sub);
   else if (slot.page == PROJECTS) drawProjects();
+  else if (slot.page == HISTORY) drawHistory();
+  else if (slot.page == ORGS) drawOrgs();
   else drawMain();
 }
 
@@ -341,6 +425,8 @@ void backlight(uint8_t v) {
   if (v != written) analogWrite(BACKLIGHT, 255 - v), written = v;
 }
 
+float lit = 0;  // brilho de agora; anda até o alvo a cada 15 ms (fade e pulso)
+
 bool night() {
   const char* clk = app::frame["clk"] | "";  // horário de Brasília vindo do Mac
   if (strlen(clk) < 2) return false;
@@ -350,7 +436,73 @@ bool night() {
 
 uint8_t brightness(bool data) {
   const int full = config::v.bright * 255 / 100;
+  if ((config::v.alerts & 2) && since(ui.bandMs) < 120000) return full;  // cruzou faixa: brilho cheio por 2 min
   return data && config::v.night && night() ? max(6, full * 8 / 100) : full;
+}
+
+void backlightTick(bool data) {
+  static uint32_t lastMs = 0;
+  if (millis() - lastMs < 15) return;
+  lastMs = millis();
+  float target = brightness(data);
+  if ((config::v.alerts & 1) && ui.blocks > 0 && since(ui.approveMs) < 20000)  // pede aprovação: pulsa 20 s
+    target *= 0.35f + 0.65f * (1 - breath(1200));
+  lit += (target - lit) * 0.3f;
+  backlight(lroundf(lit));
+}
+
+// Apaga em ~120 ms antes de trocar de tela; o backlightTick acende de novo.
+void fadeOut() {
+  while (lit > 2) lit *= 0.6f, backlight(lroundf(lit)), delay(15);
+  lit = 0, backlight(0);
+}
+
+// Frame novo: alvos da mola, número que subiu e alertas.
+void onFrame() {
+  const auto& f = app::frame;
+  const int p5 = f["p5"] | -1, pw = f["pw"] | -1;
+  if (ui.p5 < 0) ui.p5 = p5;  // primeiro frame: sem animação
+  if (ui.pw < 0) ui.pw = pw;
+  const String tot = f["tot"] | "";
+  if (ui.tot.length() && tot != ui.tot) ui.tokMs = millis();
+  ui.tot = tot;
+  const int lv = p5 >= 0 ? level(p5) : 0;
+  if (ui.level >= 0 && lv > ui.level) ui.bandMs = millis();
+  ui.level = lv;
+  int blocks = 0;
+  for (JsonArrayConst s : f["ses"].as<JsonArrayConst>()) blocks += !strcmp(s[1] | "", "block");
+  if (ui.blocks >= 0 && blocks > ui.blocks) ui.approveMs = millis();
+  ui.blocks = blocks;
+}
+
+// A mola: os valores mostrados andam 25% do caminho por passo. true enquanto ainda andam.
+bool step() {
+  bool moving = false;
+  auto ease = [&](float& v, int target) {
+    if (target < 0 || fabsf(target - v) < 0.3f) return void(v = target);
+    v += (target - v) * 0.25f;
+    moving = true;
+  };
+  ease(ui.p5, app::frame["p5"] | -1);
+  ease(ui.pw, app::frame["pw"] | -1);
+  return moving;
+}
+
+void render(int y0, int y1, Slot slot, bool data) {
+  for (oy = 0; oy < H; oy += BAND) {
+    if (oy + BAND <= y0 || oy >= y1) continue;
+    data ? draw(slot) : drawWaiting();
+    band.pushSprite(0, oy);
+    yield();
+  }
+}
+
+// O ponto de "ao vivo" pulsa direto no painel: redesenhar a faixa inteira por ele custaria demais.
+void pulseDot() {
+  if (millis() - app::lastFrameMs > 10000 || !ui.dotX) return;
+  const float b = breath(1500);
+  lcd.fillRect(ui.dotX - 5, 25, 11, 11, BG);
+  lcd.fillCircle(ui.dotX, 30, 2 + lroundf(b * 2), blend(DARK_GREEN, GREEN, b));
 }
 
 }  // namespace
@@ -372,21 +524,29 @@ void begin() {
 }
 
 void update(bool newFrame) {
-  static uint32_t lastMs = 0, cfg = UINT32_MAX;  // != version: aplica a rotação gravada no primeiro quadro
-  const bool changed = cfg != config::version;
-  if (!newFrame && !changed && millis() - lastMs < 1000) return;
-  lastMs = millis();
-  if (changed) cfg = config::version, lcd.setRotation(config::v.rotation);
+  static uint32_t fullMs = 0, animMs = 0, cfg = UINT32_MAX;  // != version: aplica a rotação gravada no primeiro quadro
+  static Slot shown{MAIN, 0};
+  static bool shownData = false;
+  if (newFrame) onFrame();
+  bool redraw = newFrame || millis() - fullMs >= 1000;
+  if (cfg != config::version) cfg = config::version, lcd.setRotation(config::v.rotation), redraw = true;
   const bool dark = config::v.theme ? config::v.theme == 2 : (bool)(app::frame["dark"] | true);
-  if (dark != color::dark) apply(dark);
+  if (dark != color::dark) apply(dark), redraw = true;
   const bool data = app::lastFrameMs && millis() - app::lastFrameMs < 60000;
   const Slot slot = data ? pageNow() : Slot{MAIN, 0};
-  for (oy = 0; oy < H; oy += BAND) {
-    data ? draw(slot) : drawWaiting();
-    band.pushSprite(0, oy);
-    yield();
+  const bool turned = data != shownData || slot.page != shown.page || slot.sub != shown.sub;
+  if (slot.page != MAIN) step(), ui.p5 = app::frame["p5"] | -1, ui.pw = app::frame["pw"] | -1;  // fora da principal: sem mola
+  if (turned || redraw) {
+    if (turned && shownData && data) fadeOut();
+    render(0, H, slot, data);
+    fullMs = animMs = millis(), shown = slot, shownData = data;
+  } else if (data && slot.page == MAIN && millis() - animMs >= 60) {  // ~15 fps só no que se mexe
+    animMs = millis();
+    if (step() || bandBlink() || since(ui.bandMs) < 1600) render(42, 190, slot, data);  // anel e coluna da direita
+    else if (since(ui.tokMs) < 1000) render(118, 146, slot, data);                    // só o número de tokens
+    pulseDot();
   }
-  backlight(brightness(data));
+  backlightTick(data);
 }
 
 bool shot(const String& name, const std::function<void(const uint8_t*, size_t)>& write) {
@@ -396,6 +556,8 @@ bool shot(const String& name, const std::function<void(const uint8_t*, size_t)>&
   else if (name == "models") slot = {MODELS, 0};
   else if (name.startsWith("model")) slot = {MODEL, (uint8_t)name.substring(5).toInt()};
   else if (name == "projects") slot = {PROJECTS, 0};
+  else if (name == "history") slot = {HISTORY, 0};
+  else if (name == "orgs") slot = {ORGS, 0};
   else if (name != "main" && !waiting) return false;
   if (slot.page == MODEL && slot.sub >= app::frame["mods"].size()) return false;
   for (oy = 0; oy < H; oy += BAND) {
