@@ -8,7 +8,7 @@ namespace screens {
 constexpr int COUNT = 3;  // telas pequenas: principal, modelos, projetos (as grandes: screens_tall.h)
 
 void bootSplash();
-void installPreview();  // desenha a tela do QR de instalação, para screenshot
+void installPreview();  // mostra a tela do QR de instalação por 5 s, para screenshot
 void holdFor(uint32_t ms);  // não redesenha por `ms` (o que está na tela fica, para screenshot)
 void render();             // desenha a tela atual (ou a de espera) e atualiza o LED de status
 void next();               // clique, toque ou arrastar para a esquerda

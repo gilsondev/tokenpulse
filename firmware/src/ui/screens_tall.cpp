@@ -345,24 +345,18 @@ void drawModels(bool live, int page) {
   dots(page);
 }
 
-// Falta instalar o daemon: QR code da página /comecar e o endereço curto. Em pé, QR em cima; deitada, à esquerda.
+// Falta instalar o daemon: título, QR code da página /comecar e o endereço curto, em coluna nas duas orientações.
+// O QR fica com a altura que sobra: deitada numa tela de 240 px ele encolhe em vez de empurrar o texto para fora.
 void drawInstall() {
   gfx::clear();
-  if (L()) {
-    const int side = gfx::height() - u(48), cx = (M() + side + W()) / 2;
-    fb().qrcode(app::START_URL, M(), u(24), side);
-    text("falta o tokenpulse", cx, gfx::height() / 2 - u(44), gfx::TITLE, TEXT, middle_center);
-    text("no Mac", cx, gfx::height() / 2 - u(44) + below(gfx::TITLE, 26), gfx::TITLE, TEXT, middle_center);
-    text("escaneie, ou abra no Mac:", cx, gfx::height() / 2 + u(20), gfx::SMALL, MUTED, middle_center);
-    text(app::START_SHORT, cx, gfx::height() / 2 + u(20) + below(gfx::SMALL, 22), gfx::LABEL, ACCENT, middle_center);
-    return;
-  }
-  const int side = min(W() - 2 * M(), gfx::height() - u(170));
-  text("falta o tokenpulse no Mac", W() / 2, u(36), gfx::TITLE, TEXT, middle_center);
-  fb().qrcode(app::START_URL, (W() - side) / 2, u(64), side);
-  const int y = u(64) + side + u(28);
+  const int titleY = u(24), qrTop = titleY + below(gfx::TITLE, 22);
+  const int textH = below(gfx::SMALL, 22) + below(gfx::LABEL, 24) + u(12);
+  const int side = min(W() - 2 * M(), gfx::height() - qrTop - textH - u(8));
+  text("falta o tokenpulse no Mac", W() / 2, titleY, gfx::TITLE, TEXT, middle_center);
+  fb().qrcode(app::START_URL, (W() - side) / 2, qrTop, side);
+  const int y = qrTop + side + u(14);
   text("escaneie, ou abra no Mac:", W() / 2, y, gfx::SMALL, MUTED, middle_center);
-  text(app::START_SHORT, W() / 2, y + below(gfx::SMALL, 24), gfx::LABEL, ACCENT, middle_center);
+  text(app::START_SHORT, W() / 2, y + below(gfx::SMALL, 22), gfx::LABEL, ACCENT, middle_center);
 }
 
 // Sem dados do Mac: o que está funcionando e o que falta, em ordem, com o que fazer em cada caso.

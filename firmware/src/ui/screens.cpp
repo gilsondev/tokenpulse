@@ -268,9 +268,10 @@ void bootSplash() {
 uint32_t holdUntil = 0;
 void holdFor(uint32_t ms) { holdUntil = millis() + ms; }
 
-void installPreview() {
-  gfx::frame([] { gfx::full() ? tall::drawInstall() : drawInstall(); });
-}
+uint32_t installUntil = 0;
+// Nos próximos 5 s o render desenha a tela do QR: o screenshot de placa sem PSRAM sai no quadro seguinte, e
+// segurar o quadro atual (como no splash) não servia para ela.
+void installPreview() { installUntil = millis() + 5000; }
 
 // Calibração do touch resistivo: um alvo perto de cada canto, a leitura crua média de cada toque e, dos
 // quatro, a leitura nas bordas da tela. Sem toque em 60 s desiste e fica a calibração que havia.
@@ -352,6 +353,7 @@ void render() {
   const bool dark = settings::v.theme == 0 ? (bool)(app::frame["dark"] | true) : settings::v.theme == 2;
   if (dark != color::dark) color::apply(dark);
   if (!gfx::ready()) return board::setLed(breath(800) > 0.5f ? 40 : 0, 0, 0);  // sem canvas: LED vermelho piscando
+  if (millis() < installUntil) return gfx::frame([] { gfx::full() ? tall::drawInstall() : drawInstall(); });
   // sem dados há mais de 1 min a tela grande troca os números velhos pelo diagnóstico da conexão
   const bool lost = gfx::full() && app::hasData() && millis() - app::lastFrameMs > 60000;
   if (!app::hasData() || lost) {

@@ -1,7 +1,7 @@
 #!/bin/bash
 # tokenpulse: liga no Mac o daemon que alimenta a placa. Para quem recebeu uma placa já gravada.
-#   curl -fsSL https://gilsondev.github.io/tokenpulse/install.sh | bash                    instala ou atualiza
-#   curl -fsSL https://gilsondev.github.io/tokenpulse/install.sh | bash -s -- --uninstall   remove
+#   curl -fsSL --retry 3 --retry-all-errors https://gilsondev.github.io/tokenpulse/install.sh | bash                    instala ou atualiza
+#   curl -fsSL --retry 3 --retry-all-errors https://gilsondev.github.io/tokenpulse/install.sh | bash -s -- --uninstall   remove
 # Baixa o código do último release para ~/.local/share/tokenpulse, instala o uv se faltar e registra o
 # daemon no login do macOS. Não grava firmware e não pede senha.
 set -euo pipefail
@@ -26,12 +26,12 @@ main() {  # numa função: com curl | bash, nada roda antes de o script chegar i
 
   echo "2/4 baixando o último release"
   local tag
-  tag=$(curl -fsSLI -o /dev/null -w '%{url_effective}' https://github.com/gilsondev/tokenpulse/releases/latest)
+  tag=$(curl -fsSLI --retry 3 --retry-all-errors -o /dev/null -w '%{url_effective}' https://github.com/gilsondev/tokenpulse/releases/latest)
   tag=${tag##*/}
   local tmp
   tmp=$(mktemp -d)
   trap 'rm -rf "$tmp"' EXIT
-  curl -fsSL "https://github.com/gilsondev/tokenpulse/archive/refs/tags/$tag.tar.gz" | tar -xz -C "$tmp" --strip-components=1
+  curl -fsSL --retry 3 --retry-all-errors "https://github.com/gilsondev/tokenpulse/archive/refs/tags/$tag.tar.gz" | tar -xz -C "$tmp" --strip-components=1
   rm -rf "$dir"
   mkdir -p "$(dirname "$dir")"
   mv "$tmp" "$dir"
@@ -49,7 +49,7 @@ main() {  # numa função: com curl | bash, nada roda antes de o script chegar i
   echo
   echo "pronto: em alguns segundos a placa sai de \"sem dados do Mac\"."
   echo "placa USB: deixe plugada. SmallTV: ele precisa estar no mesmo WiFi que este Mac."
-  echo "log: ~/Library/Logs/tokenpulse.log · para remover: curl -fsSL https://gilsondev.github.io/tokenpulse/install.sh | bash -s -- --uninstall"
+  echo "log: ~/Library/Logs/tokenpulse.log · para remover: curl -fsSL --retry 3 --retry-all-errors https://gilsondev.github.io/tokenpulse/install.sh | bash -s -- --uninstall"
 }
 
 main "$@"

@@ -27,7 +27,7 @@ port=$(uv run -q --with pyserial python host/findport.py "$board")
 echo "2/3 gravando o firmware de $board do último release em $port (~30 s)"
 dir=$(mktemp -d)
 trap 'rm -rf "$dir"' EXIT
-curl -fsSL -o "$dir/factory.bin" \
+curl -fsSL --retry 3 --retry-all-errors -o "$dir/factory.bin" \
   "https://github.com/gilsondev/tokenpulse/releases/latest/download/tokenpulse-$board-factory.bin"
 uvx -q --from "esptool<5" esptool.py --chip "$chip" --port "$port" -b 460800 write_flash 0x0 "$dir/factory.bin"
 

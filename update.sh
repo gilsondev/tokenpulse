@@ -14,7 +14,7 @@ boards=~/.claude/esp-tokens-boards.json  # o daemon grava aqui quem está conect
 launchctl list | grep -q com.gilsondev.tokenpulse ||
   { echo "o daemon não está rodando: rode host/install.sh (ou ./setup.sh <placa> numa placa nova)" >&2; exit 1; }
 
-tag=$(curl -fsSLI -o /dev/null -w '%{url_effective}' https://github.com/gilsondev/tokenpulse/releases/latest)
+tag=$(curl -fsSLI --retry 3 --retry-all-errors -o /dev/null -w '%{url_effective}' https://github.com/gilsondev/tokenpulse/releases/latest)
 tag=${tag##*/}
 echo "último release: $tag"
 
@@ -37,7 +37,7 @@ while read -r board fw; do
     continue
   fi
   echo "$board: ${fw//_/ } -> $tag"
-  curl -fsSL -o "$dir/$board.bin" "https://github.com/gilsondev/tokenpulse/releases/download/$tag/tokenpulse-$board-ota.bin"
+  curl -fsSL --retry 3 --retry-all-errors -o "$dir/$board.bin" "https://github.com/gilsondev/tokenpulse/releases/download/$tag/tokenpulse-$board-ota.bin"
   firmware/flash.sh "$board" --bin "$dir/$board.bin" </dev/null || failed=1
 done <<<"$list"
 exit $failed
