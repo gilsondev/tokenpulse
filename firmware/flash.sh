@@ -34,41 +34,7 @@ if $usb; then
   if [ -z "$port" ]; then
     # com mais de uma placa plugada o upload do PlatformIO pega a primeira porta e pode gravar na placa
     # errada. Vale a porta que já roda esta placa; senão, a única que não roda o tokenpulse.
-    py=$(head -1 "$pio" | sed 's/^#!//')
-    port=$("$py" - "$board" <<'PY'
-import glob, json, sys, time
-import serial
-want, fresh = sys.argv[1], []
-for path in sorted(set(glob.glob("/dev/cu.usbmodem*") + glob.glob("/dev/cu.usbserial*") + glob.glob("/dev/cu.wchusbserial*") + glob.glob("/dev/cu.SLAB_USBtoUART*"))):
-    try:
-        s = serial.Serial()
-        s.port, s.baudrate, s.timeout = path, 460800, 0
-        s.dtr = s.rts = False
-        s.open()
-        s.dtr = "usbmodem" in path
-        buf, deadline = b"", time.time() + 3
-        while time.time() < deadline and b"hello " not in buf:
-            s.write(b"id\n"); time.sleep(0.3); buf += s.read(4096)
-        s.close()
-    except (OSError, serial.SerialException):
-        continue
-    name = None
-    for line in buf.decode(errors="replace").splitlines():
-        if line.startswith("hello "):
-            try: name = json.loads(line[6:])["board"]
-            except (ValueError, KeyError): pass
-    if name == want:
-        print(path); sys.exit()
-    if name is None:
-        fresh.append(path)
-if len(fresh) == 1:
-    print(fresh[0])
-elif fresh:
-    print("mais de uma placa sem o tokenpulse: " + " ".join(fresh), file=sys.stderr)
-else:
-    print("nenhuma porta com uma placa " + want + " ou sem o tokenpulse", file=sys.stderr)
-PY
-)
+    port=$(cd .. && uv run -q --with pyserial python host/findport.py "$board") || true
     [ -n "$port" ] || { echo "escolha a porta com --port" >&2; exit 1; }
     echo "gravando $board em $port"
   fi

@@ -160,23 +160,21 @@ Recomendados:
 - [claude-swap](https://github.com/realiti4/claude-swap) (`uv tool install claude-swap`), para trocar de org pela
   tela. Logado em cada org, rode `cswap add`.
 
-Com a placa plugada, nesta ordem (o daemon só reconhece uma placa com ponte USB-serial, como a amarela,
-quando ela aparece já com o firmware; gravada depois, desplugue e plugue de novo):
+Com a placa plugada:
 
 ```bash
 git clone https://github.com/gilsondev/tokenpulse && cd tokenpulse
-
-# 1. firmware do release, pela USB (troque pelo da sua placa)
-curl -LO https://github.com/gilsondev/tokenpulse/releases/latest/download/tokenpulse-cyd-2432s028r-factory.bin
-uvx --from "esptool<5" esptool.py --chip esp32 write_flash 0x0 tokenpulse-cyd-2432s028r-factory.bin
-# Guition: --chip esp32s3 e tokenpulse-guition-jc3248w535-factory.bin
-
-# 2. daemon no login do macOS (log em ~/Library/Logs/tokenpulse.log)
-host/install.sh
+./setup.sh cyd-2432s028r      # ou guition-jc3248w535, waveshare-s3-lcd-147b
 ```
 
-Em alguns segundos a placa sai de "sem dados do Mac". A placa amarela, de touch resistivo, pede na primeira
-vez quatro toques com a caneta para calibrar.
+O `setup.sh` pausa o daemon se ele já roda, acha a porta da placa, grava o firmware do último release pela
+USB (com o `--chip` certo, via `uvx esptool`) e liga o daemon no login do macOS (log em
+`~/Library/Logs/tokenpulse.log`). Em alguns segundos a placa sai de "sem dados do Mac". A placa amarela, de
+touch resistivo, pede na primeira vez quatro toques com a caneta para calibrar. Gravar de novo apaga os ajustes
+e a calibração.
+
+O daemon roda direto da pasta clonada: mantenha a pasta onde está. Se mover ou apagar, a placa fica em "sem
+dados do Mac"; para mudar de lugar, rode `host/install.sh` de novo a partir da pasta nova.
 
 Atualizações depois disso vão por OTA, pelo mesmo cabo:
 

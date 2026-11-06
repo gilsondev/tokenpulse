@@ -97,6 +97,7 @@
         margin: 8px 0 0; }
   code { font: 13.5px/1.55 "JetBrains Mono", ui-monospace, monospace; }
   p code, li code, td code { background: var(--code-bg); border: 1px solid var(--line); border-radius: 6px; padding: 1px 6px; font-size: 13px; }
+  pre code { background: none; border: 0; padding: 0; font-size: 13.5px; }  /* o estilo de código na linha não vale dentro do bloco */
 
   table { width: 100%; border-collapse: collapse; font-size: 14px; }
   th, td { text-align: left; padding: 12px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
@@ -255,10 +256,7 @@ flowchart LR
     <ol class="steps">
       <li><h3>Baixe o projeto</h3><pre><code>git clone https://github.com/gilsondev/tokenpulse
 cd tokenpulse</code></pre></li>
-      <li><h3>Grave o firmware, com a placa plugada</h3><p>A imagem completa do <a href="https://github.com/gilsondev/tokenpulse/releases/latest">último release</a>, pela USB. Faça isso antes do daemon: ele reconhece a placa quando ela aparece já com o firmware.</p><pre><code>curl -LO https://github.com/gilsondev/tokenpulse/releases/latest/download/tokenpulse-<span class="env">guition-jc3248w535</span>-factory.bin
-uvx --from "esptool&lt;5" esptool.py --chip <span class="chip">esp32s3</span> write_flash 0x0 \
-  tokenpulse-<span class="env">guition-jc3248w535</span>-factory.bin</code></pre><p>Ou compile e grave com o PlatformIO: <code>firmware/flash.sh <span class="env">guition-jc3248w535</span> --usb</code>.</p></li>
-      <li><h3>Ligue o daemon no login</h3><p>Ele sobe sozinho e volta se cair. Em alguns segundos a placa sai de "sem dados do Mac". O log fica em <code>~/Library/Logs/tokenpulse.log</code>.</p><pre><code>host/install.sh</code></pre><p data-only="cyd-2432s028r">Na primeira vez a placa amarela abre a calibração: toque com a caneta no centro de cada alvo. Para refazer depois: Ajustes → Sobre → calibrar o toque.</p><p>Gravou com o daemon já rodando e a placa ficou em "sem dados do Mac"? Desplugue e plugue de novo.</p></li>
+      <li><h3>Rode o instalador, com a placa plugada</h3><p>Ele acha a placa, grava o firmware do <a href="https://github.com/gilsondev/tokenpulse/releases/latest">último release</a> pela USB e liga o daemon no login do macOS. Em alguns segundos a placa sai de "sem dados do Mac" e mostra o seu uso. O log fica em <code>~/Library/Logs/tokenpulse.log</code>.</p><pre><code>./setup.sh <span class="env">guition-jc3248w535</span></code></pre><p data-only="cyd-2432s028r">Na primeira vez a placa amarela abre a calibração: toque com a caneta no centro de cada alvo. Para refazer depois: Ajustes → Sobre → calibrar o toque.</p><p>O daemon roda direto desta pasta: não apague nem mova o <code>tokenpulse</code>. Para mudar de lugar, rode <code>host/install.sh</code> de novo na pasta nova.</p><p>Prefere compilar? <code>firmware/flash.sh <span class="env">guition-jc3248w535</span> --usb</code> e depois <code>host/install.sh</code>.</p></li>
     </ol>
   </div>
 </section>
