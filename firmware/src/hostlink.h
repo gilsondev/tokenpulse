@@ -16,6 +16,9 @@ namespace hostlink {
 void begin();
 void poll();  // lê e trata o que chegou na serial; chamado a cada volta do loop
 uint32_t lastIdMs();  // quando o daemon perguntou "id" pela última vez (0: nunca)
+// Cabo ok, nenhum daemon se apresentou e nenhum dado desde o boot, há 20 s: quase sempre é quem acabou de
+// receber a placa. A tela de espera troca as etapas pelo QR code da instalação.
+bool needsInstall();
 bool usbPlugged();    // o Mac reconheceu a placa (sem USB nativa: sempre true)
 bool portOpen();      // alguém abriu a porta serial
 const char* firmware();  // data e hora da compilação

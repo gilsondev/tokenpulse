@@ -61,7 +61,28 @@ void updateLed() {
   if (packed != last) board::setLed(r, g, b), last = packed;
 }
 
+// Falta instalar o daemon: o mesmo QR code das telas grandes, no tamanho da tela pequena.
+void drawInstall() {
+  const int w = gfx::width(), h = gfx::height();
+  fb().fillScreen(BG);
+  if (gfx::wide()) {
+    const int side = h - s(16), cx = (side + s(8) + w) / 2;
+    fb().qrcode(app::START_URL, s(8), s(8), side);
+    label("falta o tokenpulse", cx, h / 2 - s(30), TEXT, middle_center);
+    label("no Mac. escaneie, ou", cx, h / 2 - s(12), MUTED, middle_center);
+    label("abra no Mac:", cx, h / 2 + s(4), MUTED, middle_center);
+    label(app::START_SHORT, cx, h / 2 + s(24), ACCENT, middle_center);
+    return;
+  }
+  const int side = w - s(16);
+  label("falta o tokenpulse no Mac", w / 2, s(14), TEXT, middle_center);
+  fb().qrcode(app::START_URL, s(8), s(30), side);
+  label("escaneie, ou abra no Mac:", w / 2, s(30) + side + s(16), MUTED, middle_center);
+  label(app::START_SHORT, w / 2, s(30) + side + s(34), ACCENT, middle_center);
+}
+
 void drawWaiting() {
+  if (hostlink::needsInstall()) return drawInstall();
   int cx = gfx::width() / 2, cy = gfx::height() / 2;
   int start = millis() * 360 / 1200 % 360;
   fb().fillScreen(BG);
@@ -246,6 +267,10 @@ void bootSplash() {
 
 uint32_t holdUntil = 0;
 void holdFor(uint32_t ms) { holdUntil = millis() + ms; }
+
+void installPreview() {
+  gfx::frame([] { gfx::full() ? tall::drawInstall() : drawInstall(); });
+}
 
 // Calibração do touch resistivo: um alvo perto de cada canto, a leitura crua média de cada toque e, dos
 // quatro, a leitura nas bordas da tela. Sem toque em 60 s desiste e fica a calibração que havia.

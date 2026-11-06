@@ -345,9 +345,30 @@ void drawModels(bool live, int page) {
   dots(page);
 }
 
+// Falta instalar o daemon: QR code da página /comecar e o endereço curto. Em pé, QR em cima; deitada, à esquerda.
+void drawInstall() {
+  gfx::clear();
+  if (L()) {
+    const int side = gfx::height() - u(48), cx = (M() + side + W()) / 2;
+    fb().qrcode(app::START_URL, M(), u(24), side);
+    text("falta o tokenpulse", cx, gfx::height() / 2 - u(44), gfx::TITLE, TEXT, middle_center);
+    text("no Mac", cx, gfx::height() / 2 - u(44) + below(gfx::TITLE, 26), gfx::TITLE, TEXT, middle_center);
+    text("escaneie, ou abra no Mac:", cx, gfx::height() / 2 + u(20), gfx::SMALL, MUTED, middle_center);
+    text(app::START_SHORT, cx, gfx::height() / 2 + u(20) + below(gfx::SMALL, 22), gfx::LABEL, ACCENT, middle_center);
+    return;
+  }
+  const int side = min(W() - 2 * M(), gfx::height() - u(170));
+  text("falta o tokenpulse no Mac", W() / 2, u(36), gfx::TITLE, TEXT, middle_center);
+  fb().qrcode(app::START_URL, (W() - side) / 2, u(64), side);
+  const int y = u(64) + side + u(28);
+  text("escaneie, ou abra no Mac:", W() / 2, y, gfx::SMALL, MUTED, middle_center);
+  text(app::START_SHORT, W() / 2, y + below(gfx::SMALL, 24), gfx::LABEL, ACCENT, middle_center);
+}
+
 // Sem dados do Mac: o que está funcionando e o que falta, em ordem, com o que fazer em cada caso.
 void drawWaiting() {
   char buf[64];
+  if (hostlink::needsInstall()) return drawInstall();
   gfx::clear();
   // em pé, tudo centrado em coluna; deitada, mascote e título à esquerda e os passos à direita
   const bool land = L();

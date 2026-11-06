@@ -9,6 +9,11 @@ inline JsonDocument frame;       // último frame do daemon, como chegou
 inline uint32_t lastFrameMs = 0;  // 0 enquanto o Mac ainda não mandou nada
 
 inline bool hasData() { return lastFrameMs != 0; }
+
+// Para quem acabou de receber a placa: a página que ensina a instalar o daemon no Mac. O QR leva ao github.io,
+// que não depende do encurtador; o endereço escrito é o curto, para digitar.
+constexpr const char* START_URL = "https://gilsondev.github.io/tokenpulse/comecar/";
+constexpr const char* START_SHORT = "tokenpulse.s.gy/comecar";
 inline bool live() { return hasData() && millis() - lastFrameMs <= 5000; }
 // o % de 5h e da semana vem da API ou da statusline; marcado como velho depois de 5 min
 inline int dataAge() { return frame["age"] | 0; }

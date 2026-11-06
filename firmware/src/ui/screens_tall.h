@@ -7,6 +7,7 @@ namespace screens::tall {
 constexpr int PAGES = 4;  // principal, sessões, modelos, histórico; os ajustes abrem pela engrenagem
 
 void drawWaiting();
+void drawInstall();  // QR code da página /comecar, para quem ainda não instalou o daemon
 void drawMain(bool live, int page);
 void drawSessions(bool live, int page, int ws, int scroll);  // ws -1: lista de workspaces
 void drawModels(bool live, int page);

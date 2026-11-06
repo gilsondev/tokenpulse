@@ -75,6 +75,9 @@ void handle(const String& line) {
   } else if (line.startsWith("tap ")) {
     const int sp = line.indexOf(' ', 4);
     screens::tap(line.substring(4, sp).toInt(), line.substring(sp + 1).toInt());
+  } else if (line == "install") {  // a tela do QR de instalação por 3 s, para screenshot com o daemon rodando
+    screens::installPreview();
+    screens::holdFor(3000);
   } else if (line == "splash") {  // redesenha a abertura e a segura 3 s: para screenshot da tela de boot
     screens::bootSplash();
     screens::holdFor(3000);
@@ -119,6 +122,7 @@ void poll() {
 }
 
 uint32_t lastIdMs() { return idMs; }
+bool needsInstall() { return usbPlugged() && !idMs && !app::hasData() && millis() > 20000; }
 
 #if ARDUINO_USB_CDC_ON_BOOT
 bool usbPlugged() { return HWCDC::isPlugged(); }
