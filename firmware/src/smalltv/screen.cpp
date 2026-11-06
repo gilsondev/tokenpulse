@@ -444,8 +444,34 @@ void drawOta() {
   text(buf, W / 2, 152, LABEL, DIM, top_center);
 }
 
+// WiFi ok e nenhum daemon falou: quase sempre é quem acabou de receber a placa. A tela leva à página que
+// ensina a instalar o daemon no Mac, por QR code e pelo endereço escrito.
+void drawInstall() {
+  band.fillScreen(BG);
+  text("falta o tokenpulse no Mac", W / 2, 4, LABEL, TEXT, top_center);
+  band.qrcode("https://gilsondev.github.io/tokenpulse/comecar/", (W - 148) / 2, 22 - oy, 148);
+  text("escaneie, ou abra no Mac:", W / 2, 174, LABEL, MUTED, top_center);
+  text("gilsondev.github.io", W / 2, 192, LABEL, ACCENT, top_center);
+  text("/tokenpulse/comecar", W / 2, 208, LABEL, ACCENT, top_center);
+}
+
+// Sem rede: a placa abriu o próprio WiFi. O QR code de WiFi faz a câmera do celular oferecer a conexão; no
+// celular, o portal cativo abre a página de configuração sozinho.
+void drawAp() {
+  char qr[48];
+  snprintf(qr, sizeof qr, "WIFI:T:nopass;S:%s;;", net::apName());
+  band.fillScreen(BG);
+  text("configure o WiFi da placa", W / 2, 4, LABEL, TEXT, top_center);
+  band.qrcode(qr, (W - 128) / 2, 22 - oy, 128);
+  text("1. escaneie, ou entre no WiFi", W / 2, 156, LABEL, MUTED, top_center);
+  text(net::apName(), W / 2, 172, LABEL, ACCENT, top_center);
+  text("2. a página abre sozinha; se não,", W / 2, 192, LABEL, MUTED, top_center);
+  text("abra 192.168.4.1", W / 2, 208, LABEL, ACCENT, top_center);
+}
+
 void drawWaiting() {
   char buf[64];
+  if (net::apOn() && !net::online()) return drawAp();
   band.fillScreen(BG);
   text("sem dados do Mac", W / 2, 40, NUM, TEXT, top_center);
   if (app::lastFrameMs) {
@@ -454,6 +480,8 @@ void drawWaiting() {
   }
   const bool wifi = net::online();
   const bool daemon = wifi && net::lastDaemonMs() && millis() - net::lastDaemonMs() < 15000;
+  // sem nenhum dado nunca e há 20 s no WiFi sem daemon: a tela de instalação no lugar das etapas
+  if (wifi && !daemon && !app::lastFrameMs && millis() > 20000) return drawInstall();
   String hint = net::apOn() ? String("conecte em ") + net::apName() : String("procurando a rede salva…");
   step(100, wifi, "WiFi", hint.c_str());
   step(140, daemon, "daemon tokend", "rode host/install.sh no Mac");
@@ -622,6 +650,14 @@ bool shot(const String& name, const std::function<void(const uint8_t*, size_t)>&
   else if (name == "projects") slot = {PROJECTS, 0};
   else if (name == "history") slot = {HISTORY, 0};
   else if (name == "orgs") slot = {ORGS, 0};
+  else if (name == "ap") {
+    for (oy = 0; oy < H; oy += BAND) drawAp(), write(reinterpret_cast<const uint8_t*>(band.getBuffer()), min(BAND, H - oy) * W * 2), yield();
+    return true;
+  }
+  else if (name == "install") {
+    for (oy = 0; oy < H; oy += BAND) drawInstall(), write(reinterpret_cast<const uint8_t*>(band.getBuffer()), min(BAND, H - oy) * W * 2), yield();
+    return true;
+  }
   else if (name != "main" && !waiting) return false;
   if (slot.page == MODEL && slot.sub >= app::frame["mods"].size()) return false;
   for (oy = 0; oy < H; oy += BAND) {

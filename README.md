@@ -196,9 +196,25 @@ pelo prefixo dos commits desde o último release ([Conventional Commits](https:/
 O texto depois do prefixo fica em português. O cálculo está em
 [`.github/scripts/next_version.py`](.github/scripts/next_version.py) (`--test` confere as regras). Cada release traz,
 por placa, `tokenpulse-<placa>-factory.bin` (primeira gravação, imagem completa a partir do 0x0) e
-`tokenpulse-<placa>-ota.bin` (atualização pelo daemon). Uma tag `v*` empurrada à mão também publica.
+`tokenpulse-<placa>-ota.bin` (atualização pelo daemon). Uma tag `v*` empurrada à mão também publica. Num build local, a versão é o `git describe` (`v0.4.0-2-gdb2a673-dirty`: dois commits depois da
+v0.4.0, com mudanças não commitadas), e o `update.sh` não troca esse firmware pelo release sem `--force`.
 
 ## Instalação
+
+**Recebeu uma placa já gravada?** No Mac, um comando instala o daemon (o `uv`, se faltar, e o último release em
+`~/.local/share/tokenpulse`) e o liga no login, sem clonar o repositório nem pedir senha:
+
+```bash
+curl -fsSL https://gilsondev.github.io/tokenpulse/install.sh | bash
+```
+
+O passo a passo para quem recebe, com o WiFi do SmallTV, fica em
+[gilsondev.github.io/tokenpulse/comecar](https://gilsondev.github.io/tokenpulse/comecar/). O SmallTV mostra um QR
+code para essa página enquanto nenhum daemon falou com ele, e o botão "Preparar para entrega" da página de
+configuração volta os ajustes ao padrão e esquece o WiFi antes de você entregar a placa. Para remover:
+`curl -fsSL https://gilsondev.github.io/tokenpulse/install.sh | bash -s -- --uninstall`.
+
+**Gravar uma placa do zero:**
 
 Requisitos no Mac: [uv](https://docs.astral.sh/uv/) e o Claude Code logado (`claude auth status`). Para
 compilar o firmware em vez de usar o release, também o [PlatformIO](https://platformio.org/)
@@ -245,8 +261,10 @@ baixa o `tokenpulse-<placa>-ota.bin` das que estão atrás e espera cada uma vol
 2. No painel de fábrica, abra `http://<ip-do-smalltv>/update` e envie o `.bin` (compilado, é o
    `firmware/.pio/build/smalltv-ultra/firmware.bin`). Ele cabe no espaço de OTA do
    firmware de fábrica (~460 KB). Isso substitui o firmware da GeekMagic, que não volta sem o `.bin` dele.
-3. Sem rede salva, a placa abre o WiFi aberto `tokenpulse-XXXXXX`. Conecte nele pelo celular, abra
-   `http://192.168.4.1` e informe a rede da casa. Em ~20 s o daemon acha a placa e a tela sai de "sem dados do Mac".
+3. Sem rede salva, a placa abre o WiFi aberto `tokenpulse-XXXXXX` e mostra um QR code que faz o celular entrar
+   nele. A página de configuração abre sozinha (portal cativo; senão, `http://192.168.4.1`): ela lista as redes que a
+   placa enxerga com o sinal de cada uma, pede a senha e diz se conectou, com o endereço `.local`, ou o que deu
+   errado (senha, rede fora de alcance ou de 5 GHz). Em ~20 s o daemon acha a placa e a tela sai de "sem dados do Mac".
 
 Depois disso o `update.sh` e o `firmware/flash.sh smalltv-ultra` atualizam pelo WiFi. Não use o WiFi do Mac
 para entrar no `tokenpulse-XXXXXX`: sem cabo de rede, o Mac fica sem internet enquanto estiver nele.

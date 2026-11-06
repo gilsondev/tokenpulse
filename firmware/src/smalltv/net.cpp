@@ -1,5 +1,6 @@
 #include "net.h"
 
+#include <DNSServer.h>
 #include <ESP8266HTTPUpdateServer.h>
 #include <ESP8266WebServer.h>
 #include <ESP8266WiFi.h>
@@ -17,14 +18,20 @@ constexpr uint32_t JOIN_MS = 30000;  // sem entrar na rede salva nesse tempo, ab
 
 ESP8266WebServer server(80);
 ESP8266HTTPUpdateServer updater;
+DNSServer dns;  // portal cativo: no AP, todo nome responde 192.168.4.1 e o celular abre a página sozinho
 char ap[24];
 bool ap_on = false, mdns_on = false, fresh = false;
 uint32_t startMs = 0, onlineSinceMs = 0, daemonMs = 0, rebootAtMs = 0;
 String mdnsHost;  // o nome com que o mDNS está no ar
+String scanJson;  // última busca de redes, pronta para a página: [[ssid, rssi, aberta], ...]
+String joinSsid;  // a rede escolhida na página de configuração do WiFi
+uint32_t joinMs = 0;
 
 void startAp() {
   WiFi.mode(WIFI_AP_STA);
   WiFi.softAP(ap);
+  dns.start(53, "*", WiFi.softAPIP());
+  WiFi.scanNetworks(true);  // a lista já fica pronta quando a pessoa abrir a página
   ap_on = true;
 }
 
@@ -34,6 +41,7 @@ void handleState() {
   JsonDocument d;
   d["board"] = app::BOARD;
   d["fw"] = app::FIRMWARE;
+  d["agent"] = app::frame["agv"] | "";  // versão do tokend, vinda no frame
   d["host"] = hostName();
   d["ip"] = address();
   if (online()) d["ssid"] = WiFi.SSID(), d["rssi"] = WiFi.RSSI();
@@ -43,6 +51,7 @@ void handleState() {
   d["frame"] = app::lastFrameMs ? (long)((millis() - app::lastFrameMs) / 1000) : -1;
   d["daemon"] = daemonMs ? (long)((millis() - daemonMs) / 1000) : -1;
   d["ap"] = ap_on;
+  d["apName"] = ap;
   d["safe"] = app::safe;
   JsonObject c = d["cfg"].to<JsonObject>();
   const auto& v = config::v;
@@ -80,14 +89,67 @@ void handleConfig() {
   server.send(200, "application/json", String("{\"host\":\"") + hostName() + "\"}");
 }
 
-void handleRoot() { server.send_P(200, "text/html", PAGE); }
+// No AP e ainda sem rede, a raiz é a configuração do WiFi; os ajustes ficam em /config.
+void handleRoot() { server.send_P(200, "text/html", ap_on && !online() ? WIFI_PAGE : PAGE); }
+
+// Redes que a placa enxerga, sem repetir SSID (fica o sinal mais forte), da mais forte para a mais fraca.
+// A busca roda em segundo plano: a página pergunta de novo até vir "done".
+void handleScan() {
+  if (server.hasArg("again")) scanJson = "", WiFi.scanDelete(), WiFi.scanNetworks(true);
+  if (scanJson.length()) return server.send(200, "application/json", scanJson);
+  int n = WiFi.scanComplete();
+  if (n == WIFI_SCAN_FAILED) WiFi.scanNetworks(true), n = WIFI_SCAN_RUNNING;
+  if (n == WIFI_SCAN_RUNNING) return server.send(200, "application/json", "{\"state\":\"scanning\"}");
+  int order[32], m = 0;
+  for (int i = 0; i < n && m < 32; i++) {
+    if (WiFi.SSID(i).isEmpty()) continue;  // rede oculta: só pelo "minha rede não aparece"
+    int k = 0;
+    while (k < m && WiFi.SSID(order[k]) != WiFi.SSID(i)) k++;
+    if (k < m) {
+      if (WiFi.RSSI(i) > WiFi.RSSI(order[k])) order[k] = i;
+      continue;
+    }
+    order[m++] = i;
+  }
+  std::sort(order, order + m, [](int a, int b) { return WiFi.RSSI(a) > WiFi.RSSI(b); });
+  JsonDocument d;
+  d["state"] = "done";
+  JsonArray nets = d["nets"].to<JsonArray>();
+  for (int k = 0; k < m; k++) {
+    JsonArray r = nets.add<JsonArray>();
+    r.add(WiFi.SSID(order[k])), r.add(WiFi.RSSI(order[k])), r.add(WiFi.encryptionType(order[k]) == ENC_TYPE_NONE);
+  }
+  serializeJson(d, scanJson);
+  WiFi.scanDelete();
+  server.send(200, "application/json", scanJson);
+}
 
 void handleWifi() {
-  if (!ap_on) return server.send(403, "text/plain", "só pelo AP de configuração\n");
-  server.send(200, "text/plain", "conectando; em ~20 s a tela mostra o IP na rede\n");
-  delay(200);
-  WiFi.begin(server.arg("ssid"), server.arg("pass"));  // persistente: fica gravada para os próximos boots
-  startMs = millis();
+  if (!ap_on) return server.send(403, "text/plain", "só pelo WiFi de configuração da placa\n");
+  joinSsid = server.arg("ssid");
+  if (joinSsid.isEmpty()) return server.send(400, "text/plain", "escolha uma rede\n");
+  server.send(202, "application/json", "{\"ok\":true}");
+  delay(100);
+  WiFi.begin(joinSsid, server.arg("pass"));  // persistente: fica gravada para os próximos boots
+  joinMs = startMs = millis();
+}
+
+// Como vai a conexão pedida na página: connecting, connected (com o endereço) ou failed (com o motivo).
+void handleWifiState() {
+  JsonDocument d;
+  const wl_status_t st = WiFi.status();
+  const uint32_t t = millis() - joinMs;
+  d["ssid"] = joinSsid;
+  if (!joinMs) d["state"] = "idle";
+  else if (st == WL_CONNECTED) {
+    d["state"] = "connected", d["ip"] = WiFi.localIP().toString(), d["host"] = hostName();
+  } else if (st == WL_WRONG_PASSWORD) d["state"] = "failed", d["why"] = "senha";
+  else if (st == WL_NO_SSID_AVAIL && t > 8000) d["state"] = "failed", d["why"] = "rede";
+  else if (t > 25000) d["state"] = "failed", d["why"] = "tempo";
+  else d["state"] = "connecting", d["secs"] = t / 1000;
+  String out;
+  serializeJson(d, out);
+  server.send(200, "application/json", out);
 }
 
 void handleHello() {
@@ -125,6 +187,17 @@ void begin() {
   startMs = millis();
 
   server.on("/", HTTP_GET, handleRoot);
+  server.on("/config", HTTP_GET, [] { server.send_P(200, "text/html", PAGE); });
+  server.on("/wifi", HTTP_GET, [] { server.send_P(200, "text/html", WIFI_PAGE); });
+  server.on("/api/scan", HTTP_GET, handleScan);
+  server.on("/api/wifi", HTTP_GET, handleWifiState);
+  // portal cativo: o teste de internet do celular (captive.apple.com, /generate_204…) cai aqui e é
+  // mandado para a página; fora do AP, endereço desconhecido é 404
+  server.onNotFound([] {
+    if (!ap_on) return server.send(404, "text/plain", "não existe\n");
+    server.sendHeader("Location", "http://192.168.4.1/");
+    server.send(302, "text/plain", "");
+  });
   server.on("/api/state", HTTP_GET, handleState);
   server.on("/api/config", HTTP_POST, handleConfig);
   // screenshot: 240x240 RGB565 cru. Mostra os seus dados a quem estiver na rede, como a própria tela
@@ -136,6 +209,15 @@ void begin() {
       server.client().stop();  // tela pedida não existe: corta a resposta, o cliente vê o tamanho errado
   });
   server.on("/api/reboot", HTTP_POST, [] { server.send(204); rebootAtMs = millis() + 500; });
+  // entrega para outra pessoa: ajustes de fábrica e sem a rede daqui. No próximo boot a placa abre o AP, e
+  // depois do WiFi dela a tela mostra o QR code da instalação no Mac
+  server.on("/api/prepare", HTTP_POST, [] {
+    server.send(204);
+    config::v = config::Values();
+    config::save();
+    WiFi.disconnect(true);
+    rebootAtMs = millis() + 500;
+  });
   server.on("/api/forget", HTTP_POST, [] {  // apaga a rede gravada: no próximo boot a placa abre o AP
     server.send(204);
     WiFi.disconnect(true);
@@ -144,6 +226,10 @@ void begin() {
   server.on("/wifi", HTTP_POST, handleWifi);
   server.on("/hello", HTTP_GET, handleHello);
   server.on("/frame", HTTP_POST, handleFrame);
+  server.on("/logo.svg", HTTP_GET, [] {
+    server.sendHeader("Cache-Control", "max-age=86400");
+    server.send_P(200, "image/svg+xml", LOGO);
+  });
   server.on("/style.css", HTTP_GET, [] {
     server.sendHeader("Cache-Control", "max-age=3600");
     server.send_P(200, "text/css", STYLE);
@@ -172,6 +258,7 @@ void loop() {
       }
     }
     if (ap_on && millis() - onlineSinceMs > 60000) {  // conectou e ficou: o AP não é mais preciso
+      dns.stop();
       WiFi.softAPdisconnect(true);
       WiFi.mode(WIFI_STA);
       ap_on = false;
@@ -181,6 +268,7 @@ void loop() {
     if (!ap_on && millis() - startMs > JOIN_MS) startAp();
   }
   if (mdns_on) MDNS.update();
+  if (ap_on) dns.processNextRequest();
   if (rebootAtMs && millis() > rebootAtMs) ESP.restart();
 }
 

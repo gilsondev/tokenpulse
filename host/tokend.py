@@ -23,6 +23,21 @@ import serial
 from serial.tools import list_ports
 
 
+def agent_version():
+    """Versão deste tokend: o VERSION que o instalador de uma linha grava ao lado do código, ou o git describe
+    de quem roda do clone (v0.4.0-3-gdb2a673-dirty)."""
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    try:
+        return open(os.path.join(root, "VERSION")).read().strip()
+    except OSError:
+        pass
+    try:
+        return subprocess.run(["git", "-C", root, "describe", "--tags", "--always", "--dirty"],
+                              capture_output=True, text=True, timeout=5).stdout.strip() or "dev"
+    except (OSError, subprocess.TimeoutExpired):
+        return "dev"
+
+
 def log(msg):
     print(f"{datetime.now():%d/%m %H:%M:%S} {msg}", file=sys.stderr, flush=True)
 
@@ -1187,6 +1202,7 @@ def net_loop():
             # o detalhe por modelo usa tudo: tokens, %, entrada, saída, cache lido e escrito, custo e projetos
             slim["mods"] = slim.get("mods", [])[:3]
             slim["ses"], slim["sesn"] = session_list(frame)
+            slim["agv"] = AGENT  # a página da placa mostra a versão do agente ao lado da do firmware
             body = json.dumps(slim, ensure_ascii=False).encode()
         for host, board in list(net_boards.items()):
             if path := pending_ota(board.name):
@@ -1210,10 +1226,12 @@ def net_loop():
 
 
 DEMO = "--demo" in sys.argv
+AGENT = agent_version()
 DEMO_P5 = int(os.environ.get("TOKENPULSE_DEMO_P5", "42"))  # para mostrar as faixas: 42, 74, 86, 95
 
 
 def main():
+    log(f"tokend {AGENT}")
     usage = Usage()
     boards = {}   # caminho da porta -> Board
     save_boards(boards)  # o arquivo da execução anterior não vale mais

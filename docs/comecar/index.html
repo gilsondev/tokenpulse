@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Começar · tokenpulse</title>
+<meta name="description" content="Recebeu uma placa do tokenpulse já gravada? Um comando no Mac e ela começa a mostrar o seu uso do Claude Code.">
+<link rel="icon" type="image/svg+xml" href="../assets/logo.svg">
+<link rel="canonical" href="https://gilsondev.github.io/tokenpulse/comecar/">
+<meta name="theme-color" content="#1F1E1D">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #1F1E1D; --surface: #2A2927; --line: #3A3936; --text: #F5F4EE; --muted: #B8B5A9; --dim: #858278;
+    --accent: #D97757; --green: #74B37C; --code-bg: #171615;
+  }
+  @media (prefers-color-scheme: light) {
+    :root { --bg: #FAF9F5; --surface: #F0EEE6; --line: #E0DDD3; --text: #1F1E1D; --muted: #5C5A54; --dim: #8E8B82;
+            --accent: #C15F3C; --code-bg: #F0EEE6; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.55 Inter, system-ui, sans-serif; }
+  main { max-width: 680px; margin: 0 auto; padding: 40px 16px 64px; }
+  a { color: var(--accent); }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; color: var(--text); text-decoration: none; }
+  .brand img { width: 28px; height: 28px; }
+  h1 { font-size: clamp(26px, 6vw, 36px); line-height: 1.15; margin: 28px 0 10px; }
+  h2 { font-size: 20px; margin: 36px 0 10px; }
+  .lead { color: var(--muted); font-size: 18px; margin: 0; }
+  ol.steps { counter-reset: s; list-style: none; padding: 0; margin: 24px 0 0; }
+  ol.steps > li { counter-increment: s; position: relative; padding: 0 0 26px 46px; }
+  ol.steps > li::before { content: counter(s); position: absolute; left: 0; top: 0; width: 30px; height: 30px; border-radius: 50%;
+    display: grid; place-items: center; background: var(--accent); color: #fff; font-weight: 700; font-size: 14px; }
+  ol.steps h3 { margin: 2px 0 6px; font-size: 17px; }
+  ol.steps p, ul { color: var(--muted); margin: 6px 0; }
+  .cmd { display: flex; gap: 8px; align-items: stretch; margin: 10px 0; }
+  .cmd code { flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap; background: var(--code-bg); border: 1px solid var(--line);
+    border-radius: 10px; padding: 12px 14px; font: 14px/1.4 "JetBrains Mono", ui-monospace, monospace; color: var(--text); }
+  .cmd button { flex: none; font: 600 14px Inter, sans-serif; border: 0; border-radius: 10px; padding: 0 16px; cursor: pointer;
+    background: var(--accent); color: #fff; }
+  code { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 14px; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; margin: 12px 0; }
+  .card b { color: var(--text); }
+  .phone { border-left: 3px solid var(--accent); padding: 8px 14px; background: var(--surface); border-radius: 0 10px 10px 0; color: var(--muted); }
+  .phone b { color: var(--text); }
+  footer { margin-top: 48px; color: var(--dim); font-size: 14px; }
+</style>
+</head>
+<body>
+<main>
+  <a class="brand" href="../"><img src="../assets/logo.svg" alt="">tokenpulse</a>
+
+  <h1>Recebeu uma placa do tokenpulse?</h1>
+  <p class="lead">Ela já vem gravada. Falta ligar no seu Mac o programa que lê o seu uso do Claude Code e manda para ela. É um comando, sem senha.</p>
+
+  <p class="phone" id="phone" hidden>Está no celular? Os passos abaixo são no <b>Mac</b>. Abra lá o endereço <b>gilsondev.github.io/tokenpulse/comecar</b>.</p>
+
+  <ol class="steps">
+    <li>
+      <h3>Rode este comando no Terminal do Mac</h3>
+      <div class="cmd"><code id="cmd">curl -fsSL https://gilsondev.github.io/tokenpulse/install.sh | bash</code><button type="button" id="copy">Copiar</button></div>
+      <p>Ele instala o <a href="https://docs.astral.sh/uv/">uv</a> se faltar, baixa o <a href="https://github.com/gilsondev/tokenpulse/releases/latest">último release</a> para <code>~/.local/share/tokenpulse</code> e liga o daemon no login do macOS. Não grava firmware e não mexe na placa. <a href="../install.sh">Veja o script</a> antes, se quiser.</p>
+    </li>
+    <li>
+      <h3>Ligue a placa</h3>
+      <div class="card"><b>Guition, ESP32-2432S028R ou Waveshare:</b> plugue no Mac com um cabo USB que passe dados. Na Guition, se a placa liga mas a tela fica em "cabo USB", gire o plugue USB-C: só um lado passa dados.</div>
+      <div class="card"><b>GeekMagic SmallTV-Ultra:</b> ligue em qualquer fonte USB. Na primeira vez a tela mostra um QR code: escaneie com a câmera do celular para entrar no WiFi <code>tokenpulse-XXXXXX</code>. A página de configuração abre sozinha (senão, abra <code>http://192.168.4.1</code>): escolha a sua rede na lista, a mesma do Mac, e digite a senha. A página avisa quando conectar. Não use o WiFi do Mac para isso, ou ele fica sem internet enquanto estiver conectado.</div>
+    </li>
+    <li>
+      <h3>Pronto</h3>
+      <p>Em alguns segundos a placa sai de "sem dados do Mac" e mostra a janela de 5 h, a semana e as suas sessões.</p>
+    </li>
+  </ol>
+
+  <h2>Antes de começar</h2>
+  <ul>
+    <li>Um Mac com macOS.</li>
+    <li>O Claude Code instalado e logado: rode <code>claude</code> uma vez. Sem login a placa mostra os tokens, mas não o % de uso.</li>
+  </ul>
+
+  <h2>Se não funcionar</h2>
+  <ul>
+    <li>A tela de espera da placa diz qual etapa falta: cabo ou WiFi, daemon, dados.</li>
+    <li>O log fica em <code>~/Library/Logs/tokenpulse.log</code>. As últimas linhas costumam dizer o que houve: <code>tail -20 ~/Library/Logs/tokenpulse.log</code>.</li>
+    <li>SmallTV que não aparece: confira se ele e o Mac estão na mesma rede. Redes de convidados e VLANs separadas bloqueiam o mDNS.</li>
+    <li>Para atualizar depois, rode o mesmo comando de novo.</li>
+  </ul>
+
+  <h2>Para remover</h2>
+  <div class="cmd"><code>curl -fsSL https://gilsondev.github.io/tokenpulse/install.sh | bash -s -- --uninstall</code></div>
+
+  <footer>Tudo sobre o projeto, as placas e como gravar uma do zero: <a href="../">gilsondev.github.io/tokenpulse</a>.</footer>
+</main>
+<script>
+  document.getElementById("copy").addEventListener("click", async e => {
+    try { await navigator.clipboard.writeText(document.getElementById("cmd").textContent); e.target.textContent = "Copiado"; }
+    catch { e.target.textContent = "Selecione e copie"; }
+    setTimeout(() => e.target.textContent = "Copiar", 2000);
+  });
+  if (/iPhone|iPad|Android/i.test(navigator.userAgent)) document.getElementById("phone").hidden = false;
+</script>
+</body>
+</html>

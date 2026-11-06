@@ -1,7 +1,8 @@
 #!/bin/bash
 # Atualiza pelo OTA, pelo mesmo cabo USB, todas as placas plugadas que estão atrás do último release.
 # Diferente do setup.sh, mantém os ajustes e a calibração do toque. Placa com firmware compilado aqui
-# ("dev <data>") fica como está: o release poderia ser mais velho que o seu teste.
+# (v0.4.0-2-gdb2a673-dirty, ou "dev <data>" nos antigos) fica como está: o release poderia ser mais velho que
+# o seu teste.
 #   ./update.sh            atualiza as placas com release diferente do último
 #   ./update.sh --force    troca também os firmwares compilados localmente pelo release
 set -euo pipefail
@@ -30,7 +31,8 @@ while read -r board fw; do
     echo "$board: já está na $tag"
     continue
   fi
-  if [[ "$fw" == dev_* ]] && ! $force; then
+  # build local: "dev <data>" dos antigos, ou o git describe (v0.4.0-2-gdb2a673, -dirty) dos atuais
+  if [[ "$fw" == dev_* || "$fw" =~ -g[0-9a-f]+ || "$fw" == *-dirty ]] && ! $force; then
     echo "$board: firmware compilado localmente (${fw//_/ }), fica como está; ./update.sh --force troca pelo $tag"
     continue
   fi
