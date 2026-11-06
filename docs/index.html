@@ -109,6 +109,16 @@
 
   .callout { border-left: 3px solid var(--accent); background: var(--surface); padding: 14px 18px; border-radius: 0 12px 12px 0;
              color: var(--muted); font-size: 14px; margin-top: 20px; }
+  .pick { display: inline-flex; flex-wrap: wrap; gap: 6px; padding: 4px; border: 1px solid var(--line);
+          border-radius: 999px; background: var(--surface); margin-top: 20px; }
+  .pick button { font: inherit; font-size: 14px; color: var(--muted); background: none; border: 0; cursor: pointer;
+                 padding: 8px 14px; border-radius: 999px; }
+  .pick button[aria-pressed="true"] { background: var(--accent); color: #fff; font-weight: 600; }
+  /* itens de grid encolhem abaixo do conteúdo: sem isto, um comando longo alarga a página no celular */
+  .split > *, .steps, .steps li { min-width: 0; }
+  #instalar .steps { margin-top: 28px; }
+  [data-only] { display: none; }
+  [data-only].on { display: block; }
   footer { padding: 40px 0 60px; border-top: 1px solid var(--line); color: var(--dim); font-size: 14px; }
   footer .wrap { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: center; }
 </style>
@@ -228,18 +238,27 @@ flowchart LR
 </section>
 
 <section id="instalar">
-  <div class="wrap split">
+  <div class="wrap">
     <div>
       <h2>Instalar</h2>
       <p class="sub">Você precisa de um Mac com <a href="https://docs.astral.sh/uv/">uv</a> e o Claude Code logado. O <a href="https://herdr.dev">herdr</a> e o <a href="https://github.com/realiti4/claude-swap">claude-swap</a> são opcionais e liberam as sessões por workspace e a troca de org.</p>
-      <div class="callout">A JC3248W535 só passa dados pela USB-C num dos lados do plugue. Se a placa liga mas o Mac não a vê, gire o plugue.</div>
+      <p class="sub">Escolha a sua placa: os comandos e os avisos abaixo mudam com ela.</p>
+      <div class="pick" role="group" aria-label="Sua placa">
+        <button type="button" data-board="guition-jc3248w535" data-chip="esp32s3" data-ota="15" aria-pressed="true">Guition 3,5"</button>
+        <button type="button" data-board="cyd-2432s028r" data-chip="esp32" data-ota="40" aria-pressed="false">Placa amarela 2,8"</button>
+        <button type="button" data-board="waveshare-s3-lcd-147b" data-chip="esp32s3" data-ota="15" aria-pressed="false">Waveshare 1,47"</button>
+      </div>
+      <div class="callout on" data-only="guition-jc3248w535">A JC3248W535 só passa dados pela USB-C num dos lados do plugue. Se a placa liga mas o Mac não a vê, gire o plugue.</div>
+      <div class="callout" data-only="cyd-2432s028r">A placa amarela (ESP32-2432S028R) tem touch resistivo: use a caneta que vem com ela. Na primeira vez ela pede quatro toques, um em cada canto, para calibrar. Use um cabo USB que passe dados.</div>
+      <div class="callout" data-only="waveshare-s3-lcd-147b">A Waveshare de 1,47" não tem touch: o botão BOOT troca de tela e segurar volta para a principal. Ela gira sozinha pelo acelerômetro.</div>
     </div>
     <ol class="steps">
       <li><h3>Baixe o projeto</h3><pre><code>git clone https://github.com/gilsondev/tokenpulse
 cd tokenpulse</code></pre></li>
-      <li><h3>Ligue o daemon no login</h3><p>Ele sobe sozinho e volta se cair. O log fica em <code>~/Library/Logs/tokenpulse.log</code>.</p><pre><code>host/install.sh</code></pre></li>
-      <li><h3>Grave o firmware a primeira vez</h3><p>Baixe o <code>*-factory.bin</code> da sua placa no <a href="https://github.com/gilsondev/tokenpulse/releases/latest">último release</a> e grave pela USB:</p><pre><code>esptool.py --chip esp32s3 write_flash 0x0 \
-  tokenpulse-guition-jc3248w535-factory.bin</code></pre><p>Ou compile e grave com o PlatformIO: <code>firmware/flash.sh --usb</code>.</p></li>
+      <li><h3>Grave o firmware, com a placa plugada</h3><p>A imagem completa do <a href="https://github.com/gilsondev/tokenpulse/releases/latest">último release</a>, pela USB. Faça isso antes do daemon: ele reconhece a placa quando ela aparece já com o firmware.</p><pre><code>curl -LO https://github.com/gilsondev/tokenpulse/releases/latest/download/tokenpulse-<span class="env">guition-jc3248w535</span>-factory.bin
+uvx --from "esptool&lt;5" esptool.py --chip <span class="chip">esp32s3</span> write_flash 0x0 \
+  tokenpulse-<span class="env">guition-jc3248w535</span>-factory.bin</code></pre><p>Ou compile e grave com o PlatformIO: <code>firmware/flash.sh <span class="env">guition-jc3248w535</span> --usb</code>.</p></li>
+      <li><h3>Ligue o daemon no login</h3><p>Ele sobe sozinho e volta se cair. Em alguns segundos a placa sai de "sem dados do Mac". O log fica em <code>~/Library/Logs/tokenpulse.log</code>.</p><pre><code>host/install.sh</code></pre><p data-only="cyd-2432s028r">Na primeira vez a placa amarela abre a calibração: toque com a caneta no centro de cada alvo. Para refazer depois: Ajustes → Sobre → calibrar o toque.</p><p>Gravou com o daemon já rodando e a placa ficou em "sem dados do Mac"? Desplugue e plugue de novo.</p></li>
     </ol>
   </div>
 </section>
@@ -250,10 +269,10 @@ cd tokenpulse</code></pre></li>
     <p class="sub">Depois da primeira gravação, você nunca mais precisa do bootloader nem de botões. O daemon que já está rodando manda o firmware novo pelo mesmo cabo USB, enquanto a placa mostra o progresso na tela. Sem Wi-Fi e sem abrir o case.</p>
     <div class="split">
       <ol class="steps">
-        <li><h3>Firmware de um release</h3><p>Baixe o <code>*-ota.bin</code> da sua placa e mande:</p><pre><code>firmware/flash.sh guition-jc3248w535 \
-  --bin tokenpulse-guition-jc3248w535-ota.bin</code></pre></li>
-        <li><h3>Ou compile da fonte</h3><p>Compila com o PlatformIO e manda na sequência:</p><pre><code>firmware/flash.sh</code></pre></li>
-        <li><h3>Pronto em ~15 segundos</h3><p>A placa reinicia na versão nova, que aparece em Ajustes → Sobre.</p></li>
+        <li><h3>Firmware de um release</h3><p>Baixe o <code>*-ota.bin</code> da sua placa e mande:</p><pre><code>firmware/flash.sh <span class="env">guition-jc3248w535</span> \
+  --bin tokenpulse-<span class="env">guition-jc3248w535</span>-ota.bin</code></pre></li>
+        <li><h3>Ou compile da fonte</h3><p>Compila com o PlatformIO e manda na sequência:</p><pre><code>firmware/flash.sh <span class="env">guition-jc3248w535</span></code></pre></li>
+        <li><h3>Pronto em ~<span class="ota">15</span> segundos</h3><p>A placa reinicia na versão nova, que aparece em Ajustes → Sobre.</p></li>
       </ol>
       <div>
         <div class="ota-flow">
@@ -284,6 +303,24 @@ cd tokenpulse</code></pre></li>
   </div>
 </footer>
 
+<script>
+  // seletor de placa: troca o env, o chip e o tempo do OTA nos comandos, e mostra só os avisos da placa
+  const pick = document.querySelectorAll(".pick button");
+  function choose(btn) {
+    const b = btn.dataset.board;
+    pick.forEach(x => x.setAttribute("aria-pressed", x === btn));
+    document.querySelectorAll(".env").forEach(e => e.textContent = b);
+    document.querySelectorAll(".chip").forEach(e => e.textContent = btn.dataset.chip);
+    document.querySelectorAll(".ota").forEach(e => e.textContent = btn.dataset.ota);
+    document.querySelectorAll("[data-only]").forEach(e => e.classList.toggle("on", e.dataset.only === b));
+    try { localStorage.setItem("placa", b); } catch (e) {}
+  }
+  pick.forEach(btn => btn.addEventListener("click", () => choose(btn)));
+  let saved = null;
+  try { saved = localStorage.getItem("placa"); } catch (e) {}
+  const first = [...pick].find(x => x.dataset.board === saved);
+  if (first) choose(first);
+</script>
 <script type="module">
   import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs";
   const dark = matchMedia("(prefers-color-scheme: dark)").matches;

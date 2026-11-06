@@ -144,17 +144,14 @@ qual placa está rodando.
 ## Releases do firmware
 
 Cada tag `v*` gera um [release](https://github.com/gilsondev/tokenpulse/releases) pelo GitHub Actions com, por
-placa, `tokenpulse-<placa>-ota.bin` (para o OTA) e `tokenpulse-<placa>-factory.bin` (primeira gravação):
-
-```bash
-esptool.py --chip esp32s3 write_flash 0x0 tokenpulse-guition-jc3248w535-factory.bin
-esptool.py --chip esp32 write_flash 0x0 tokenpulse-cyd-2432s028r-factory.bin   # a imagem já começa no 0x0
-```
+placa, `tokenpulse-<placa>-factory.bin` (primeira gravação, imagem completa a partir do 0x0) e
+`tokenpulse-<placa>-ota.bin` (atualização pelo daemon).
 
 ## Instalação
 
-Requisitos no Mac: [uv](https://docs.astral.sh/uv/), [PlatformIO](https://platformio.org/)
-(`uv tool install platformio`) e o Claude Code logado (`claude auth status`).
+Requisitos no Mac: [uv](https://docs.astral.sh/uv/) e o Claude Code logado (`claude auth status`). Para
+compilar o firmware em vez de usar o release, também o [PlatformIO](https://platformio.org/)
+(`uv tool install platformio`).
 
 Recomendados:
 - [herdr](https://herdr.dev), para o estado real de cada sessão e o agrupamento por workspace. Instale a
@@ -163,12 +160,30 @@ Recomendados:
 - [claude-swap](https://github.com/realiti4/claude-swap) (`uv tool install claude-swap`), para trocar de org pela
   tela. Logado em cada org, rode `cswap add`.
 
+Com a placa plugada, nesta ordem (o daemon só reconhece uma placa com ponte USB-serial, como a amarela,
+quando ela aparece já com o firmware; gravada depois, desplugue e plugue de novo):
+
 ```bash
-host/install.sh                                # daemon no login do macOS (log em ~/Library/Logs/tokenpulse.log)
-firmware/flash.sh --usb                        # primeira gravação, pela USB (a Guition; outra placa: o env antes)
-firmware/flash.sh cyd-2432s028r --usb          # primeira gravação da placa amarela
-firmware/flash.sh                              # as próximas: OTA pela serial (~15 s na Guition, ~40 s na CYD)
-firmware/flash.sh guition-jc3248w535 --bin tokenpulse-guition-jc3248w535-ota.bin   # OTA de um release
+git clone https://github.com/gilsondev/tokenpulse && cd tokenpulse
+
+# 1. firmware do release, pela USB (troque pelo da sua placa)
+curl -LO https://github.com/gilsondev/tokenpulse/releases/latest/download/tokenpulse-cyd-2432s028r-factory.bin
+uvx --from "esptool<5" esptool.py --chip esp32 write_flash 0x0 tokenpulse-cyd-2432s028r-factory.bin
+# Guition: --chip esp32s3 e tokenpulse-guition-jc3248w535-factory.bin
+
+# 2. daemon no login do macOS (log em ~/Library/Logs/tokenpulse.log)
+host/install.sh
+```
+
+Em alguns segundos a placa sai de "sem dados do Mac". A placa amarela, de touch resistivo, pede na primeira
+vez quatro toques com a caneta para calibrar.
+
+Atualizações depois disso vão por OTA, pelo mesmo cabo:
+
+```bash
+firmware/flash.sh cyd-2432s028r --bin tokenpulse-cyd-2432s028r-ota.bin   # .bin de um release (~40 s; Guition ~15 s)
+firmware/flash.sh                              # ou compila com o PlatformIO e manda (placa padrão; outra: o env antes)
+firmware/flash.sh cyd-2432s028r --usb          # primeira gravação compilando da fonte, sem o release
 ```
 
 Opcional: aponte o `statusLine` do `~/.claude/settings.json` para `host/statusline.sh` (passe a sua statusline
