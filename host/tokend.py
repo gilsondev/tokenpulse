@@ -865,11 +865,19 @@ def wait_for(port, word, timeout):
     return f"sem resposta ({word})"
 
 
+def settle(port):
+    # pela ponte CH340, começar a captura ou o OTA com o último frame ainda saindo corta bytes no meio
+    # dele, e a placa mostra o modelo com texto trocado
+    port.flush()
+    time.sleep(0.3)
+    port.reset_input_buffer()
+
+
 def ota(port, path):
     """Manda o firmware pela serial; a placa mostra o progresso e reinicia no fim."""
     data = open(path, "rb").read()
     port.timeout = 0.05
-    port.reset_input_buffer()
+    settle(port)
     port.write((json.dumps({"ota": len(data), "md5": hashlib.md5(data).hexdigest()}) + "\n").encode())
     if err := wait_for(port, "OK", 10):
         return err
@@ -937,7 +945,7 @@ def screenshot(port, req, frame):
 
 
 def capture(port, req):
-    port.reset_input_buffer()
+    settle(port)
     port.write(b"shot\n")
     port.timeout = 0.05  # sem isso o read(max(1, in_waiting)) gira a 100% de CPU enquanto espera
     deadline, buf = time.time() + 8, b""
