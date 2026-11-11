@@ -15,12 +15,14 @@ constexpr const char* NAME = "waveshare-amoled-216";
 constexpr uint8_t DEFAULT_ROTATION = 0;
 constexpr uint8_t ROTATIONS = 4;  // tela quadrada: as quatro posições custam o mesmo
 constexpr uint8_t ROT_FOR[4] = {0, 2, 3, 1};  // medido segurando a placa nas 4 posições
-constexpr Profile PROFILE{.touch = true, .calibrate = false, .imu = true, .led = false, .button = true, .speaker = true, .oled = true, .dense = true};
+constexpr Profile PROFILE{.touch = true, .calibrate = false, .imu = true, .led = false, .button = true, .speaker = true, .oled = true, .sd = true, .battery = true, .dense = true};
 constexpr uint8_t GRID_ROWS[2] = {0, 0};
 constexpr uint32_t SERIAL_BAUD = 115200;
 
 constexpr int PIN_SDA = 15, PIN_SCL = 14;
+constexpr int SD_PINS[4] = {2, 1, 3, 41};  // CLK, CMD, D0, D3 (o CS do modo SPI)
 constexpr int PIN_BUTTON = 18;  // KEY3, o botão do usuário
+constexpr int PIN_BOOT = 0;     // silencia o som por 1 h; segurado ao ligar, entra no modo de gravação
 constexpr int PIN_PWR = 16;     // o PWR da PMU, invertido por um transistor: nível alto é apertado
 constexpr uint8_t PMU_ADDR = 0x34;
 
@@ -41,7 +43,12 @@ inline int displayHeight() { return SIDE; }
 
 bool touchNative(int16_t& x, int16_t& y);  // waveshare_amoled_216.cpp
 void audioBegin();
-void play(uint8_t i, uint8_t vol);
+void play(uint8_t i, uint8_t vol, uint16_t minMs = 0, uint8_t times = 1);
+void pmuBegin();
+bool powerState(PowerState& s);
+void pmuReport();
+bool rtcRead(uint32_t& t);
+void rtcWrite(uint32_t t);
 
 inline Qmi8658 imu;
 
@@ -55,11 +62,13 @@ inline void pmuWrite(uint8_t reg, uint8_t v) {
 inline void begin() {
   pinMode(PIN_BUTTON, INPUT_PULLUP);
   pinMode(PIN_PWR, INPUT);
+  pinMode(PIN_BOOT, INPUT_PULLUP);
   Wire.begin(PIN_SDA, PIN_SCL, 400000);
   // AXP2101: segurar o PWR por 4 s desliga a placa pela própria PMU, mesmo com o firmware travado (os mesmos
   // registradores do claude-desktop-buddy-esp32). O firmware desliga antes, aos 2 s (main.cpp)
   pmuWrite(0x27, 0x10);
   pmuWrite(0x22, 0b110);
+  pmuBegin();
   imu.begin(Wire, PIN_SDA, PIN_SCL);
   audioBegin();
 }
@@ -72,6 +81,7 @@ inline bool gravity(int16_t& x, int16_t& y) {
 inline void setLed(uint8_t, uint8_t, uint8_t) {}
 inline bool buttonPressed() { return digitalRead(PIN_BUTTON) == LOW; }
 inline bool restPressed() { return digitalRead(PIN_PWR) == HIGH; }
+inline bool mutePressed() { return digitalRead(PIN_BOOT) == LOW; }
 // AXP2101: o bit 0 do registrador 0x10 desliga na hora (o mesmo que o shutdown() da XPowersLib)
 inline void powerOff() {
   Wire.beginTransmission(PMU_ADDR);

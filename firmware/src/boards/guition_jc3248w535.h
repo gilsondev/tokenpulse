@@ -66,9 +66,13 @@ inline bool touch(int16_t& x, int16_t& y) {
 inline bool buttonPressed() { return digitalRead(PIN_BUTTON) == LOW; }
 inline bool touchRaw(int16_t&, int16_t&) { return false; }  // capacitivo: já sai em pixels
 
-inline void play(uint8_t, uint8_t) {}
+inline void play(uint8_t, uint8_t, uint16_t = 0, uint8_t = 1) {}
 inline bool restPressed() { return false; }
+inline bool mutePressed() { return false; }
 inline void powerOff() {}
+inline bool powerState(PowerState&) { return false; }
+inline bool rtcRead(uint32_t&) { return false; }
+inline void rtcWrite(uint32_t) {}
 constexpr bool PUSH_CLEARS = false;
 inline int32_t pushFill = -1;
 

@@ -4,6 +4,9 @@
 #include <Update.h>
 
 #include "app.h"
+#include "ble.h"
+#include "sd.h"
+#include "webui.h"
 #include "power.h"
 #include "settings.h"
 #include "boards/board.h"
@@ -71,7 +74,11 @@ uint32_t idMs = 0;
 void handle(const String& line) {
   if (line == "id") {
     idMs = millis();
+#ifdef TOKENPULSE_BLE  // o nome no BLE: com a placa na USB, o daemon não a usa também sem fio
+    Serial.printf("hello {\"board\":\"%s\",\"fw\":\"%s\",\"ble\":\"%s\"}\n", board::NAME, firmware(), webui::apName());
+#else
     Serial.printf("hello {\"board\":\"%s\",\"fw\":\"%s\"}\n", board::NAME, firmware());
+#endif
   } else if (line == "imu") {
     int16_t x, y;
     if (board::gravity(x, y)) Serial.printf("acc=%d,%d rot=%d\n", x, y, gfx::rotation());
@@ -90,10 +97,20 @@ void handle(const String& line) {
     power::wake();  // como um toque de verdade: tira do descanso
     const int sp = line.indexOf(' ', 4);
     screens::tap(line.substring(4, sp).toInt(), line.substring(sp + 1).toInt());
+#ifdef BOARD_WAVESHARE_AMOLED_216
+  } else if (line == "pmu") {  // a configuração de carga da bateria, para conferir
+    board::pmuReport();
+#endif
+  } else if (line == "rtc") {  // a hora guardada no RTC, para conferir
+    uint32_t t;
+    if (!board::rtcRead(t)) return (void)Serial.println("rtc: sem hora");
+    Serial.printf("rtc: %02lu:%02lu:%02lu\n", t / 3600 % 24, t / 60 % 60, t % 60);
   } else if (line == "rest") {  // descanso na hora, para testar e capturar
     power::rest();
   } else if (line.startsWith("play ")) {  // prévia de um som do alerta (sound.h)
     board::play(line.substring(5).toInt(), settings::volumePct());
+  } else if (line == "attn") {  // o destaque de sessão esperando você, para screenshot
+    screens::attentionPreview();
   } else if (line == "offline") {  // a tela de sem dados por 5 s, para screenshot com o daemon rodando
     screens::offlinePreview();
   } else if (line == "install") {  // a tela do QR de instalação por 5 s, para screenshot com o daemon rodando
@@ -123,6 +140,9 @@ void handle(const String& line) {
     }
     app::frame = std::move(next);
     app::syncClock(app::frame["t"] | 0);
+    sd::saveHistory(app::frame["hist"]);
+    static uint32_t rtcMs = 0;  // a hora do Mac vai para o RTC no primeiro frame e depois a cada hora
+    if (app::nowLocal() && (!rtcMs || millis() - rtcMs > 3600000)) rtcMs = millis() | 1, board::rtcWrite(app::nowLocal());
     app::lastFrameMs = millis();
     anim::onFrame();
   } else if (line.length()) {
@@ -140,6 +160,16 @@ void begin() {
 
 void poll() {
   if (Serial.available()) handle(Serial.readStringUntil('\n'));
+  // pelo BLE só entram frames: comandos (OTA, toques, descanso) ficam restritos à USB
+  String line;
+  while (ble::poll(line))
+    if (line.startsWith("{")) handle(line);
+}
+
+void action(const char* line) {
+  Serial.println(line);
+  String l = String(line) + "\n";
+  ble::send(l.c_str());
 }
 
 uint32_t lastIdMs() { return idMs; }

@@ -1,4 +1,7 @@
 #pragma once
+#include <stdint.h>
+
+#include "../boards/profile.h"
 // Telas para retrato grande (320x480): grade de 16 px, Inter com anti-aliasing, um número herói por tela.
 // Telas pequenas usam os desenhos de screens.cpp.
 
@@ -8,6 +11,8 @@ constexpr int PAGES = 4;  // principal, sessões, modelos, histórico; os ajuste
 
 void drawWaiting();
 void drawShutdown(float p);  // PWR segurado: p de 0 a 1 até a PMU desligar
+void drawAttention(int r, uint32_t ageMs);  // a sessão (índice em sess.rows) que passou a esperar você
+bool attentionCenter(int x, int y);           // o toque caiu no botão "abrir no Mac" do destaque
 void drawSaver();   // OLED parada: só o relógio, em cinza sobre preto, mudando de lugar a cada minuto
 void drawInstall();  // QR code da página /comecar, para quem ainda não instalou o daemon
 void drawMain(bool live, int page);
@@ -23,6 +28,9 @@ void drawHistory(bool live, int page, int sel);
 void drawSettings(bool live);
 void settingsHome();  // os ajustes abrem na lista de grupos
 void drawAbout(bool live, bool armed);
+void aboutTop();             // o Sobre abre do começo
+bool aboutScroll(int dir);   // arrastar na vertical: +1 desce; false se já está na ponta
+int chargeEtaMin(const board::PowerState& ps);  // minutos até a carga completa, ou -1 sem estimativa
 void drawWeb(bool live);  // QR da página web, ou do WiFi da placa para configurá-la
 void drawAccount(bool live);
 

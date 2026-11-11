@@ -13,6 +13,8 @@
 
 namespace hostlink {
 
+void action(const char* line);  // pede uma ação ao Mac (ACTION ...): pela serial e, se houver, pelo BLE
+
 void begin();
 void poll();  // lê e trata o que chegou na serial; chamado a cada volta do loop
 uint32_t lastIdMs();  // quando o daemon perguntou "id" pela última vez (0: nunca)

@@ -10,6 +10,8 @@
 #include "screens_tall.h"
 #include "../power.h"
 #include "../settings.h"
+#include "../sound.h"
+#include "../ble.h"
 
 using namespace color;
 using gfx::bar;
@@ -374,17 +376,125 @@ void checkApproval() {
     if (n++ == 0) ws = r[5] | -1;
   }
   app::blocks = n;
-  if (last >= 0 && n > last && settings::web.alerts & 2 && board::PROFILE.speaker) board::play(settings::web.sound, settings::volumePct());
+  // o som e o destaque em tela cheia ficam com o checkAttention; aqui só o brilho pulsando e, nas telas
+  // pequenas, abrir as sessões
   if (last >= 0 && n > last && settings::web.alerts & 1) {
     app::approveMs = millis();
     power::wake();
-    if (gfx::full() && !settingsOpen && ws >= 0) {  // abre o workspace dela: quem pede aprovação vem primeiro
-      if (page != 1) go(1, -1);
-      sessWs = ws, sessScroll = 0;
-      sessWsName = (const char*)(app::frame["sess"]["ws"][ws][0] | "");
-    }
+    if (!gfx::full() && board::PROFILE.speaker && settings::web.alerts & 2 && !app::muted())
+      board::play(settings::web.sound, settings::volumePct());
   }
+  (void)ws;
   last = n;
+}
+
+// Destaque: a sessão que passou a pedir aprovação ocupa a tela inteira por até 60 s, com o som. "Sua vez" (o
+// Claude terminou e espera uma mensagem nova) não conta: acontece a cada resposta e cansaria. A regra do
+// SmallTV: espera de até 1 h, e o Agent SDK não espera ninguém.
+String attnSid;
+uint32_t attnMs = 0;
+int attentionRow() {
+  if (!attnSid.length() || millis() - attnMs > 60000) return -1;
+  int i = 0;
+  for (JsonArrayConst r : app::frame["sess"]["rows"].as<JsonArrayConst>()) {
+    const char* st = r[2] | "";
+    if (attnSid == (r[6] | "")) return !strcmp(st, "block") ? i : -1;
+    i++;
+  }
+  return -1;  // a sessão sumiu da lista
+}
+void dismissAttention() { attnSid = ""; }
+
+void attentionPreview() {  // a primeira sessão que espera você, em destaque, para screenshot
+  for (JsonArrayConst r : app::frame["sess"]["rows"].as<JsonArrayConst>())
+    if (!strcmp(r[2] | "", "block")) {
+      attnSid = (const char*)(r[6] | ""), attnMs = millis();
+      const auto& w = settings::web;  // com o som do caso, como um destaque de verdade
+      if (board::PROFILE.speaker && w.alerts & 2 && !app::muted() && w.sound < sound::COUNT)
+        board::play(w.sound, settings::volumePct(), 0, 2);
+      return power::wake();
+    }
+}
+
+void checkAttention() {
+  static uint32_t seenFrame = 0;
+  static String waiting;  // "id,id," de quem já esperava no frame anterior
+  static bool first = true;
+  if (app::lastFrameMs == seenFrame) return;
+  seenFrame = app::lastFrameMs;
+  String now;
+  int pick = -1, i = 0;
+  bool pickBlock = false;
+  for (JsonArrayConst r : app::frame["sess"]["rows"].as<JsonArrayConst>()) {
+    const char* st = r[2] | "";
+    const int mins = r[4] | -1;
+    const bool block = !strcmp(st, "block");
+    if (block && mins >= 0 && mins <= 60 && strcmp(r[1] | "", "SDK")) {
+      const String sid = r[6] | "";
+      now += sid + ",";
+      if (!first && waiting.indexOf(sid + ",") < 0 && pick < 0) pick = i, pickBlock = true;
+    }
+    i++;
+  }
+  waiting = now, first = false;
+  if (pick < 0) return;
+  const auto& w = settings::web;
+  const uint8_t snd = w.sound;
+  Serial.printf("destaque: %s (%s), som %d%s\n", (const char*)(app::frame["sess"]["rows"][pick][6] | ""),
+                pickBlock ? "aprovar" : "sua vez", snd, app::muted() ? " silenciado" : "");
+  if (board::PROFILE.speaker && w.alerts & 2 && !app::muted() && snd < sound::COUNT) board::play(snd, settings::volumePct(), 0, 2);
+  if (gfx::full() && w.alerts & 1) {
+    attnSid = (const char*)(app::frame["sess"]["rows"][pick][6] | "");
+    attnMs = millis();
+    power::wake();
+  }
+}
+
+// Sons dos limites, de ~2 s: a janela de 5h esgotou (lembra de trocar de org), renovou (o uso voltou para perto
+// de 0%) e o limite da semana esgotou.
+void checkWindowSounds() {
+  static uint32_t seenFrame = 0;
+  static int last = -1, lastW = -1;  // -1 até o primeiro frame: o boot não toca nada
+  if (app::lastFrameMs == seenFrame) return;
+  seenFrame = app::lastFrameMs;
+  const int p5 = app::frame["p5"] | -1, pw = app::frame["pw"] | -1;
+  const auto& w = settings::web;
+  const bool can = board::PROFILE.speaker && w.alerts & 2 && !app::muted();
+  auto play = [&](uint8_t s) {
+    if (can && s < sound::COUNT) board::play(s, settings::volumePct(), 2000);
+  };
+  if (p5 >= 0) {
+    if (last >= 0 && last < 100 && p5 >= 100) play(w.soundOut);
+    if (last >= 10 && p5 <= 5) play(w.soundNew);
+    last = p5;
+  }
+  if (pw >= 0) {
+    if (lastW >= 0 && lastW < 100 && pw >= 100) play(w.soundWeek);
+    lastW = pw;
+  }
+}
+
+// Sons de estado da placa: bateria fraca (uma vez abaixo de 15% fora do USB), Mac sumiu (uma vez depois de 1 min
+// sem dados) e Bluetooth (uma vez ao conectar, duas ao cair).
+void checkDeviceSounds() {
+  const auto& w = settings::web;
+  const bool can = board::PROFILE.speaker && w.alerts & 2 && !app::muted();
+  auto play = [&](uint8_t s, uint8_t times = 1) {
+    if (can && s < sound::COUNT) board::play(s, settings::volumePct(), 0, times);
+  };
+  static bool lowSaid = false, goneSaid = false, wasLinked = false;
+  board::PowerState ps;
+  if (board::powerState(ps) && ps.battery && ps.pct >= 0) {
+    tall::chargeEtaMin(ps);  // acompanha o ritmo da carga mesmo com o Sobre fechado
+    if (!ps.usb && ps.pct < 15 && !lowSaid) play(w.soundBat), lowSaid = true;
+    if (ps.usb || ps.pct >= 20) lowSaid = false;  // carregou: avisa de novo na próxima descida
+  }
+  const bool gone = app::hasData() && millis() - app::lastFrameMs > 60000;
+  if (gone && !goneSaid) play(w.soundMac);
+  goneSaid = gone;
+  const bool linked = ble::connected();
+  if (linked != wasLinked) play(w.soundBle, linked ? 1 : 2);
+  wasLinked = linked;
 }
 
 // Troca automática (ajuste da página web): passa para a próxima tela ligada depois de N s sem toque nem
@@ -421,6 +531,9 @@ void webDone() {
 
 void render() {
   checkApproval();
+  checkAttention();
+  checkWindowSounds();
+  checkDeviceSounds();
   autoTurn();
   webDone();
   if (millis() < holdUntil) return;
@@ -429,6 +542,8 @@ void render() {
     const float p = min(1.f, (shutHeldMs - 500) / 1500.f);
     return gfx::frame([p] { tall::drawShutdown(p); });
   }
+  if (const int r = attentionRow(); r >= 0 && gfx::full() && !settingsOpen && app::hasData())
+    return gfx::frame([r] { tall::drawAttention(r, millis() - attnMs); });
   if (board::PROFILE.oled && power::idle()) return gfx::frame(tall::drawSaver);
   const bool dark = settings::v.theme == 0 ? (bool)(app::frame["dark"] | true) : settings::v.theme == 2;
   if (dark != color::dark) color::apply(dark);
@@ -481,6 +596,7 @@ bool sessionStep(int dir) {
   return true;
 }
 void next() {
+  if (attentionRow() >= 0) return dismissAttention();  // o botão fecha o destaque
   if (!sessionStep(1)) go((page + 1) % count(), -1);
 }
 void prev() {
@@ -490,9 +606,16 @@ void prev() {
   if (to == 1 && gfx::full()) sessScroll = tall::pagesOf(-1) - 1;  // voltando dos modelos: a última página
 }
 
-void scroll(int dir) { sessionStep(dir); }  // arrastar na vertical também passa as páginas
+void scroll(int dir) {  // arrastar na vertical rola o Sobre ou passa as páginas de sessões
+  if (settingsOpen && (about == 1 || about == 2)) return void(tall::aboutScroll(dir));
+  sessionStep(dir);
+}
 
 void tap(int x, int y) {
+  if (const int r = attentionRow(); r >= 0 && gfx::full()) {  // destaque: o botão traz a sessão, o resto fecha
+    if (tall::attentionCenter(x, y)) tall::focusRow(r);
+    return dismissAttention();
+  }
   if (!gfx::full()) return next();
   if (page == 0 && !settingsOpen && (tall::orgTitleAt(x, y) || tall::suggestionAt(x, y))) {  // lista de orgs
     gfx::slide(-1);
@@ -533,7 +656,7 @@ void tap(int x, int y) {
       return;
     }
     const int r = tall::settingsTap(x, y);
-    if (r == 1) about = 1;
+    if (r == 1) about = 1, tall::aboutTop();
     if (r == 2) about = 3;
     return;
   }
@@ -569,6 +692,13 @@ void tap(int x, int y) {
   next();
 }
 void home() { go(0, 1); }
+
+void pullDown() {
+  if (!gfx::full() || settingsOpen) return;
+  settingsOpen = true, about = 0, orgFromHeader = false;
+  tall::settingsHome();
+  anim::reset();
+}
 
 void homeUp() {
   gfx::slide(gfx::UP);  // sempre sobe, até quando só fecha um painel aberto por cima da principal

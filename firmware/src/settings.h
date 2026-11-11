@@ -22,10 +22,16 @@ struct Web {
   uint8_t alerts = 3;    // sessão nova pedindo aprovação: 1 abre as sessões e pulsa o brilho, 2 toca um som
   uint8_t wifi = 0;      // 1: a pessoa configurou o WiFi pela placa; ela entra na rede ao ligar
   char host[32] = "";    // nome na rede (<host>.local); vazio: tokenpulse-<id do chip>
-  uint8_t sound = 0;     // som do alerta (sound.h)
+  uint8_t sound = 6;     // som da sessão esperando você, tocado 2 vezes (sound.h; o Vidro)
   uint8_t volume = 2;    // 1 baixo, 2 médio, 3 alto
   uint8_t restSecs = 1;  // relógio do descanso (OLED): 0 HH:MM, 1 HH:MM:SS
   uint8_t restPages = 7; // telas do descanso: 1 relógio, 2 uso, 4 sessões, 8 modelos, 16 histórico
+  uint8_t soundOut = 9;  // som quando a janela de 5h esgota, ~2 s (sound.h; sound::COUNT: desligado; os Três tons)
+  uint8_t soundNew = 0;  // som quando a janela renova e o uso volta a ~0%, ~2 s (a Pergunta 1)
+  uint8_t soundWeek = 10; // som quando o limite da semana esgota, ~2 s (o Pep)
+  uint8_t soundBat = 7;   // bateria abaixo de 15% fora do USB (o Gongo)
+  uint8_t soundMac = 3;   // 1 min sem dados do Mac (a Pergunta 4)
+  uint8_t soundBle = 5;   // Bluetooth conectou (uma vez) ou caiu (duas) (a Confirmação 2)
   // campo novo entra sempre no fim: o gravado por um firmware antigo é menor e o resto fica no padrão
 };
 extern Web web;

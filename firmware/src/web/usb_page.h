@@ -37,7 +37,13 @@ static const char USB_PAGE[] PROGMEM = R"HTML(<!doctype html>
 <section><h2>Alertas</h2>
 <label>Sessão pedindo aprovação: abrir as sessões e pulsar o brilho <input type=checkbox name=alerts></label>
 <label id=srow hidden>Sessão pedindo aprovação: tocar um som <input type=checkbox name=beep></label>
-<label id=prow hidden>Som <span><select name=sound id=snd></select> <button id=play type=button>ouvir</button></span></label>
+<label id=prow hidden>Sessão esperando você <span><select name=sound id=snd></select> <button id=play type=button>ouvir</button></span></label>
+<label id=orow2 hidden>Janela de 5h esgotou <select name=soundOut></select></label>
+<label id=nrow hidden>Janela de 5h renovou <select name=soundNew></select></label>
+<label id=wrow hidden>Limite da semana esgotou <select name=soundWeek></select></label>
+<label id=brow hidden>Bateria fraca <select name=soundBat></select></label>
+<label id=mrow hidden>Mac sem dados há 1 min <select name=soundMac></select></label>
+<label id=lrow hidden>Bluetooth conectou ou caiu <select name=soundBle></select></label>
 <label id=vrow hidden>Volume <select name=volume><option value=1>baixo<option value=2>médio<option value=3>alto</select></label>
 </section>
 <section><h2>Rede</h2>
@@ -60,8 +66,8 @@ let host='';
 async function state(){
   const s=await(await fetch('/api/state',{cache:'no-store'})).json();
   $('sub').textContent=s.board+' em http://'+s.host+'.local';
-  $('orow').hidden=s.imu;$('rest').hidden=!s.oled;$('srow').hidden=$('prow').hidden=$('vrow').hidden=!s.speaker;
-  if(s.sounds&&!f.sound.options.length)s.sounds.forEach((n,i)=>f.sound.add(new Option(n,i)));
+  $('orow').hidden=s.imu;$('rest').hidden=!s.oled;$('srow').hidden=$('prow').hidden=$('vrow').hidden=$('orow2').hidden=$('nrow').hidden=$('wrow').hidden=$('brow').hidden=$('mrow').hidden=$('lrow').hidden=!s.speaker;
+  if(s.sounds&&!f.sound.options.length){s.sounds.forEach((n,i)=>f.sound.add(new Option(n,i)));for(const k of['soundOut','soundNew','soundWeek','soundBat','soundMac','soundBle']){s.sounds.forEach((n,i)=>f[k].add(new Option(n,i)));f[k].add(new Option('desligado',s.sounds.length))}}
   for(const o of f.orient.options)if(o.value>1)o.hidden=s.rotations<4;
   const rows=[['Firmware',s.fw],['Agente (tokend)',s.agent||'ainda não falou com a placa'],['Endereço','http://'+s.host+'.local'],
     ['IP',s.ip||'—'],['Rede',s.ssid?s.ssid+' ('+s.rssi+' dBm)':'sem WiFi'],['Último dado',ago(s.frame)],
@@ -74,14 +80,14 @@ async function state(){
 state().then(s=>{
   const c=s.cfg;host=c.host;
   for(const k of['bright','idle','theme','orient','interval'])f[k].value=c[k];
-  f.hideCost.checked=!!c.hideCost;f.alerts.checked=!!(c.alerts&1);f.beep.checked=!!(c.alerts&2);f.sound.value=c.sound;f.volume.value=c.volume;f.restSecs.value=c.restSecs;for(let i=0;i<5;i++)f['rp'+i].checked=!!(c.restPages>>i&1);f.host.value=c.host;
+  f.hideCost.checked=!!c.hideCost;f.alerts.checked=!!(c.alerts&1);f.beep.checked=!!(c.alerts&2);f.sound.value=c.sound;f.volume.value=c.volume;f.soundOut.value=c.soundOut;f.soundNew.value=c.soundNew;f.soundWeek.value=c.soundWeek;f.soundBat.value=c.soundBat;f.soundMac.value=c.soundMac;f.soundBle.value=c.soundBle;f.restSecs.value=c.restSecs;for(let i=0;i<5;i++)f['rp'+i].checked=!!(c.restPages>>i&1);f.host.value=c.host;
   f.sessions.checked=!!(c.pages&1);f.models.checked=!!(c.pages&2);f.history.checked=!!(c.pages&4);
 });
 setInterval(state,5000);
 f.addEventListener('change',async e=>{
   if(e.target.name==='host'&&!f.host.checkValidity())return say('Nome: letras minúsculas, números e hífen.');
   const b=new URLSearchParams({bright:f.bright.value,idle:f.idle.value,theme:f.theme.value,orient:f.orient.value,
-    hideCost:+f.hideCost.checked,interval:f.interval.value,alerts:(f.alerts.checked?1:0)|(f.beep.checked?2:0),sound:f.sound.value||0,volume:f.volume.value||2,restSecs:f.restSecs.value||0,restPages:[0,1,2,3,4].reduce((m,i)=>m|(f['rp'+i].checked?1<<i:0),0)||1,host:f.host.value,
+    hideCost:+f.hideCost.checked,interval:f.interval.value,alerts:(f.alerts.checked?1:0)|(f.beep.checked?2:0),sound:f.sound.value||0,volume:f.volume.value||2,soundOut:f.soundOut.value||0,soundNew:f.soundNew.value||0,soundWeek:f.soundWeek.value||0,soundBat:f.soundBat.value||0,soundMac:f.soundMac.value||0,soundBle:f.soundBle.value||0,restSecs:f.restSecs.value||0,restPages:[0,1,2,3,4].reduce((m,i)=>m|(f['rp'+i].checked?1<<i:0),0)||1,host:f.host.value,
     pages:(f.sessions.checked?1:0)|(f.models.checked?2:0)|(f.history.checked?4:0)});
   const r=await fetch('/api/config',{method:'POST',body:b});
   if(!r.ok)return say(await r.text());

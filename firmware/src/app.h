@@ -9,6 +9,8 @@ inline JsonDocument frame;       // último frame do daemon, como chegou
 inline uint32_t lastFrameMs = 0;  // 0 enquanto o Mac ainda não mandou nada
 inline uint32_t approveMs = 0;    // quando surgiu a última sessão pedindo aprovação (0: nunca)
 inline int blocks = 0;            // sessões pedindo aprovação agora
+inline uint32_t muteUntil = 0;     // som do alerta silenciado até este millis() (0: não)
+inline bool muted() { return muteUntil && (int32_t)(muteUntil - millis()) > 0; }
 inline bool serialOta = false;    // OTA pela USB em andamento: o progresso da página web não desenha
 
 inline bool hasData() { return lastFrameMs != 0; }
@@ -20,6 +22,9 @@ inline void syncClock(uint32_t t) {
   if (!t) return;
   const int64_t cand = (int64_t)t * 1000 - millis();
   if (cand > clockOffsetMs || cand < clockOffsetMs - 2000) clockOffsetMs = cand;  // atrasou 2 s: o Mac mudou a hora
+}
+inline uint32_t nowLocal() {  // segundos desde 1970 na hora do Mac; 0 sem hora
+  return clockOffsetMs == INT64_MIN ? 0 : (uint32_t)((millis() + clockOffsetMs) / 1000);
 }
 inline int32_t secondsOfDay() {  // -1 sem hora
   return clockOffsetMs == INT64_MIN ? -1 : (int32_t)((millis() + clockOffsetMs) / 1000 % 86400);

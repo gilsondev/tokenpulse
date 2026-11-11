@@ -1,9 +1,10 @@
 # /// script
 # requires-python = ">=3.10"
-# dependencies = ["pyserial>=3.5"]
+# dependencies = ["pyserial>=3.5", "bleak>=0.22"]
 # ///
 """tokenpulse: lê o uso de tokens do Claude Code (CLI e Desktop) e envia 1 linha JSON por segundo
 para as telas ESP32 ligadas na USB. `--once` imprime um frame; `--demo` manda só dados fictícios."""
+import asyncio
 import glob
 import hashlib
 import json
@@ -48,6 +49,8 @@ ACCOUNT = os.path.join(HOME, ".claude.json")
 SHOT_DIR = os.path.join(HOME, ".claude/esp-tokens-shot")  # o shot.sh grava <placa> com {"cmds": [...], "out": "x.png"}
 OTA_DIR = os.path.join(HOME, ".claude/esp-tokens-ota")  # o flash.sh grava <placa> com o caminho do .bin
 BOARDS = os.path.join(HOME, ".claude/esp-tokens-boards.json")  # placas conectadas e o firmware de cada uma (update.sh)
+# Placas com Bluetooth que já estiveram na USB deste Mac: o daemon só conecta sem fio a elas, nunca à de um colega
+BLE_KNOWN = os.path.join(HOME, ".claude/esp-tokens-ble.json")
 # placas com USB nativo (usbmodem) e com ponte USB-serial CP210x/CH34x
 # placas: USB nativo do ESP32 (Espressif) e pontes USB-serial CP210x/CH34x; outros seriais nem são abertos
 ESPRESSIF_VID = 0x303A
@@ -183,9 +186,12 @@ class Usage:
         if cur and cur["ts"] > ts:
             return
         msg = d.get("message") if isinstance(d.get("message"), dict) else {}
+        q = (cur or {}).get("q", "")
+        if kind == "assistant":
+            q = ask_summary(msg.get("content")) or q
         self.sessions[sid] = {"ts": ts, "kind": kind, "stop": msg.get("stop_reason"),
                               "project": os.path.basename((d.get("cwd") or "").rstrip("/")) or "?",
-                              "entry": d.get("entrypoint", "cli")}
+                              "entry": d.get("entrypoint", "cli"), "q": q}
 
     def _ingest_line(self, d):
         msg = d.get("message")
@@ -401,11 +407,49 @@ OUTSIDE = (1000, "fora do herdr")  # terminais sem herdr, depois dos workspaces
 DESKTOP = (1001, "Claude Desktop")  # sempre o último: o Desktop não deixa escolher a conversa, só abrir o app
 
 
+ASK_MAX = 120  # o resumo do que a sessão pede: cabe em 3 linhas do destaque da placa
+_PLAIN = str.maketrans({"\u201c": '"', "\u201d": '"', "\u2018": "'", "\u2019": "'", "\u2014": "-", "\u2013": "-",
+                        "\u2192": "->", "\u00a0": " "})
+
+
+def plain(text):
+    """Texto que as fontes da placa desenham: ASCII, acentos do português e "·…"; o resto (emoji, marcação) sai."""
+    text = re.sub(r"(?m)^\s*(#+|>)\s*", "", text.translate(_PLAIN))  # títulos e citações do markdown
+    text = re.sub(r"\*\*|__|`", "", text)
+    text = "".join(c for c in text if c.isascii() or c in "áàâãéêíóôõúüçÁÀÂÃÉÊÍÓÔÕÚÜÇ·…°")
+    return re.sub(r"\s+([.,!?;:])", r"\1", " ".join(text.split()))
+
+
+def ask_summary(content):
+    """O que a última mensagem do Claude pede: a pergunta do AskUserQuestion, a ferramenta e o comando ou arquivo
+    de um pedido de permissão, ou o texto. Vazio se a mensagem não tem nada disso."""
+    if isinstance(content, str):
+        content = [{"type": "text", "text": content}]
+    for c in content if isinstance(content, list) else []:
+        if not isinstance(c, dict):
+            continue
+        if c.get("type") == "tool_use":
+            inp = c.get("input") if isinstance(c.get("input"), dict) else {}
+            qs = inp.get("questions")
+            if c.get("name") == "AskUserQuestion" and isinstance(qs, list) and qs and isinstance(qs[0], dict):
+                s = qs[0].get("question", "")
+            else:
+                detail = inp.get("command") or inp.get("file_path") or inp.get("url") or inp.get("description") or ""
+                s = f"{c.get('name', '')}: {detail}" if detail else c.get("name", "")
+        elif c.get("type") == "text":
+            s = c.get("text", "")
+        else:
+            continue
+        if s := plain(str(s)):
+            return s[:ASK_MAX - 1] + "…" if len(s) > ASK_MAX else s
+    return ""
+
+
 def sessions(state, titles, herdr, events, now):
     """Sessões agrupadas pelos workspaces do herdr.
     ws: [nome, sessões, trabalhando, precisa de você, sua vez, em foco, é o Claude Desktop], na ordem do herdr.
     rows: [nome, CLI/Desk, estado, tokens, minutos desde a última atividade (-1: sem dado), índice do workspace,
-           id curto da sessão (para o toque trazê-la à frente), em foco no herdr].
+           id curto da sessão (para o toque trazê-la à frente), em foco no herdr, o que ela pede (só esperando você)].
     Entram todos os painéis de Claude do herdr e as outras sessões com atividade na última hora.
     Estado: block (esperando você aprovar), work, turn (o Claude terminou, sua vez) ou idle.
     O estado do herdr vale mais que a heurística do .jsonl; o nome é o título da sessão quando existe."""
@@ -435,11 +479,12 @@ def sessions(state, titles, herdr, events, now):
         origin = "Desk" if entry == "claude-desktop" else "SDK" if entry == "sdk-cli" else "CLI"
         row = [cut(name, 48), origin, st, fmt_tokens(tokens[sid]) if sid in tokens else "--",
                int(age // 60) if age is not None else -1]
+        ask = s.get("q", "") if s and st in ("block", "turn") and age is not None and age <= 3600 else ""
         _known_sessions[sid[:8]] = {"pane": h["pane"] if h else None, "desk": origin == "Desk"}
         # sem herdr na máquina, o agrupamento natural é o projeto (pasta) da sessão
         group = h["ws"] if h else DESKTOP if origin == "Desk" else OUTSIDE if herdr else (0, folder)
         groups.setdefault(group, []).append((st, -(s["ts"] if s else 0), row, sid[:8],
-                                              bool(seen and h and h["focused"])))
+                                              bool(seen and h and h["focused"]), ask))
     order = {"block": 0, "work": 1, "turn": 2, "idle": 3}
     ws, rows = [], []
     for i, (key, items) in enumerate(sorted(groups.items())):
@@ -447,7 +492,7 @@ def sessions(state, titles, herdr, events, now):
         count = lambda st: sum(1 for r in items if r[0] == st)
         ws.append([cut(key[1], 32), len(items), count("work"), count("block"), count("turn"),
                    1 if seen and key == _herdr.get("focused_ws") else 0, 1 if key == DESKTOP else 0])
-        rows += [r[2] + [i, r[3], 1 if r[4] else 0] for r in items[:MAX_PER_WS]]
+        rows += [r[2] + [i, r[3], 1 if r[4] else 0] + ([r[5]] if r[5] else []) for r in items[:MAX_PER_WS]]
     return {"n": sum(w[1] for w in ws), "ws": ws, "rows": rows[:MAX_SESSIONS]}
 
 
@@ -810,8 +855,8 @@ def limits():
 class Board:
     """Uma placa conectada: a porta serial e o nome que ela informou no handshake."""
 
-    def __init__(self, path, ser, name, fw=""):
-        self.path, self.ser, self.name, self.fw = path, ser, name, fw
+    def __init__(self, path, ser, name, fw="", ble=""):
+        self.path, self.ser, self.name, self.fw, self.ble = path, ser, name, fw, ble
         self.buf = b""  # linha da placa ainda sem o \n
         self.busy = False  # OTA ou screenshot rodando numa thread: o laço principal não mexe na porta
         self.gone = False  # a thread acabou com a porta (OTA reiniciou a placa, ou deu erro): reconectar
@@ -821,6 +866,128 @@ class Board:
 
 
 BAUD = 460800  # placas com ponte USB-serial (CH340, CP210x) usam esta; a USB nativa do ESP ignora
+
+
+def known_ble():
+    try:
+        return set(json.load(open(BLE_KNOWN)))
+    except (OSError, ValueError):
+        return set()
+
+
+def remember_ble(name):
+    known = known_ble()
+    if name not in known:
+        json.dump(sorted(known | {name}), open(BLE_KNOWN, "w"))
+        log(f"bluetooth: {name} pareada (veio pela USB)")
+
+
+_usb_ble = set()  # nomes Bluetooth das placas que estão na USB agora: com cabo, o BLE fica de lado
+BLE_SERVICE = "6e400001-b5a3-f393-e0a9-e50e24dcca9e"  # o "UART" da Nordic, o mesmo do firmware
+BLE_RX = "6e400002-b5a3-f393-e0a9-e50e24dcca9e"  # o daemon escreve aqui
+BLE_TX = "6e400003-b5a3-f393-e0a9-e50e24dcca9e"  # a placa avisa por aqui (ACTION ...)
+
+
+_ble_frame = {"line": b""}  # no processo do Bluetooth: o último frame que o daemon mandou
+
+
+async def ble_main():
+    """Uma placa conhecida fora da USB recebe os frames por Bluetooth, um por segundo, e manda as ações."""
+    from bleak import BleakClient, BleakScanner
+    while True:
+        usb = set() if os.environ.get("TOKENPULSE_BLE_TEST") else _usb_ble  # teste: BLE mesmo com o cabo
+        targets = known_ble() - usb
+        if not targets:
+            await asyncio.sleep(5)
+            continue
+        try:
+            dev = await BleakScanner.find_device_by_filter(
+                lambda d, ad: (ad.local_name or d.name) in targets, timeout=8, service_uuids=[BLE_SERVICE])
+        except Exception as e:  # Bluetooth desligado
+            print(f"log bluetooth: {e}", flush=True)
+            await asyncio.sleep(60)
+            continue
+        if not dev:
+            await asyncio.sleep(10)
+            continue
+        name, buf = dev.name, b""
+
+        def on_tx(_, data):
+            nonlocal buf
+            *lines, buf = (buf + bytes(data)).split(b"\n")
+            for raw in lines:
+                line = raw.decode(errors="replace").strip()
+                if line.startswith("ACTION "):
+                    print(f"action {line[7:].strip()}", flush=True)
+        try:
+            async with BleakClient(dev) as client:
+                print(f"log [{name}] conectada por bluetooth", flush=True)
+                await client.start_notify(BLE_TX, on_tx)
+                chunk = max(20, client.mtu_size - 3)
+                while client.is_connected and name not in usb:
+                    line = _ble_frame["line"]
+                    for i in range(0, len(line), chunk):
+                        await client.write_gatt_char(BLE_RX, line[i:i + chunk], response=False)
+                    await asyncio.sleep(1)
+                    usb = set() if os.environ.get("TOKENPULSE_BLE_TEST") else _usb_ble
+                print(f"log [{name}] " + ("voltou para a USB" if name in usb else "bluetooth desconectado"), flush=True)
+        except Exception as e:
+            print(f"log [{name}] bluetooth: {e}", flush=True)
+            await asyncio.sleep(5)
+
+
+def ble_worker():
+    """Processo à parte para o Bluetooth: no macOS, um processo sem permissão é morto pelo sistema no primeiro
+    acesso, e assim isso derruba só este processo, nunca o daemon. Lê do daemon "frame <json>" e "usb <nomes>"."""
+    def read_stdin():
+        global _usb_ble
+        for raw in sys.stdin:
+            kind, _, rest = raw.rstrip("\n").partition(" ")
+            if kind == "frame":
+                _ble_frame["line"] = (rest + "\n").encode()
+            elif kind == "usb":
+                _usb_ble = set(rest.split()) if rest else set()
+        os._exit(0)  # o daemon fechou o pipe: acabou
+    threading.Thread(target=read_stdin, daemon=True).start()
+    asyncio.run(ble_main())
+
+
+def ble_loop():
+    """No daemon: mantém o processo do Bluetooth e passa os frames para ele. Se o processo morrer logo (macOS sem
+    permissão de Bluetooth, bleak ausente), registra e para de tentar."""
+    deaths = 0
+    time.sleep(15)  # antes, o laço principal acha as placas na USB: sem isso, a placa na USB conecta e cai do BLE
+    while deaths < 3:
+        if not known_ble():
+            time.sleep(10)
+            continue
+        started = time.time()
+        proc = subprocess.Popen([sys.executable, os.path.abspath(__file__), "--ble-worker"], stdin=subprocess.PIPE,
+                                stdout=subprocess.PIPE, text=True, bufsize=1)
+
+        def pump_out():
+            for line in proc.stdout:
+                kind, _, rest = line.rstrip("\n").partition(" ")
+                if kind == "log":
+                    log(rest)
+                elif kind == "action" and not DEMO:
+                    threading.Thread(target=run_action, args=(rest,), daemon=True).start()
+        threading.Thread(target=pump_out, daemon=True).start()
+        try:
+            while proc.poll() is None:
+                if frame := _latest.get("frame"):
+                    proc.stdin.write("usb " + " ".join(sorted(_usb_ble)) + "\n")
+                    proc.stdin.write("frame " + encode_frame(frame).decode().rstrip("\n") + "\n")
+                    proc.stdin.flush()
+                time.sleep(1)
+        except (BrokenPipeError, OSError):
+            pass
+        proc.wait()
+        if time.time() - started < 60:
+            deaths += 1
+        log(f"bluetooth: o processo saiu (código {proc.returncode})")
+        time.sleep(10)
+    log("bluetooth: indisponível neste Mac (sem permissão ou sem o bleak); só USB e WiFi")
 
 
 def connect(path, vid):
@@ -844,7 +1011,10 @@ def connect(path, vid):
             if line.startswith("hello "):
                 try:
                     hello = json.loads(line[6:])
-                    return Board(path, ser, hello["board"], hello.get("fw", ""))
+                    board = Board(path, ser, hello["board"], hello.get("fw", ""), hello.get("ble", ""))
+                    if board.ble:
+                        remember_ble(board.ble)
+                    return board
                 except (ValueError, KeyError, TypeError):
                     continue  # hello partido: tenta de novo até o prazo
     ser.close()
@@ -871,7 +1041,10 @@ def settle(port):
     # dele, e a placa mostra o modelo com texto trocado
     port.flush()
     time.sleep(0.3)
-    port.reset_input_buffer()
+    # o que a placa respondeu aos comandos de antes (rtc, play...) vai para o log em vez de sumir
+    for line in port.read(port.in_waiting).decode(errors="replace").splitlines():
+        if line.strip() and not line.startswith("{"):
+            log(f"placa: {line.strip()}")
 
 
 def ota(port, path):
@@ -985,13 +1158,13 @@ def demo_frame():
         hist.append([WEEKDAYS[d.weekday()], d.day, float(tok), round(tok * 0.42)])
     sessions = [
         ["Refatorar o checkout", "CLI", "work", "12,4M", 0, 0, "0000000a", 1],
-        ["Revisar PR de pagamentos", "CLI", "block", "3,1M", 1, 0, "0000000b", 0],
-        ["Testes do carrinho", "CLI", "turn", "6,8M", 4, 0, "0000000c", 0],
+        ["Revisar PR de pagamentos", "CLI", "block", "3,1M", 1, 0, "0000000b", 0, "Bash: gh pr merge 482 --squash"],
+        ["Testes do carrinho", "CLI", "turn", "6,8M", 4, 0, "0000000c", 0, "Os 42 testes passaram. Abro o PR agora ou reviso a cobertura do checkout antes?"],
         ["Pipeline de deploy", "CLI", "turn", "2,2M", 9, 1, "0000000e", 0],
         ["Alertas do cluster", "CLI", "idle", "--", -1, 1, "0000000f", 0],
         ["Terraform da VPC", "CLI", "idle", "540k", 130, 1, "00000010", 0],
         ["Blog pessoal", "CLI", "idle", "--", -1, 2, "00000011", 0],
-        ["Migração do banco", "Desk", "turn", "1,2M", 6, 3, "0000000d", 0],
+        ["Migração do banco", "Desk", "turn", "1,2M", 6, 3, "0000000d", 0, "Rodo a migração em staging primeiro?"],
     ]
     return {
         "m": "Opus 5.5 · high", "tot": "84,2M", "rate": fmt_tokens(sum(sp[-5:]) / 5), "sp": sp, "cli": 3, "desk": 1,
@@ -1259,6 +1432,7 @@ def main():
         threading.Thread(target=herdr_events, daemon=True).start()
     if "--once" not in sys.argv:
         threading.Thread(target=net_loop, daemon=True).start()
+        threading.Thread(target=ble_loop, daemon=True).start()
     if "--once" in sys.argv:
         time.sleep(3)  # dá tempo da primeira busca na API
     while True:
@@ -1302,6 +1476,8 @@ def main():
                     log(f"{path}: sem resposta ao id; " + ("tento de novo" if native else "só testo de novo se replugar"))
                 retry = 5 if time.time() - first_fail[path] < 60 else 60
                 ignored[path] = time.time() + (retry if native else 10 ** 9)
+        global _usb_ble
+        _usb_ble = {b.ble for b in boards.values() if b.ble}  # troca do conjunto inteiro: a thread do BLE só lê
         for path, board in list(boards.items()):
             if not serve(board, frame):
                 del boards[path]
@@ -1311,4 +1487,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    ble_worker() if "--ble-worker" in sys.argv else main()

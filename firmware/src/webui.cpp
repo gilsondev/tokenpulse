@@ -65,7 +65,7 @@ void handleState() {
   const auto& v = settings::v;
   const auto& w = settings::web;
   c["bright"] = v.bright, c["idle"] = v.idle, c["theme"] = v.theme, c["orient"] = v.orient, c["hideCost"] = v.hideCost;
-  c["interval"] = w.interval, c["pages"] = w.pages, c["alerts"] = w.alerts, c["sound"] = w.sound, c["volume"] = w.volume, c["restSecs"] = w.restSecs, c["restPages"] = w.restPages, c["host"] = host();
+  c["interval"] = w.interval, c["pages"] = w.pages, c["alerts"] = w.alerts, c["sound"] = w.sound, c["volume"] = w.volume, c["restSecs"] = w.restSecs, c["restPages"] = w.restPages, c["soundOut"] = w.soundOut, c["soundNew"] = w.soundNew, c["soundWeek"] = w.soundWeek, c["soundBat"] = w.soundBat, c["soundMac"] = w.soundMac, c["soundBle"] = w.soundBle, c["host"] = host();
   String out;
   serializeJson(d, out);
   server.send(200, "application/json", out);
@@ -100,6 +100,12 @@ void handleConfig() {
   num("volume", 1, 3, w.volume);
   num("restSecs", 0, 1, w.restSecs);
   num("restPages", 1, 31, w.restPages);
+  num("soundOut", 0, sound::COUNT, w.soundOut);
+  num("soundNew", 0, sound::COUNT, w.soundNew);
+  num("soundWeek", 0, sound::COUNT, w.soundWeek);
+  num("soundBat", 0, sound::COUNT, w.soundBat);
+  num("soundMac", 0, sound::COUNT, w.soundMac);
+  num("soundBle", 0, sound::COUNT, w.soundBle);
   settings::save();
   settings::saveWeb();
   if (v.orient != orient) gfx::setRotation(v.orient), anim::reset();

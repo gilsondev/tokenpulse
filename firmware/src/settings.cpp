@@ -39,6 +39,12 @@ void begin() {
     if (web.volume < 1 || web.volume > 3) web.volume = d.volume;
     if (web.restSecs > 1) web.restSecs = d.restSecs;
     if (!web.restPages || web.restPages > 31) web.restPages = d.restPages;
+    if (web.soundOut > sound::COUNT) web.soundOut = d.soundOut;
+    if (web.soundNew > sound::COUNT) web.soundNew = d.soundNew;
+    if (web.soundWeek > sound::COUNT) web.soundWeek = d.soundWeek;
+    if (web.soundBat > sound::COUNT) web.soundBat = d.soundBat;
+    if (web.soundMac > sound::COUNT) web.soundMac = d.soundMac;
+    if (web.soundBle > sound::COUNT) web.soundBle = d.soundBle;
     if (web.host[0] && !validHost(web.host)) web.host[0] = 0;
   }
   prefs.end();
@@ -80,7 +86,10 @@ bool validHost(const String& h) {
 uint8_t brightness() { return 64 * (min<int>(v.bright, 3) + 1) - 1; }
 
 uint8_t volumePct() {
-  static const uint8_t PCT[] = {0, 45, 65, 85};
+  // o ES8311 lê o % como uma escala em dB (0,5 dB por passo): ~-27,5, ~-19 e ~-11,5 dB, uns 8 dB entre níveis
+  // para soarem diferentes. Com os picos dos sons em -6 dBFS (data/sounds), o alto-falante da AMOLED satura
+  // acima de ~-14 dBFS efetivos: o alto fica no teto medido de ouvido
+  static const uint8_t PCT[] = {0, 53, 60, 66};
   return PCT[min<int>(web.volume, 3)];
 }
 

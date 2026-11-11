@@ -1,5 +1,8 @@
 #if defined(BOARD_WAVESHARE_AMOLED_216)
+#include <SensorPCF85063.hpp>
 #include <TouchDrvCSTXXX.hpp>
+#define XPOWERS_CHIP_AXP2101
+#include <XPowersLib.h>
 #include <driver/i2s.h>
 #include <driver/spi_master.h>
 #include <esp_heap_caps.h>
@@ -114,10 +117,13 @@ extern const uint8_t _binary_data_sounds_confirmation_001_pcm_start[], _binary_d
 extern const uint8_t _binary_data_sounds_confirmation_002_pcm_start[], _binary_data_sounds_confirmation_002_pcm_end[];
 extern const uint8_t _binary_data_sounds_glass_001_pcm_start[], _binary_data_sounds_glass_001_pcm_end[];
 extern const uint8_t _binary_data_sounds_bong_001_pcm_start[], _binary_data_sounds_bong_001_pcm_end[];
+extern const uint8_t _binary_data_sounds_power_up_7_pcm_start[], _binary_data_sounds_power_up_7_pcm_end[];
+extern const uint8_t _binary_data_sounds_three_tone_1_pcm_start[], _binary_data_sounds_three_tone_1_pcm_end[];
+extern const uint8_t _binary_data_sounds_pep_sound_1_pcm_start[], _binary_data_sounds_pep_sound_1_pcm_end[];
 }
 
 namespace {
-constexpr int SR = 16000, PA_CTRL = 46;
+constexpr int SR = 24000, PA_CTRL = 46;  // os PCM de data/sounds são de 24 kHz
 struct Clip {
   const uint8_t *start, *end;
 };
@@ -129,20 +135,31 @@ const Clip CLIPS[] = {
     {_binary_data_sounds_confirmation_001_pcm_start, _binary_data_sounds_confirmation_001_pcm_end},
     {_binary_data_sounds_confirmation_002_pcm_start, _binary_data_sounds_confirmation_002_pcm_end},
     {_binary_data_sounds_glass_001_pcm_start, _binary_data_sounds_glass_001_pcm_end},
-    {_binary_data_sounds_bong_001_pcm_start, _binary_data_sounds_bong_001_pcm_end}};
+    {_binary_data_sounds_bong_001_pcm_start, _binary_data_sounds_bong_001_pcm_end},
+    {_binary_data_sounds_power_up_7_pcm_start, _binary_data_sounds_power_up_7_pcm_end},
+    {_binary_data_sounds_three_tone_1_pcm_start, _binary_data_sounds_three_tone_1_pcm_end},
+    {_binary_data_sounds_pep_sound_1_pcm_start, _binary_data_sounds_pep_sound_1_pcm_end}};
 static_assert(sizeof CLIPS / sizeof *CLIPS == sound::COUNT, "um PCM por nome em sound.h");
 QueueHandle_t queue = nullptr;
 es8311_handle_t codec = nullptr;
 struct Req {
-  uint8_t i, vol;
+  uint8_t i, vol, times;
+  uint16_t minMs;
 };
 
 void soundTask(void*) {
   Req q;
   while (xQueueReceive(queue, &q, portMAX_DELAY) == pdTRUE) {
     es8311_voice_volume_set(codec, q.vol, nullptr);
-    size_t written;
-    i2s_write(I2S_NUM_0, CLIPS[q.i].start, CLIPS[q.i].end - CLIPS[q.i].start, &written, portMAX_DELAY);
+    // repete com 150 ms de pausa até tocar `times` vezes e durar ao menos `minMs`
+    const size_t bytes = CLIPS[q.i].end - CLIPS[q.i].start;
+    const uint32_t clipMs = bytes / 2 * 1000 / SR + 150;
+    static const int16_t silence[SR * 150 / 1000] = {};
+    for (uint32_t n = 0, ms = 0; n < q.times || ms < q.minMs; n++, ms += clipMs) {
+      size_t written;
+      if (n) i2s_write(I2S_NUM_0, silence, sizeof silence, &written, portMAX_DELAY);
+      i2s_write(I2S_NUM_0, CLIPS[q.i].start, bytes, &written, portMAX_DELAY);
+    }
     i2s_zero_dma_buffer(I2S_NUM_0);  // sem isso o fim do DMA repete e vira um zumbido
   }
 }
@@ -181,8 +198,8 @@ void audioBegin() {
   xTaskCreatePinnedToCore(soundTask, "som", 4096, nullptr, 5, nullptr, 0);
 }
 
-void play(uint8_t i, uint8_t vol) {
-  const Req q{i, vol};
+void play(uint8_t i, uint8_t vol, uint16_t minMs, uint8_t times) {
+  const Req q{i, vol, max<uint8_t>(times, 1), minMs};
   if (queue && i < sound::COUNT) xQueueSend(queue, &q, 0);
 }
 
@@ -266,6 +283,87 @@ void displayPush(const uint16_t* px, int, int, int) {
   }
   spi_device_polling_end(dev, portMAX_DELAY);
   csHigh();
+}
+
+// RTC PCF85063, com a hora local (a placa não sabe de fuso): o daemon manda a hora do Mac e ela fica guardada
+// para o relógio funcionar desde o boot e sem o Mac.
+namespace {
+SensorPCF85063 rtc;
+int rtcOk = -1;  // -1: ainda não iniciado
+bool rtcReady() {
+  if (rtcOk < 0) rtcOk = rtc.begin(Wire, PIN_SDA, PIN_SCL);
+  return rtcOk;
+}
+}  // namespace
+
+bool rtcRead(uint32_t& t) {
+  if (!rtcReady() || !rtc.isClockIntegrityGuaranteed()) return false;  // ficou sem energia: a hora não vale
+  struct tm tm = rtc.getDateTime().toUnixTime();
+  tm.tm_isdst = 0;
+  const time_t v = mktime(&tm);  // sem TZ definido, o mktime da placa é UTC: devolve a mesma hora "local"
+  if (v < 1700000000) return false;
+  t = v;
+  return true;
+}
+
+void rtcWrite(uint32_t t) {
+  if (!rtcReady()) return;
+  const time_t v = t;
+  struct tm tm;
+  gmtime_r(&v, &tm);
+  rtc.setDateTime(RTC_DateTime(tm));
+}
+
+// Bateria pelo AXP2101 (XPowersLib). A carga fica como a placa já está: tensão e corrente dependem da bateria.
+namespace {
+XPowersPMU pmu;
+bool pmuOk = false;
+}  // namespace
+
+void pmuBegin() {
+  pmuOk = pmu.init(Wire, PIN_SDA, PIN_SCL, AXP2101_SLAVE_ADDRESS);
+  if (!pmuOk) return void(Serial.println("PMU AXP2101 sem resposta"));
+  pmu.enableBattDetection();
+  pmu.enableBattVoltageMeasure();
+  pmu.enableVbusVoltageMeasure();
+  // LiPo de 1000 mAh quase sempre na USB: parar em 4,1 V (em vez de 4,2 V) troca ~10% de carga por bem mais ciclos,
+  // 200 mA é 0,2C (a PMU vem com 25 mA, ~40 h para encher) e o desligamento em 3,3 V evita descarga profunda
+  pmu.setChargeTargetVoltage(XPOWERS_AXP2101_CHG_VOL_4V1);
+  pmu.setChargerConstantCurr(XPOWERS_AXP2101_CHG_CUR_200MA);
+  pmu.setPrechargeCurr(XPOWERS_AXP2101_PRECHARGE_50MA);
+  pmu.setChargerTerminationCurr(XPOWERS_AXP2101_CHG_ITERM_25MA);
+  pmu.setSysPowerDownVoltage(3300);
+  Serial.printf("PMU: bateria %d, USB %d, carregando %d, %d%%, %u mV\n", pmu.isBatteryConnect(), pmu.isVbusIn(),
+                pmu.isCharging(), pmu.getBatteryPercent(), pmu.getBattVoltage());
+}
+
+// A configuração de carga gravada na PMU, para o comando "pmu"
+void pmuReport() {
+  if (!pmuOk) return (void)Serial.println("pmu: sem resposta");
+  static const char* VOL[] = {"?", "4,0", "4,1", "4,2", "4,35", "4,4"};
+  static const char* ST[] = {"trickle", "pré-carga", "corrente constante", "tensão constante", "carregada", "parada"};
+  const int cc = pmu.getChargerConstantCurr(), v = pmu.getChargeTargetVoltage(), st = pmu.getChargerStatus();
+  Serial.printf("pmu: alvo %s V, corrente %d mA, término %d mA (%s), estado %s, bateria %u mV, %d%%, USB %d, VBUS %u mV, desliga em %u mV\n",
+                v >= 1 && v <= 5 ? VOL[v] : "?", cc <= 4 ? cc * 25 : cc <= 8 ? 100 + (cc - 4) * 25 : 200 + (cc - 8) * 100,
+                (int)pmu.getChargerTerminationCurr() * 25, pmu.isChargerTerminationLimit() ? "ligado" : "desligado",
+                st >= 0 && st <= 5 ? ST[st] : "?", pmu.getBattVoltage(), pmu.getBatteryPercent(), pmu.isVbusIn(), pmu.getVbusVoltage(),
+                pmu.getSysPowerDownVoltage());
+}
+
+// Lida a cada 2 s: o estado muda devagar e o I2C é dividido com o toque.
+bool powerState(PowerState& s) {
+  static PowerState last;
+  static uint32_t lastMs = 0;
+  if (!pmuOk) return false;
+  if (!lastMs || millis() - lastMs > 2000) {
+    lastMs = millis();
+    last.battery = pmu.isBatteryConnect();
+    last.usb = pmu.isVbusIn();
+    last.charging = last.battery && pmu.isCharging();
+    last.pct = last.battery ? constrain(pmu.getBatteryPercent(), 0, 100) : -1;
+  }
+  s = last;
+  return true;
 }
 
 }  // namespace board

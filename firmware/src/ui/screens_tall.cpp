@@ -3,6 +3,8 @@
 #include "../app.h"
 #include "../hostlink.h"
 #include "../webui.h"
+#include "../ble.h"
+#include "../sd.h"
 #include "../settings.h"
 #include "../sound.h"
 #include "anim.h"
@@ -110,12 +112,92 @@ void gear(int cx, int cy, int r, uint16_t c) {
 }
 
 // Cabeçalho: org e relógio; embaixo modelo, ponto de status e sessões abertas.
+// Energia, à esquerda do relógio: bateria com o nível e o % (raio quando ligada no USB, nível verde carregando,
+// vermelho abaixo de 15%), ou um plugue quando a placa roda só pelo USB, sem bateria. Devolve a largura usada (0 sem PMU).
+int powerIcon(int right, int cy, bool draw) {
+  board::PowerState s;
+  if (!board::PROFILE.battery || !board::powerState(s)) return 0;
+  const int bw = u(22), bh = u(12), cap = u(2), gap = u(6);
+  if (!s.battery) {  // só USB: o plugue
+    const int pw = u(16);
+    if (draw) {
+      const int x = right - pw;
+      fb().fillSmoothRoundRect(x, cy - u(5), u(10), u(10), u(2), MUTED);         // o corpo
+      fb().fillRect(x + u(10), cy - u(4), u(4), u(2), MUTED);                    // os dois pinos
+      fb().fillRect(x + u(10), cy + u(2), u(4), u(2), MUTED);
+      fb().fillRect(x - u(4), cy - u(1), u(4), u(2), MUTED);                     // o cabo
+    }
+    return pw + u(4);
+  }
+  char pct[8] = "";
+  if (s.pct >= 0) snprintf(pct, sizeof pct, "%d%%", s.pct);
+  const int tw = pct[0] ? gfx::textWidth(pct, gfx::SMALL) + gap : 0;
+  if (draw) {
+    const int x = right - bw - cap;
+    const uint16_t c = s.charging ? GREEN : s.pct >= 0 && s.pct < 15 ? RED : TEXT;
+    fb().drawRoundRect(x, cy - bh / 2, bw, bh, u(3), MUTED);
+    fb().fillRect(x + bw, cy - u(3), cap, u(6), MUTED);
+    const int fill = (bw - u(4)) * max(0, s.pct) / 100;
+    if (fill > 0) fb().fillRoundRect(x + u(2), cy - bh / 2 + u(2), fill, bh - u(4), u(1), c);
+    if (s.usb) {  // o raio: ligada no USB (o nível fica verde enquanto carrega)
+      const int mx = x + bw / 2;
+      fb().fillTriangle(mx + u(1), cy - u(6), mx - u(4), cy + u(1), mx, cy + u(1), BG);
+      fb().fillTriangle(mx - u(1), cy + u(6), mx + u(4), cy - u(1), mx, cy - u(1), BG);
+      fb().fillTriangle(mx + u(1), cy - u(5), mx - u(3), cy + u(1), mx, cy + u(1), TEXT);
+      fb().fillTriangle(mx - u(1), cy + u(5), mx + u(3), cy - u(1), mx, cy - u(1), TEXT);
+    }
+    if (pct[0]) text(pct, x - gap, cy, gfx::SMALL, s.pct < 15 && !s.usb ? RED : MUTED, middle_right);
+  }
+  return bw + cap + tw + u(4);
+}
+
+// Bluetooth, à esquerda da bateria: o símbolo em cinza ligado à espera do Mac, em azul conectado. Devolve a
+// largura usada (0 em placa sem BLE).
+int bleIcon(int right, int cy, bool draw) {
+#ifdef TOKENPULSE_BLE
+  const int h = u(14), w = u(4), x = right - w - u(1), y = cy - h / 2;
+  if (draw) {
+    const uint16_t c = ble::connected() ? 0x3D9F : MUTED;  // azul do Bluetooth quando conectado
+    const float r = max(1.f, u(1) * 0.8f);
+    gfx::wideLine(x - w, y + h / 4, x + w, y + 3 * h / 4, r, c);
+    gfx::wideLine(x + w, y + 3 * h / 4, x, y + h, r, c);
+    gfx::wideLine(x, y + h, x, y, r, c);
+    gfx::wideLine(x, y, x + w, y + h / 4, r, c);
+    gfx::wideLine(x + w, y + h / 4, x - w, y + 3 * h / 4, r, c);
+  }
+  return 2 * w + u(6);
+#else
+  (void)right, (void)cy, (void)draw;
+  return 0;
+#endif
+}
+
+// Som silenciado pelo BOOT: um sino riscado, à esquerda do Bluetooth. Devolve a largura usada.
+int muteIcon(int right, int cy, bool draw) {
+  if (!app::muted()) return 0;
+  const int r = u(5), x = right - r - u(2);
+  if (draw) {
+    fb().fillCircle(x, cy - u(1), r, MUTED);                       // o corpo do sino
+    fb().fillRect(x - r - u(1), cy, 2 * r + u(3), u(3), MUTED);    // a borda
+    fb().fillCircle(x, cy + u(5), u(2), MUTED);                    // o badalo
+    gfx::wideLine(x - r - u(2), cy - r - u(2), x + r + u(2), cy + r + u(3), max(1.f, u(1) * 0.9f), RED);
+  }
+  return 2 * r + u(8);
+}
+
 // sub: a linha do modelo e de CLI/Desk embaixo do título. Offline ela sempre aparece: é onde está o aviso.
 void header(bool live, const char* title, bool dropdown = false, bool sub = true) {
   const auto& f = app::frame;
+  char clkBuf[8];  // a hora contínua (RTC + frames) anda entre os frames e sem o Mac; sem ela, a do frame
+  const int32_t secs = app::secondsOfDay();
+  if (secs >= 0) snprintf(clkBuf, sizeof clkBuf, "%02d:%02d", (int)(secs / 3600), (int)(secs / 60 % 60));
   const gfx::Font HT = board::PROFILE.dense ? gfx::TITLE : gfx::LABEL, HS = board::PROFILE.dense ? gfx::LABEL : gfx::SMALL;
-  const char* clk = f["clk"] | "";
-  const int clkLeft = W() - M() - u(30) - gfx::textWidth(clk, gfx::TITLE);
+  const char* clk = secs >= 0 ? clkBuf : (const char*)(f["clk"] | "");
+  const int clkW = gfx::textWidth(clk, gfx::TITLE), clkCy = u(8) + gfx::lineHeight(gfx::TITLE) / 2;
+  const int pw = powerIcon(W() - M() - u(30) - clkW - u(8), clkCy, true);
+  const int bw = bleIcon(W() - M() - u(30) - clkW - u(8) - pw, clkCy, true);
+  const int mw = muteIcon(W() - M() - u(30) - clkW - u(8) - pw - bw, clkCy, true);
+  const int clkLeft = W() - M() - u(30) - clkW - (pw + bw + mw ? pw + bw + mw + u(8) : 0);
   const String t = fit(title, HT, clkLeft - M() - u(10) - (dropdown ? u(18) : 0));
   if (!strncmp(title, "‹", strlen("‹"))) {  // título que volta: um botão em pílula, para ver que dá para tocar
     const uint16_t pill = blend(BG, TRACK, 0.85f);
@@ -414,6 +496,57 @@ void drawInstall() {
   text(app::START_SHORT, W() / 2, y + below(gfx::SMALL, 22), gfx::LABEL, ACCENT, middle_center);
 }
 
+// Destaque de uma sessão que passou a esperar você: o mascote grande, o título, o workspace e o estado, na cor
+// do estado. O botão "Abrir Sessão" traz a janela da sessão para a frente; tocar fora dele, ou o KEY3, fecha.
+int ATTN_BTN_Y() { return gfx::height() - u(92); }
+int ATTN_BTN_H() { return u(50); }
+void drawAttention(int r, uint32_t ageMs) {
+  JsonArrayConst row = app::frame["sess"]["rows"][r];
+  const bool block = !strcmp(row[2] | "", "block");
+  const uint16_t c = block ? RED : YELLOW, bg = blend(BG, c, 0.12f);
+  gfx::clear(bg);
+  const int cx = W() / 2, h = gfx::height(), maxW = W() - 2 * M();
+  const char* ask = row[8] | "";  // o que a sessão pede (o daemon só manda para quem espera você)
+  text(block ? "pede aprovação" : "sua vez", cx, u(28), gfx::TITLE, c, middle_center, bg);
+  // com a pergunta, o mascote encolhe para ela caber acima do botão
+  const int px = max(3, *ask ? u(5) : u(8)), my = u(52);
+  mascot::draw(cx - mascot::W * px / 2, my, px, block ? mascot::BLOCK : mascot::TURN, bg);
+  int y = my + 8 * px + u(14);
+  const int lh = gfx::lineHeight(gfx::NUM);
+  text(fit(row[0] | "", gfx::NUM, maxW).c_str(), cx, y, gfx::NUM, TEXT, top_center, bg);
+  y += lh + u(2);
+  char buf[64];
+  const int mins = row[4] | 0;
+  const char* ws = app::frame["sess"]["ws"][(int)(row[5] | 0)][0] | "";
+  if (mins > 0) snprintf(buf, sizeof buf, "%s · %s · há %d min", ws, (const char*)(row[1] | ""), mins);
+  else snprintf(buf, sizeof buf, "%s · %s · agora", ws, (const char*)(row[1] | ""));
+  text(fit(buf, gfx::SMALL, maxW).c_str(), cx, y, gfx::SMALL, MUTED, top_center, bg);
+  y += gfx::lineHeight(gfx::SMALL) + u(12);
+  // a pergunta em até 3 linhas, quebrada nas palavras; o que não couber termina em reticências
+  const int ql = gfx::lineHeight(gfx::LABEL), room = (ATTN_BTN_Y() - u(10) - y) / ql;
+  String rest = ask;
+  for (int line = 0; line < min(3, room) && rest.length(); line++) {
+    String l2, l1 = wrap2(rest.c_str(), gfx::LABEL, maxW, l2);
+    if (gfx::textWidth(l1.c_str(), gfx::LABEL) > maxW) l1 = fit(l1.c_str(), gfx::LABEL, maxW);  // palavra sem espaço
+    const bool last = line == min(3, room) - 1 && l2.length();
+    if (last) l1 = fit((l1 + " " + l2).c_str(), gfx::LABEL, maxW);
+    text(l1.c_str(), cx, y, gfx::LABEL, TEXT, top_center, bg);
+    y += ql, rest = last ? "" : l2;
+  }
+  const int by = ATTN_BTN_Y(), bh = ATTN_BTN_H(), bw2 = min(maxW, u(260));
+  fb().fillSmoothRoundRect(cx - bw2 / 2, by, bw2, bh, bh / 2, c);
+  text("Abrir Sessão", cx, by + bh / 2, gfx::LABEL, BG, middle_center, c);
+  // o tempo até o destaque sair sozinho
+  const int left = maxW * (60000 - min<uint32_t>(ageMs, 60000)) / 60000;
+  fb().fillRoundRect(M(), h - u(22), maxW, u(4), u(2), blend(bg, c, 0.25f));
+  if (left > 0) fb().fillRoundRect(M(), h - u(22), left, u(4), u(2), c);
+}
+
+bool attentionCenter(int x, int y) {  // o botão "abrir no Mac", com folga para o dedo
+  const int bw2 = min(W() - 2 * M(), u(260));
+  return abs(x - W() / 2) < bw2 / 2 + u(10) && y > ATTN_BTN_Y() - u(10) && y < ATTN_BTN_Y() + ATTN_BTN_H() + u(10);
+}
+
 // Descanso da OLED: as telas escolhidas (settings::web.restPages), em versão resumida, uma a cada 15 s.
 // Cada troca põe o bloco num lugar novo da tela, e o fundo é preto: o vidro não marca.
 namespace {
@@ -561,6 +694,11 @@ void drawSaver() {
     x = (int)(rnd % max(1, W() - w)), y = (int)(rnd / 7 % max(1, gfx::height() - h));
   };
   int x, y, w, h;
+  int cw, chh;  // sem o Mac: com a hora do RTC, alterna o relógio e o mascote
+  if ((!app::hasData() || millis() - app::lastFrameMs > 60000) && slot % 2 && restClock(0, 0, true, cw, chh)) {
+    place(cw, chh, x, y);
+    return (void)restClock(x, y, false, cw, chh);
+  }
   if (!app::hasData() || millis() - app::lastFrameMs > 60000) {  // o mascote tentando ligar o cabo
     const char* s = "sem dados do Mac";
     const int px = u(6), mw = mascot::W_OFFLINE * px, gap = u(14), th = gfx::lineHeight(gfx::LABEL);
@@ -863,7 +1001,9 @@ bool backAt(int, int y) { return y < GRID_Y() - u(4); }
 bool focusRow(int r) {
   const char* sid = app::frame["sess"]["rows"][r][6] | "";
   if (!*sid) return false;
-  Serial.printf("ACTION focus %s\n", sid);
+  char cmd[32];
+  snprintf(cmd, sizeof cmd, "ACTION focus %s", sid);
+  hostlink::action(cmd);
   focusReqIdx = r, focusReqMs = millis();
   return true;
 }
@@ -1050,9 +1190,13 @@ Row screenRows[] = {
     board::ROTATIONS == 4 ? Row{"Lado do cabo USB", &settings::v.orient, {"embaixo", "direita", "em cima", "esquerda"}, 4}
                           : Row{"Posição", &settings::v.orient, {"vertical", "horizontal"}, 2},
 };
+// Os sons: o volume vale para todos; cada aviso escolhe o seu (os da janela também podem ficar desligados).
 Row soundRows[] = {
-    {"Som do alerta", &soundLevel, {"desligado", "baixo", "médio", "alto"}, 4},
-    {"Som", &settings::web.sound, {}, sound::COUNT, CYCLE},
+    {"Volume", &soundLevel, {"desligado", "baixo", "médio", "alto"}, 4},
+    {"Sessão", &settings::web.sound, {}, sound::COUNT, CYCLE},
+    {"5h esgotou", &settings::web.soundOut, {}, sound::COUNT + 1, CYCLE},
+    {"5h renovou", &settings::web.soundNew, {}, sound::COUNT + 1, CYCLE},
+    {"Semana", &settings::web.soundWeek, {}, sound::COUNT + 1, CYCLE},
 };
 Row restRows[] = {
     {"Relógio", &settings::web.restSecs, {"HH:MM", "HH:MM:SS"}, 2},
@@ -1065,23 +1209,28 @@ struct Group {
 };
 const Group GROUPS[] = {
     {"Tela", screenRows, board::PROFILE.imu ? 4 : 5},
-    {"Som", soundRows, 2},
+    {"Som", soundRows, 5},
     {"Descanso", restRows, 2},
+    {"Cartão SD", nullptr, 0},  // tela própria: o estado do cartão e o botão de formatar
 };
 int group = -1;  // -1: a lista
 
 // Os itens da lista, na ordem: grupos que a placa tem, depois Conta e Sobre.
-enum Item : int8_t { G_SCREEN, G_SOUND, G_REST, ACCOUNT, ABOUT };
+enum Item : int8_t { G_SCREEN, G_SOUND, G_REST, G_SD, ACCOUNT, ABOUT };
 int items(Item* out) {
   int n = 0;
   out[n++] = G_SCREEN;
   if (board::PROFILE.speaker) out[n++] = G_SOUND;
   if (board::PROFILE.oled) out[n++] = G_REST;
+  if (board::PROFILE.sd) out[n++] = G_SD;
   out[n++] = ACCOUNT, out[n++] = ABOUT;
   return n;
 }
 int MASK_LINE() { return u(46); }  // uma opção da lista de interruptores
-int rowHeight(const Row& r) { return r.kind == MASK ? SEG_TOP() + r.count * MASK_LINE() : ROW_H(); }
+// a lista de interruptores é mais alta que uma linha comum; o seletor de som, sem título em cima, mais baixo
+int rowHeight(const Row& r) {
+  return r.kind == MASK ? SEG_TOP() + r.count * MASK_LINE() : r.kind == CYCLE ? SEG_H() + u(6) : ROW_H();
+}
 int listRowH(int n) { return min(u(72), (gfx::height() - SET_Y() - M()) / n); }
 
 // Onde fica a linha i do grupo (o nome em y, o controle em y + SEG_TOP). Deitada, duas seguidas de até 3
@@ -1097,7 +1246,7 @@ Cell cell(const Group& g, int i) {
   }
   int y = SET_Y() + line * ROW_H();
   for (int k = 0; k < i; k++)  // a lista de interruptores é mais alta que uma linha comum
-    if (g.rows[k].kind == MASK) y += rowHeight(g.rows[k]) - ROW_H();
+    if (g.rows[k].kind != SEG) y += rowHeight(g.rows[k]) - ROW_H();
   return col < 0 ? Cell{M(), y, full} : Cell{M() + col * (half + gap), y, half};
 }
 
@@ -1130,21 +1279,31 @@ void summary(Item it, char* buf, size_t n) {
         if (w.restPages >> i & 1) snprintf(buf + strlen(buf), n - strlen(buf), "%s%s", buf[0] ? ", " : "", PAGE[i]);
       break;
     }
+    case G_SD:
+      if (sd::state() == sd::READY) snprintf(buf, n, "%d dias · %lu MB livres", sd::days(), (unsigned long)sd::freeMB());
+      else strlcpy(buf, sd::state() == sd::NONE ? "sem cartão" : "não montou", n);
+      break;
     case ACCOUNT: strlcpy(buf, app::frame["org"] | "", n); break;
     default: strlcpy(buf, hostlink::firmware(), n);
   }
 }
 
 void drawRow(const Row& r, Cell c, uint16_t track) {
-  const int sy = c.y + SEG_TOP(), sh = SEG_H();
-  text(r.name, c.x, c.y, gfx::SMALL, MUTED);
-  fb().fillSmoothRoundRect(c.x, sy, c.w, sh, sh / 2, track);
-  if (r.kind == CYCLE) {  // ‹ nome ›: os lados trocam
-    text("‹", c.x + u(18), sy + sh / 2, gfx::TITLE, ACCENT, middle_center, track);
-    text(sound::NAMES[*r.value], c.x + c.w / 2, sy + sh / 2, gfx::SMALL, TEXT, middle_center, track);
-    text("›", c.x + c.w - u(18), sy + sh / 2, gfx::TITLE, ACCENT, middle_center, track);
+  const int sh = SEG_H();
+  if (r.kind == CYCLE) {  // numa linha só: o nome à esquerda, o som à direita entre ‹ ›; os lados trocam
+    fb().fillSmoothRoundRect(c.x, c.y, c.w, sh, sh / 2, track);
+    const int cy = c.y + sh / 2;
+    text(r.name, c.x + u(16), cy, gfx::SMALL, MUTED, middle_left, track);
+    const bool off = *r.value >= sound::COUNT;
+    text("›", c.x + c.w - u(16), cy, gfx::TITLE, ACCENT, middle_right, track);
+    const int vr = c.x + c.w - u(36);
+    text(off ? "desligado" : sound::NAMES[*r.value], vr, cy, gfx::SMALL, off ? DIM : TEXT, middle_right, track);
+    text("‹", vr - gfx::textWidth(off ? "desligado" : sound::NAMES[*r.value], gfx::SMALL) - u(12), cy, gfx::TITLE, ACCENT, middle_right, track);
     return;
   }
+  const int sy = c.y + SEG_TOP();
+  text(r.name, c.x, c.y, gfx::SMALL, MUTED);
+  fb().fillSmoothRoundRect(c.x, sy, c.w, sh, sh / 2, track);
   if (r.kind == MASK) {  // uma opção por linha, com o interruptor à direita
     fb().fillSmoothRoundRect(c.x, sy, c.w, r.count * MASK_LINE() - u(6), u(12), track);
     for (int k = 0; k < r.count; k++) {
@@ -1170,10 +1329,48 @@ void drawRow(const Row& r, Cell c, uint16_t track) {
 
 void settingsHome() { group = -1; }
 
+// Cartão SD: o estado e, quando ele não montou, formatar com dois toques (apaga tudo o que houver nele).
+uint32_t sdArmedMs = 0;
+int SD_BTN_Y() { return SET_Y() + 3 * below(gfx::LABEL, 26) + u(16); }
+void drawSd(bool live, uint16_t track) {
+  header(live, "‹ Cartão SD");
+  char buf[48];
+  const int x = M(), w = W() - 2 * M(), step = below(gfx::LABEL, 26);
+  int y = SET_Y();
+  if (sd::state() == sd::READY) {
+    snprintf(buf, sizeof buf, "%d dias de histórico guardados", sd::days());
+    text(buf, x, y, gfx::LABEL, TEXT), y += step;
+    snprintf(buf, sizeof buf, "%lu MB livres", (unsigned long)sd::freeMB());
+    text(buf, x, y, gfx::LABEL, MUTED), y += step;
+    text("grava o dia de hoje a cada 10 min", x, y, gfx::SMALL, DIM);
+    return;
+  }
+  text(sd::state() == sd::NONE ? "nenhum cartão encontrado" : "o cartão não montou", x, y, gfx::LABEL, TEXT), y += step;
+  text("sem formato, corrompido ou fora do leitor", x, y, gfx::SMALL, MUTED), y += step;
+  const bool armed = sdArmedMs && millis() - sdArmedMs < 3000;
+  const int bh = u(48), by = SD_BTN_Y();
+  fb().fillSmoothRoundRect(x, by, w, bh, bh / 2, armed ? RED : track);
+  text(armed ? "toque de novo: apaga tudo no cartão" : "formatar o cartão", x + w / 2, by + bh / 2, gfx::LABEL,
+       armed ? BG : TEXT, middle_center, armed ? RED : track);
+}
+int sdTap(int y) {
+  const int by = SD_BTN_Y();
+  if (sd::state() == sd::READY || y < by || y > by + u(48)) return -1;
+  if (sdArmedMs && millis() - sdArmedMs < 3000) {
+    sdArmedMs = 0;
+    gfx::loading(gfx::BOOT, "cartão SD", "formatando…", 0.5f);
+    sd::format();
+  } else {
+    sdArmedMs = millis();
+  }
+  return 0;
+}
+
 void drawSettings(bool live) {
   gfx::clear();
   const uint16_t track = blend(BG, TRACK, 0.7f);
   soundLevel = settings::web.alerts & 2 ? settings::web.volume : 0;
+  if (group == G_SD) return drawSd(live, track);
   if (group >= 0) {
     const Group& g = GROUPS[group];
     fitRows(g);
@@ -1181,12 +1378,19 @@ void drawSettings(bool live) {
     snprintf(title, sizeof title, "‹ %s", g.name);
     header(live, title);
     for (int i = 0; i < g.n; i++) drawRow(g.rows[i], cell(g, i), track);
+    if (group == G_SOUND && board::PROFILE.oled) {  // a AMOLED tem o BOOT livre para silenciar
+      const Cell c = cell(g, g.n - 1);
+      int y = c.y + rowHeight(g.rows[g.n - 1]) + u(10);
+      // uma linha só: com 5 controles, não sobra altura para mais
+      text(app::muted() ? "silenciado pelo BOOT: toque nele de novo" : "BOOT silencia por 1 h (não segure ao ligar)",
+           M(), y, gfx::SMALL, app::muted() ? RED : DIM);
+    }
     return;
   }
   header(live, "ajustes");
-  Item list[5];
+  Item list[6];
   const int n = items(list), rh = listRowH(n), w = W() - 2 * M();
-  static const char* NAMES[] = {"Tela", "Som", "Descanso", "Conta", "Sobre"};
+  static const char* NAMES[] = {"Tela", "Som", "Descanso", "Cartão SD", "Conta", "Sobre"};
   char buf[48];
   for (int i = 0; i < n; i++) {
     const int y = SET_Y() + i * rh, h = rh - u(8);
@@ -1202,7 +1406,7 @@ void drawSettings(bool live) {
 // Toque nos ajustes: 0 trocou um ajuste (ou abriu/fechou um grupo), 1 abriu o Sobre, 2 abriu a Conta, -1 nada
 int settingsTap(int x, int y) {
   if (group < 0) {
-    Item list[5];
+    Item list[6];
     const int n = items(list), rh = listRowH(n);
     const int i = (y - SET_Y()) / rh;
     if (y < SET_Y() || i >= n || x < M() || x > W() - M()) return -1;
@@ -1212,17 +1416,18 @@ int settingsTap(int x, int y) {
     return 0;
   }
   if (y < SET_Y() - u(4)) return void(group = -1), 0;  // o título: volta para a lista
+  if (group == G_SD) return sdTap(y);
   const Group& g = GROUPS[group];
   fitRows(g);
   for (int i = 0; i < g.n; i++) {
     const Cell c = cell(g, i);
-    const int top = c.y + SEG_TOP();
     Row& r = g.rows[i];
+    const int top = r.kind == CYCLE ? c.y : c.y + SEG_TOP();
     const int bottom = r.kind == MASK ? top + r.count * MASK_LINE() : top + SEG_H() + 4;
     if (x < c.x || x >= c.x + c.w || y < top - 6 || y > bottom) continue;
     auto& web = settings::web;
-    if (r.kind == CYCLE) {
-      *r.value = (*r.value + (x - c.x < c.w / 3 ? r.count - 1 : 1)) % r.count;
+    if (r.kind == CYCLE) {  // à direita avança; na metade da esquerda (o nome e o ‹) volta
+      *r.value = (*r.value + (x - c.x < c.w / 2 ? r.count - 1 : 1)) % r.count;
     } else {
       const int k = r.kind == MASK ? constrain((y - top) / MASK_LINE(), 0, r.count - 1)
                                    : min<int>((x - c.x) * r.count / c.w, r.count - 1);
@@ -1239,16 +1444,43 @@ int settingsTap(int x, int y) {
     }
     settings::save();
     settings::saveWeb();
-    if (group == G_SOUND && web.alerts & 2) board::play(web.sound, settings::volumePct());  // a prévia
+    if (group == G_SOUND && web.alerts & 2 && *r.value < sound::COUNT) {  // a prévia, como o aviso toca
+      const bool session = r.value == &web.sound || r.kind != CYCLE;
+      board::play(r.kind == CYCLE ? *r.value : web.sound, settings::volumePct(), session ? 0 : 2000, session ? 2 : 1);
+    }
     return 0;
   }
   return -1;
 }
 
 // Sobre: o que a placa sabe de si mesma, e reiniciar com toque duplo de confirmação.
-// Deitada, os 8 itens vão em 2 colunas de 4, rótulo em cima e valor embaixo; os botões vêm logo depois.
+// Deitada, os itens vão em 2 colunas, rótulo em cima e valor embaixo; os botões vêm logo depois.
 int aboutStep() { return L() || gfx::ui() == gfx::LARGE ? max(u(39), gfx::lineHeight(gfx::SMALL) + gfx::lineHeight(gfx::LABEL)) : below(gfx::LABEL, 26) + u(3); }
-int RESTART_Y() { return L() ? max(u(232), u(66) + 4 * aboutStep() + u(6)) : u(384); }
+// com bateria, ela é o primeiro item e a página web desce uma posição
+int aboutItems() { return board::PROFILE.battery ? 8 : 7; }
+int aboutWebItem() { return aboutItems() - 2; }
+int aboutRows() { return L() ? (aboutItems() + 1) / 2 : aboutItems(); }
+int RESTART_Y() { return L() ? max(u(232), u(66) + aboutRows() * aboutStep() + u(6)) : max(u(384), u(66) + aboutRows() * aboutStep() + u(6)); }
+// Rolagem em linhas inteiras: o item de cima sempre começa logo abaixo do cabeçalho
+int aboutOff = 0;
+int aboutMaxOff() { return max(0, (RESTART_Y() + u(48) + u(12) - gfx::height() + aboutStep() - 1) / aboutStep()); }
+void aboutTop() { aboutOff = 0; }
+bool aboutScroll(int dir) {
+  const int to = constrain(aboutOff + dir * 3, 0, aboutMaxOff());
+  if (to == aboutOff) return false;
+  aboutOff = to;
+  return true;
+}
+
+// Previsão de carga completa pelo ritmo desde que a carga começou; precisa subir 2% para estimar
+int chargeEtaMin(const board::PowerState& ps) {
+  static uint32_t t0 = 0;
+  static int p0 = -1;
+  if (!ps.charging || ps.pct < 0) return p0 = -1, -1;
+  if (p0 < 0 || ps.pct < p0) t0 = millis(), p0 = ps.pct;
+  const int gained = ps.pct - p0;
+  return gained < 2 ? -1 : (100 - ps.pct) * (millis() - t0) / gained / 60000;
+}
 
 void drawAbout(bool live, bool armed) {
   char buf[64];
@@ -1272,35 +1504,51 @@ void drawAbout(bool live, bool armed) {
   else if (app::lastFrameMs) snprintf(buf, sizeof buf, "sem dados há %lu min", (millis() - app::lastFrameMs) / 60000);
   else strcpy(buf, "esperando o Mac");
   String link = buf;
-  snprintf(buf, sizeof buf, "atualizado há %d min", app::dataAge() / 60);
-  String pct = app::stale() ? String(buf) : String("em dia");
   // a entrada da página web: o endereço, ou o convite para ligar o WiFi (toque no item)
   String web = webui::online() ? String(webui::host()) + ".local" : webui::apOn() ? String("WiFi ") + webui::apName()
                                                                                   : String("toque para ligar o WiFi");
-  const char* items[][2] = {
+  board::PowerState ps;
+  String bat = "sem bateria";
+  if (board::powerState(ps) && ps.battery) {
+    const int eta = chargeEtaMin(ps);
+    if (!ps.usb) snprintf(buf, sizeof buf, "%d%% · na bateria", ps.pct);
+    else if (!ps.charging) snprintf(buf, sizeof buf, "%d%% · carregada", ps.pct);
+    else if (eta < 0) snprintf(buf, sizeof buf, "%d%% · carregando", ps.pct);
+    else if (eta >= 60) snprintf(buf, sizeof buf, "%d%% · cheia em ~%dh%02d", ps.pct, eta / 60, eta % 60);
+    else snprintf(buf, sizeof buf, "%d%% · cheia em ~%d min", ps.pct, max(eta, 1));
+    bat = buf;
+  }
+  const char* all[][2] = {
+      {"bateria", bat.c_str()},
       {"placa", board::NAME},          {"firmware", hostlink::firmware()}, {"ligada há", upTxt.c_str()},
       {"PSRAM", psram.c_str()}, {"RAM interna", ram.c_str()},  {"página web", web.c_str()},
-      {"conexão", link.c_str()},          {"% de uso", pct.c_str()},
+      {"conexão", link.c_str()},
   };
-  // tela grande: rótulo em cima, valor embaixo. Na média em pé 8 pares não cabem empilhados: um por linha.
-  // Deitada: empilhados, em 2 colunas de 4.
+  const auto* items = all + (board::PROFILE.battery ? 0 : 1);
+  const int n = aboutItems(), rows = aboutRows(), off = aboutOff, top = u(66);
+  // tela grande: rótulo em cima, valor embaixo. Na média em pé os pares não cabem empilhados: um por linha.
+  // Deitada: empilhados, em 2 colunas.
   const bool stacked = L() || gfx::ui() == gfx::LARGE;
   const int cols = L() ? 2 : 1, colW = (W() - 2 * M() - (cols - 1) * u(16)) / cols, step = aboutStep();
-  int k = 0;
-  for (auto& it : items) {
-    const int x = M() + (k / 4 % cols) * (colW + u(16)), y = u(66) + (cols == 2 ? k % 4 : k) * step;
+  for (int k = 0; k < n; k++) {
+    const auto& it = items[k];
+    const int row = k % rows - off, x = M() + (k / rows) * (colW + u(16)), y = top + row * step;
+    if (row < 0) continue;  // rolou para cima do cabeçalho
     // o item da página web é o único que se toca: na cor de destaque e com "›", como os botões
-    const bool link = k == 5;
+    const bool link = k == aboutWebItem();
     const String val = link ? String(it[1]) + " ›" : String(it[1]);
     const uint16_t c = link ? ACCENT : TEXT;
     text(it[0], x, y, gfx::SMALL, DIM);
     if (stacked) text(fit(val.c_str(), gfx::LABEL, colW).c_str(), x, y + below(gfx::SMALL, 18), gfx::LABEL, c);
     else text(fit(val.c_str(), gfx::LABEL, W() - 2 * M() - u(110)).c_str(), W() - M(), y, gfx::LABEL, c, top_right);
-    k++;
+  }
+  if (const int mo = aboutMaxOff()) {  // barra de rolagem: a página continua para baixo
+    const int th = gfx::height() - top - u(8), bh = th * rows / (rows + mo);
+    fb().fillSmoothRoundRect(W() - u(5), top + (th - bh) * off / mo, u(3), bh, u(2), TRACK);
   }
   // touch resistivo: calibrar o toque divide a linha com o reiniciar
   const bool cal = board::PROFILE.calibrate;
-  const int bw = cal ? (W() - 2 * M() - u(8)) / 2 : W() - 2 * M(), rx = W() - M() - bw, by = RESTART_Y(), bh = u(48);
+  const int bw = cal ? (W() - 2 * M() - u(8)) / 2 : W() - 2 * M(), rx = W() - M() - bw, by = RESTART_Y() - off * step, bh = u(48);
   const uint16_t c = armed ? RED : blend(BG, TRACK, 0.7f);
   if (cal) {
     const uint16_t cb = blend(BG, TRACK, 0.7f);
@@ -1316,9 +1564,10 @@ void drawAbout(bool live, bool armed) {
 }
 
 int aboutButtonAt(int x, int y) {
-  // o item "página web" (o 6º, k = 5): a mesma conta de posição do drawAbout
-  const int cols = L() ? 2 : 1, colW = (W() - 2 * M() - (cols - 1) * u(16)) / cols, k = 5;
-  const int ix = M() + (k / 4 % cols) * (colW + u(16)), iy = u(66) + (cols == 2 ? k % 4 : k) * aboutStep();
+  // o item "página web": a mesma conta de posição do drawAbout, na página rolada
+  y += aboutOff * aboutStep();
+  const int cols = L() ? 2 : 1, colW = (W() - 2 * M() - (cols - 1) * u(16)) / cols, k = aboutWebItem();
+  const int ix = M() + (k / aboutRows()) * (colW + u(16)), iy = u(66) + k % aboutRows() * aboutStep();
   if (x >= ix && x < ix + colW && y >= iy - u(4) && y < iy + aboutStep()) return 3;
   if (y < RESTART_Y() || y >= RESTART_Y() + u(48)) return 0;
   return board::PROFILE.calibrate && x < W() / 2 ? 2 : 1;
@@ -1435,7 +1684,7 @@ void drawAccount(bool live) {
 bool accountTap(int x, int y) {
   auto confirm = [](int num, const char* action) {
     if (armed(num)) {
-      Serial.println(action);
+      hostlink::action(action);
       armedAcct = -2;
     } else {
       armedAcct = num, armedMs = millis();

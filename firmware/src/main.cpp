@@ -2,6 +2,9 @@
 // Hardware específico fica em boards/; telas em ui/; protocolo serial e OTA em hostlink.cpp.
 #include <Arduino.h>
 
+#include "app.h"
+#include "ble.h"
+#include "sd.h"
 #include "boards/board.h"
 #include "hostlink.h"
 #include "power.h"
@@ -63,6 +66,25 @@ void checkButton() {
 }
 
 // PWR: um toque entra no descanso ou sai dele; segurar desliga.
+// BOOT: um toque silencia o som do alerta por 1 h; outro religa e toca a prévia do som.
+void checkMute() {
+  static bool down = false;
+  static uint32_t changedMs = 0;
+  const bool pressed = board::mutePressed();
+  if (pressed != down && millis() - changedMs < 50) return;  // o contato quica ao apertar: ignora por 50 ms
+  if (pressed != down) changedMs = millis();
+  if (pressed && !down) {
+    power::wake();
+    if (app::muted()) {
+      app::muteUntil = 0;
+      board::play(settings::web.sound, settings::volumePct());
+    } else {
+      app::muteUntil = (millis() + 3600000UL) | 1;
+    }
+  }
+  down = pressed;
+}
+
 constexpr uint32_t SHUT_MS = 2000;  // PWR segurado: a tela avisa a partir de 0,5 s e desliga aos 2 s
 
 void checkRest() {
@@ -111,6 +133,8 @@ void checkTouch() {
   const int swipe = min(gfx::width(), gfx::height()) / 8;
   // arrastar para cima a partir da borda de baixo: volta para a principal de qualquer lugar, como no celular
   if (y0 > gfx::height() - gfx::height() * 3 / 40 && dy < -gfx::height() * 5 / 48 && abs(dy) > abs(dx)) screens::homeUp();
+  // arrastar para baixo a partir da borda de cima: abre os ajustes, como a cortina do celular
+  else if (y0 < gfx::height() * 3 / 40 && dy > gfx::height() * 5 / 48 && abs(dy) > abs(dx)) screens::pullDown();
   else if (abs(dx) > swipe && abs(dx) > 2 * abs(dy)) dx < 0 ? screens::next() : screens::prev();
   else if (abs(dy) > swipe && abs(dy) > 2 * abs(dx)) screens::scroll(dy < 0 ? 1 : -1);
   else if (abs(dx) < 24 && abs(dy) < 24) screens::tap(x0, y0);
@@ -123,6 +147,9 @@ void setup() {
   settings::begin();
   gfx::begin();
   board::begin();
+  sd::begin();
+  uint32_t t;
+  if (board::rtcRead(t)) app::syncClock(t);  // a hora do RTC até o Mac mandar a dele
   if (board::PROFILE.imu) {  // já na posição em que a placa está, desde a abertura
     int side = -1;
     for (uint32_t t0 = millis(); side < 0 && millis() - t0 < 300; delay(20)) side = gravitySide();
@@ -134,6 +161,7 @@ void setup() {
   // touch resistivo sem calibração gravada: calibra antes de tudo, senão os toques caem longe da caneta
   if (board::PROFILE.calibrate && !settings::cal.ok) screens::calibrateTouch();
   webui::begin();
+  ble::begin(webui::apName());  // o mesmo nome do WiFi da placa; sem BLE no build, não faz nada
 }
 
 void loop() {
@@ -141,6 +169,7 @@ void loop() {
   if (board::PROFILE.imu) checkOrientation();
   if (board::PROFILE.button) checkButton();
   checkRest();
+  checkMute();
   if (board::PROFILE.touch) checkTouch();
   hostlink::poll();
   webui::loop();

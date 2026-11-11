@@ -34,8 +34,14 @@
 //   void setLed(uint8_t r, uint8_t g, uint8_t b)
 //   bool buttonPressed()
 //   bool restPressed()                    botão de descanso (PWR); as placas sem ele devolvem false
+//   bool mutePressed()                    botão de silenciar (BOOT, quando ele não é o botão principal)
 //   void powerOff()                       desliga a placa (PMU); as placas sem PMU não fazem nada
-//   void play(uint8_t i, uint8_t vol)     toca o som i de sound.h no volume vol (0-100), sem bloquear
+//   bool powerState(PowerState& s)        bateria e USB (profile.h); false sem PMU
+//   bool rtcRead(uint32_t& t)             hora local guardada no RTC (segundos desde 1970); false sem RTC ou parado
+//   void rtcWrite(uint32_t t)             grava a hora local no RTC
+//   void play(uint8_t i, uint8_t vol, uint16_t minMs = 0, uint8_t times = 1)
+//                                         toca o som i de sound.h no volume vol (0-100), sem bloquear; repete até
+//                                         tocar `times` vezes e durar ao menos minMs
 //   bool touch(int16_t& x, int16_t& y)   um dedo na tela, em pixels da tela; false sem touch ou sem toque
 //   bool touchRaw(int16_t& x, int16_t& y) a leitura crua do touch resistivo, para a calibração
 //                                        (PROFILE.calibrate); as outras placas devolvem false
