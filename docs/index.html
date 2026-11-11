@@ -184,7 +184,7 @@
       <div class="shot"><img src="screenshots/05-modelo.png" alt="Detalhe de um modelo" loading="lazy"><div><h3>Detalhe do modelo</h3><p>Composição dos tokens, custo equivalente na API e os projetos que mais usaram.</p></div></div>
       <div class="shot"><img src="screenshots/06-historico.png" alt="Histórico de 14 dias" loading="lazy"><div><h3>Histórico</h3><p>Tokens e custo por dia nas últimas duas semanas. Toque numa barra para ver o dia.</p></div></div>
       <div class="shot"><img src="screenshots/10-esgotado.png" alt="Janela esgotada com sugestão de trocar de org" loading="lazy"><div><h3>Limite esgotado</h3><p>Com outra org salva no <a href="https://github.com/realiti4/claude-swap">claude-swap</a>, a tela sugere a troca para a de menor uso.</p></div></div>
-      <div class="shot"><img src="screenshots/07-ajustes.png" alt="Ajustes" loading="lazy"><div><h3>Ajustes</h3><p>Pela engrenagem ao lado do relógio, numa lista de grupos como no celular: Tela, Som e Descanso nas placas que têm, Conta e Sobre.</p></div></div>
+      <div class="shot"><img src="screenshots/07-ajustes.png" alt="Ajustes" loading="lazy"><div><h3>Ajustes</h3><p>Pela engrenagem ao lado do relógio ou arrastando do topo da tela, numa lista de grupos como no celular: Tela, Som, Descanso e Cartão SD nas placas que têm, Conta e Sobre.</p></div></div>
       <div class="shot"><img src="screenshots/00-boot.png" alt="Tela de abertura com o logo" loading="lazy"><div><h3>Abertura</h3><p>E uma tela de diagnóstico que diz o que falta quando o Mac some: cabo, daemon ou dados.</p></div></div>
     </div>
     <div class="strip"><h3>Deitada</h3><p>Em Ajustes → Tela → horizontal, cada tela ganha uma versão deitada: o anel à esquerda, as sessões em 3 colunas e o detalhe do modelo com os projetos ao lado.</p><img src="screenshots/deitada.png" alt="As telas deitadas: principal, sessões em 3 colunas e detalhe do modelo" loading="lazy"></div>
@@ -304,7 +304,7 @@ flowchart LR
     </div>
 
     <div class="model" data-only="waveshare-amoled-216">
-      <img src="screenshots/waveshare-amoled-216.png" alt="Waveshare AMOLED 2,16 com dados fictícios: principal, workspaces e as sessões de um workspace" loading="lazy">
+      <img src="screenshots/waveshare-amoled-216.png" alt="Waveshare AMOLED 2,16 com dados fictícios: principal, workspaces, as sessões de um workspace e uma sessão pedindo aprovação" loading="lazy">
       <div>
         <h3>Waveshare ESP32-S3-Touch-AMOLED-2.16</h3>
         <dl>
@@ -312,12 +312,16 @@ flowchart LR
           <dt>Tela</dt><dd>2,16" AMOLED 480×480 com cantos redondos, CO5300 por QSPI, a ~29 quadros por segundo</dd>
           <dt>Toque</dt><dd>capacitivo, com o dedo</dd>
           <dt>Interface</dt><dd>todas as telas no layout grande; gira sozinha pelo acelerômetro; descanso contra marcas no vidro</dd>
-          <dt>Som</dt><dd>alto-falante: um som quando uma sessão pede aprovação, com 8 opções e volume em Ajustes → Som</dd>
-          <dt>Botões</dt><dd>KEY3 troca de tela; PWR entra e sai do descanso e, segurado por 2 s, desliga a placa</dd>
+          <dt>Som</dt><dd>alto-falante: sessão pedindo aprovação, 5 h esgotada ou renovada, semana esgotada, bateria fraca, Mac sem dados e Bluetooth, com 11 opções e volume em Ajustes → Som</dd>
+          <dt>Bateria</dt><dd>ícone de carga no cabeçalho, porcentagem e previsão de carga completa no Sobre; carrega até 4,1 V para durar mais</dd>
+          <dt>Sem fio</dt><dd>fora da USB, os dados chegam por Bluetooth; o Mac aprende a placa na primeira conexão pelo cabo</dd>
+          <dt>Extras</dt><dd>relógio no RTC; histórico diário no cartão microSD, além dos 14 dias</dd>
+          <dt>Botões</dt><dd>KEY3 troca de tela; PWR entra e sai do descanso e, segurado por 2 s, desliga a placa; BOOT silencia por 1 h</dd>
           <dt>Atualização</dt><dd>OTA pela USB em ~25 s</dd>
         </dl>
         <p class="note">Parada, a tela troca o painel por versões resumidas em fundo preto, uma a cada 15 s e cada uma num lugar novo. Em Ajustes → Descanso você escolhe quais telas entram e o relógio com ou sem segundos.</p>
         <img class="wide" src="screenshots/amoled-descanso.png" alt="O descanso da AMOLED: relógio flip, anel de uso, sessões, modelos e 14 dias" loading="lazy">
+        <img class="wide" src="screenshots/amoled-ajustes.png" alt="Ajustes da AMOLED: a lista de grupos, o grupo Som e o Sobre com a bateria" loading="lazy">
       </div>
     </div>
 
@@ -360,7 +364,7 @@ flowchart LR
       <div class="callout on" data-only="guition-jc3248w535">A JC3248W535 só passa dados pela USB-C num dos lados do plugue. Se a placa liga mas o Mac não a vê, gire o plugue.</div>
       <div class="callout" data-only="cyd-2432s028r">A ESP32-2432S028R tem touch resistivo: use a caneta que vem com ela. Na primeira vez ela pede quatro toques, um em cada canto, para calibrar. Use um cabo USB que passe dados.</div>
       <div class="callout" data-only="waveshare-s3-lcd-147b">A Waveshare de 1,47" não tem touch: o botão BOOT troca de tela e segurar volta para a principal. Ela gira sozinha pelo acelerômetro.</div>
-      <div class="callout" data-only="waveshare-amoled-216">Mesmo na versão com bateria, a AMOLED 2,16" recebe os dados pelo cabo USB-C ligado ao Mac. Segurar o botão PWR por 2 s desliga a placa.</div>
+      <div class="callout" data-only="waveshare-amoled-216">Ligue a AMOLED 2,16" pela USB-C na primeira vez: o Mac aprende o nome dela e, quando ela sai do cabo, continua mandando os dados por Bluetooth. Segurar o botão PWR por 2 s desliga a placa.</div>
       <div class="callout" data-only="smalltv-ultra">O SmallTV-Ultra não tem USB de dados: tudo vai pelo WiFi, e o <code>setup.sh</code> não serve para ele. O firmware de fábrica da GeekMagic é substituído e só volta com o <code>.bin</code> dele.</div>
     </div>
     <ol class="steps">

@@ -49,13 +49,22 @@ cartões compactos, 6 por página em pé e 4 deitada. No Sobre fica o botão par
 **Na Waveshare AMOLED 2,16".** A tela de 480×480 tem cantos redondos: a interface ocupa o quadrado do meio,
 gira sozinha pelo acelerômetro e roda a ~29 quadros por segundo. Parada, ela entra no descanso, que alterna
 versões resumidas das telas (relógio flip, anel de uso, sessões, modelos e 14 dias) num fundo preto, cada uma num
-lugar novo, para o vidro não marcar. Uma sessão pedindo aprovação toca um som.
+lugar novo, para o vidro não marcar. Ela usa o resto do hardware da placa:
 
-<p align="center"><img src="docs/screenshots/waveshare-amoled-216.png" alt="Waveshare AMOLED 2,16 com dados fictícios: principal, workspaces e as sessões de um workspace" width="100%"></p>
+- **Bateria:** o ícone no cabeçalho mostra a carga e se a placa está na USB. O Sobre mostra a porcentagem e
+  a previsão de carga completa. A carga para em 4,1 V em vez de 4,2 V, para a bateria durar mais ciclos.
+- **Bluetooth:** fora do cabo, a placa continua recebendo os dados sem fio. O Mac aprende o nome dela na
+  primeira conexão pela USB.
+- **Relógio** guardado no RTC, e o histórico diário num **cartão microSD**, além dos 14 dias que o Mac manda.
+- **Som:** um alerta quando uma sessão pede aprovação e sons para a janela de 5 h esgotada ou renovada, a
+  semana esgotada, bateria fraca, Mac sem dados e Bluetooth. O botão BOOT silencia por 1 h.
+
+<p align="center"><img src="docs/screenshots/waveshare-amoled-216.png" alt="Waveshare AMOLED 2,16 com dados fictícios: principal, workspaces, as sessões de um workspace e uma sessão pedindo aprovação" width="100%"></p>
 <p align="center"><img src="docs/screenshots/amoled-descanso.png" alt="O descanso da AMOLED: relógio flip, anel de uso, sessões, modelos e 14 dias" width="100%"></p>
-<p align="center"><img src="docs/screenshots/amoled-ajustes.png" alt="Ajustes da AMOLED: a lista de grupos e o grupo Descanso, com as telas do descanso" width="66%"></p>
+<p align="center"><img src="docs/screenshots/amoled-ajustes.png" alt="Ajustes da AMOLED: a lista de grupos, o grupo Som e o Sobre com a bateria" width="100%"></p>
 
-**Alertas.** Quando uma sessão passa a pedir aprovação, a tela abre o workspace dela e o brilho pulsa por 20 s;
+**Alertas.** Quando uma sessão passa a pedir aprovação, as placas com touch mostram uma página com a sessão, o
+que ela pergunta e o botão Abrir Sessão, que traz a janela para a frente no Mac. O brilho pulsa por 20 s;
 nas placas com LED ele pisca vermelho enquanto houver sessão para aprovar. Cada estado de sessão tem a sua cor:
 verde trabalhando, vermelho aprovar, amarelo sua vez.
 
@@ -194,8 +203,9 @@ A tela Sobre mostra a placa, o perfil e a memória de quem está rodando.
 marca com imagem parada, então a imagem inteira anda até 6 px por minuto e, parada, a placa entra no
 descanso: fundo preto e versões resumidas das telas (relógio flip, anel de uso, sessões, modelos e 14 dias),
 uma a cada 15 s, cada uma num lugar novo. Em Ajustes → Descanso dá para escolher as telas e o relógio com ou sem
-segundos. Uma sessão pedindo aprovação toca um som (8 opções, com volume, em Ajustes → Som ou na página web). O
-KEY3 avança a tela; o PWR entra e sai do descanso e, segurado por 2 s, desliga a placa.
+segundos. Os sons (11 opções, com volume, em Ajustes → Som ou na página web) avisam a sessão pedindo aprovação e
+os limites de 5 h e da semana. O KEY3 avança a tela; o PWR entra e sai do descanso e, segurado por 2 s, desliga
+a placa; o BOOT silencia por 1 h. Arrastar do topo da tela abre os ajustes.
 
 **Em pé ou deitada** (Ajustes → Tela): as placas com touch têm uma versão horizontal de cada tela. O anel
 vai para a esquerda, as sessões ficam em 3 colunas e os ajustes, o Sobre e a troca de org em 2. O toque gira
@@ -373,7 +383,8 @@ Waveshare de 1,47", em OpenSCAD, inspirado no
 [LovyanGFX](https://github.com/lovyan03/LovyanGFX), [Arduino_GFX](https://github.com/moononournation/Arduino_GFX),
 [ArduinoJson](https://arduinojson.org/), [SensorLib](https://github.com/lewisxhe/SensorLib), a fonte
 [Inter](https://rsms.me/inter/) (SIL OFL 1.1, `firmware/tools/fonts/OFL.txt`) e os sons do
-[Interface Sounds](https://kenney.nl/assets/interface-sounds), da [Kenney](https://www.kenney.nl) (CC0,
-`firmware/data/sounds/LICENSE-kenney.txt`). O driver do ES8311 em `firmware/lib/ES8311` é da Espressif
+[Interface Sounds](https://kenney.nl/assets/interface-sounds) e do
+[Digital Audio](https://kenney.nl/assets/digital-audio), da [Kenney](https://www.kenney.nl) (CC0,
+`firmware/data/sounds/LICENSE-kenney*.txt`). O driver do ES8311 em `firmware/lib/ES8311` é da Espressif
 (Apache-2.0), e a configuração do áudio e da PMU da AMOLED veio do
 [claude-desktop-buddy-esp32](https://github.com/vthinkxie/claude-desktop-buddy-esp32) (MIT). Feito com o Claude Code.
