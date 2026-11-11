@@ -153,4 +153,8 @@ inline bool touch(int16_t& x, int16_t& y) {
   return true;
 }
 
+inline void play(uint8_t, uint8_t) {}
+inline bool restPressed() { return false; }
+inline void powerOff() {}
+
 }  // namespace board

@@ -30,6 +30,9 @@ FONTS = [
     ("inter_hero_m", 40, 700, DIGITS),
     # SmallTV: o % de dois dígitos tem que caber no anel de 90 px por dentro
     ("inter_hero_s", 32, 700, DIGITS),
+    # descanso das telas OLED: o % de uso grande, de longe
+    ("inter_giant", 120, 700, "0123456789%"),
+    ("inter_flip", 72, 700, "0123456789"),  # os 6 cartões do relógio flip numa linha de 424 px
 ]
 
 

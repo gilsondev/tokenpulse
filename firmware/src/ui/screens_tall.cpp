@@ -4,8 +4,11 @@
 #include "../hostlink.h"
 #include "../webui.h"
 #include "../settings.h"
+#include "../sound.h"
 #include "anim.h"
 #include "gfx.h"
+#include "flipclock.h"
+#include "fonts/inter_giant.h"
 #include "mascot.h"
 #include "screens.h"
 
@@ -96,12 +99,13 @@ void gear(int cx, int cy, int r, uint16_t c) {
 // Cabeçalho: org e relógio; embaixo modelo, ponto de status e sessões abertas.
 void header(bool live, const char* title, bool dropdown = false) {
   const auto& f = app::frame;
+  const gfx::Font HT = board::PROFILE.dense ? gfx::TITLE : gfx::LABEL, HS = board::PROFILE.dense ? gfx::LABEL : gfx::SMALL;
   const char* clk = f["clk"] | "";
   const int clkLeft = W() - M() - u(30) - gfx::textWidth(clk, gfx::TITLE);
-  const String t = fit(title, gfx::LABEL, clkLeft - M() - u(10) - (dropdown ? u(18) : 0));
-  text(t.c_str(), M(), u(10), gfx::LABEL, TEXT);
+  const String t = fit(title, HT, clkLeft - M() - u(10) - (dropdown ? u(18) : 0));
+  text(t.c_str(), M(), u(10), HT, TEXT);
   if (dropdown) {  // a org abre a lista de orgs: um "v" pequeno depois do nome
-    const int x = M() + gfx::textWidth(t.c_str(), gfx::LABEL) + u(8), y = u(19), d = max(3, u(4));
+    const int x = M() + gfx::textWidth(t.c_str(), HT) + u(8), y = u(10) + gfx::lineHeight(HT) / 2, d = max(3, u(4));
     gfx::wideLine(x, y - d / 2, x + d, y + d / 2, 1.0f, MUTED);
     gfx::wideLine(x + d, y + d / 2, x + 2 * d, y - d / 2, 1.0f, MUTED);
   }
@@ -110,11 +114,11 @@ void header(bool live, const char* title, bool dropdown = false) {
   char buf[32];
   if (live) snprintf(buf, sizeof buf, "CLI %d · Desk %d", (int)(f["cli"] | 0), (int)(f["desk"] | 0));
   else snprintf(buf, sizeof buf, "offline há %lu min", (millis() - app::lastFrameMs) / 60000);
-  const int sy = u(10) + below(gfx::LABEL, 22), w = gfx::textWidth(buf, gfx::SMALL);
+  const int sy = u(10) + below(HT, 22), w = gfx::textWidth(buf, HS);
   // o modelo divide a linha com o status: corta o modelo, nunca o status
-  text(fit(f["m"] | "Claude", gfx::SMALL, W() - 2 * M() - w - u(24)).c_str(), M(), sy, gfx::SMALL, DIM);
-  text(buf, W() - M(), sy, gfx::SMALL, live ? DIM : RED, top_right);
-  fb().fillSmoothCircle(W() - M() - w - u(8), sy + gfx::lineHeight(gfx::SMALL) / 2 - u(2), max(2, u(3)), live ? GREEN : RED);
+  text(fit(f["m"] | "Claude", HS, W() - 2 * M() - w - u(24)).c_str(), M(), sy, HS, DIM);
+  text(buf, W() - M(), sy, HS, live ? DIM : RED, top_right);
+  fb().fillSmoothCircle(W() - M() - w - u(8), sy + gfx::lineHeight(HS) / 2 - u(2), max(2, u(3)), live ? GREEN : RED);
 }
 
 // Outra org salva no cswap para sugerir quando a janela esgota: a de menor % conhecido.
@@ -388,6 +392,187 @@ void drawInstall() {
   text(app::START_SHORT, W() / 2, y + below(gfx::SMALL, 22), gfx::LABEL, ACCENT, middle_center);
 }
 
+// Descanso da OLED: as telas escolhidas (settings::web.restPages), em versão resumida, uma a cada 15 s.
+// Cada troca põe o bloco num lugar novo da tela, e o fundo é preto: o vidro não marca.
+namespace {
+constexpr uint16_t REST_TEXT = 0xBDF7, REST_MUTED = 0x8410, REST_TRACK = 0x2104;
+constexpr uint32_t REST_MS = 15000;
+int DRIFT() { return u(28); }  // folga em volta do bloco, para ele mudar de lugar a cada troca
+
+lgfx::VLWfont& giantFont(bool& ok) {
+  static lgfx::PointerWrapper wrap;
+  static lgfx::VLWfont font;
+  static bool loaded = (wrap.set(inter_giant), font.loadFont(&wrap));
+  ok = loaded;
+  return font;
+}
+
+// O anel da home, grande, com o % de 5h no meio na cor da faixa e a semana embaixo.
+bool restUsage(int x0, int y0, bool measure, int& w, int& h) {
+  const auto& f = app::frame;
+  const int p5 = f["p5"] | -1, pw = f["pw"] | -1;
+  if (p5 < 0) return false;
+  const int r = W() / 2 - u(26), thick = u(20);  // sobra em volta para o anel mudar de lugar
+  w = h = 2 * r;
+  if (measure) return true;
+  const int cx = x0 + r, cy = y0 + r;
+  const uint16_t lc = levelColor(p5);
+  gfx::ring(cx, cy, r, thick, min(p5, 100) / 100.f, lc, REST_TRACK, 0);
+  char buf[24];
+  snprintf(buf, sizeof buf, "%d%%", p5);
+  bool ok;
+  auto& giant = giantFont(ok);
+  if (ok) {  // antes dos textos: o fundo do glifo gigante cobriria o que estivesse embaixo
+    auto& fb = gfx::fb();
+    fb.setFont(&giant);
+    fb.setTextDatum(middle_center);
+    fb.setTextColor(lc, 0);
+    fb.drawString(buf, cx, cy);
+  } else {
+    text(buf, cx, cy, gfx::HERO, lc, middle_center, 0);
+  }
+  text("sessão 5h", cx, cy - u(82), gfx::TITLE, REST_MUTED, middle_center, 0);
+  if (pw >= 0) {
+    snprintf(buf, sizeof buf, "semana %d%%", pw);
+    text(buf, cx, cy + u(86), gfx::NUM, pw >= 70 ? levelColor(pw) : REST_MUTED, middle_center, 0);
+  }
+  return true;
+}
+
+bool restClock(int x0, int y0, bool measure, int& w, int& h) {
+  int32_t secs = app::secondsOfDay();
+  if (secs < 0) {  // daemon antigo, sem o campo "t": a hora do "clk"
+    const char* clk = app::frame["clk"] | "";
+    if (strlen(clk) >= 5) secs = atoi(clk) * 3600 + atoi(clk + 3) * 60;
+  }
+  if (secs < 0) return false;
+  const bool s = settings::web.restSecs;
+  flip::size(w, h, s);
+  if (!measure) flip::draw(x0, y0, secs, s);
+  return true;
+}
+
+// Sessões: quantas trabalham, esperam você e pedem aprovação, com as cores de estado da placa.
+bool restSessions(int x0, int y0, bool measure, int& w, int& h) {
+  int work = 0, block = 0, turn = 0, total = 0;
+  for (JsonArrayConst g : app::frame["sess"]["ws"].as<JsonArrayConst>())
+    total += (int)g[1], work += (int)g[2], block += (int)g[3], turn += (int)g[4];
+  if (!total) return false;
+  struct Line {
+    int n;
+    const char* label;
+    uint16_t c;
+  } lines[] = {{block, "pedem aprovação", RED}, {turn, "esperam você", YELLOW}, {work, "trabalhando", GREEN},
+               {total - work - block - turn, "paradas", REST_MUTED}};
+  int shown = 0, labelW = 0;
+  for (auto& l : lines)
+    if (l.n) shown++, labelW = max(labelW, gfx::textWidth(l.label, gfx::NUM));
+  const int title = gfx::lineHeight(gfx::TITLE) + u(14), nh = gfx::lineHeight(gfx::HERO);
+  const int step = max(nh, (gfx::height() - DRIFT() - title) / shown), numW = gfx::textWidth("00", gfx::HERO);
+  w = max(numW + u(18) + labelW, gfx::textWidth("sessões", gfx::TITLE)), h = title + shown * step;
+  if (measure) return true;
+  text("sessões", x0, y0, gfx::TITLE, REST_MUTED, top_left, 0);
+  int y = y0 + title + (step - nh) / 2;
+  char buf[8];
+  for (auto& l : lines) {
+    if (!l.n) continue;
+    snprintf(buf, sizeof buf, "%d", l.n);
+    text(buf, x0 + numW, y, gfx::HERO, l.c, top_right, 0);
+    text(l.label, x0 + numW + u(18), y + nh / 2, gfx::NUM, l.c == REST_MUTED ? REST_MUTED : REST_TEXT, middle_left, 0);
+    y += step;
+  }
+  return true;
+}
+
+// Modelos de hoje: os três que mais usaram, com os tokens e uma barra do quanto do dia.
+bool restModels(int x0, int y0, bool measure, int& w, int& h) {
+  JsonArrayConst mods = app::frame["mods"];
+  const int n = min<int>(mods.size(), 3);
+  if (!n) return false;
+  const int title = gfx::lineHeight(gfx::TITLE) + u(14), nh = gfx::lineHeight(gfx::NUM), bar = u(12);
+  const int step = max(nh + bar + u(16), (gfx::height() - DRIFT() - title) / n);
+  w = W() - DRIFT(), h = title + n * step;
+  if (measure) return true;
+  text("modelos hoje", x0, y0, gfx::TITLE, REST_MUTED, top_left, 0);
+  for (int i = 0; i < n; i++) {
+    JsonArrayConst m = mods[i];
+    const int y = y0 + title + i * step + (step - nh - bar - u(10)) / 2;
+    text(m[0] | "?", x0, y, gfx::NUM, REST_TEXT, top_left, 0);
+    text(m[1] | "", x0 + w, y, gfx::NUM, REST_MUTED, top_right, 0);
+    const int by = y + nh + u(10), bw = w * min(100, (int)(m[2] | 0)) / 100;
+    gfx::fb().fillSmoothRoundRect(x0, by, w, bar, bar / 2, REST_TRACK);
+    if (bw > bar) gfx::fb().fillSmoothRoundRect(x0, by, bw, bar, bar / 2, i ? REST_MUTED : ACCENT);
+  }
+  return true;
+}
+
+// Histórico: 14 barras de tokens por dia, hoje em destaque, e o total de hoje embaixo.
+bool restHistory(int x0, int y0, bool measure, int& w, int& h) {
+  JsonArrayConst hist = app::frame["hist"];
+  const int n = hist.size();
+  if (!n) return false;
+  const int title = gfx::lineHeight(gfx::TITLE) + u(14), nh = gfx::lineHeight(gfx::NUM), gap = u(6);
+  w = W() - DRIFT(), h = gfx::height() - DRIFT();
+  if (measure) return true;
+  const int bar = (w - (n - 1) * gap) / n, bh = h - title - u(14) - nh;
+  float peak = 0.1f;
+  for (JsonArrayConst d : hist) peak = max(peak, (float)d[2]);
+  text("14 dias", x0, y0, gfx::TITLE, REST_MUTED, top_left, 0);
+  for (int i = 0; i < n; i++) {
+    const int bhi = max(u(4), (int)(bh * (float)hist[i][2] / peak)), x = x0 + i * (bar + gap);
+    gfx::fb().fillSmoothRoundRect(x, y0 + title + bh - bhi, bar, bhi, min(bar / 3, u(5)), i == n - 1 ? ACCENT : 0x4208);
+  }
+  char buf[24];
+  snprintf(buf, sizeof buf, "hoje %.1fM", (float)hist[n - 1][2]);
+  String s = buf;
+  s.replace('.', ',');
+  text(s.c_str(), x0, y0 + title + bh + u(14), gfx::NUM, REST_TEXT, top_left, 0);
+  return true;
+}
+}  // namespace
+
+void drawSaver() {
+  gfx::clear(0);
+  const uint32_t slot = millis() / REST_MS;
+  const uint32_t rnd = (slot + 1) * 2654435761u;  // posição nova a cada troca, espalhada pela tela
+  auto place = [&](int w, int h, int& x, int& y) {
+    x = (int)(rnd % max(1, W() - w)), y = (int)(rnd / 7 % max(1, gfx::height() - h));
+  };
+  int x, y, w, h;
+  if (!app::hasData() || millis() - app::lastFrameMs > 60000) {  // o mascote tentando ligar o cabo
+    const char* s = "sem dados do Mac";
+    const int px = u(6), mw = mascot::W_OFFLINE * px, gap = u(14), th = gfx::lineHeight(gfx::LABEL);
+    place(mw, 10 * px + gap + th, x, y);
+    mascot::draw(x, y + 2 * px, px, mascot::OFFLINE, 0);
+    return text(s, x + mw / 2, y + 10 * px + gap, gfx::LABEL, 0x6B4D, top_center, 0);
+  }
+  using Page = bool (*)(int, int, bool, int&, int&);
+  static const Page PAGES[] = {restClock, restUsage, restSessions, restModels, restHistory};
+  const uint8_t on = settings::web.restPages ? settings::web.restPages : 1;
+  // a página da vez entre as ligadas; sem dado para ela, a próxima
+  int n = 0;
+  for (int i = 0; i < 5; i++) n += on >> i & 1;
+  for (int k = 0, want = slot % n; k < 5 * 2; k++) {
+    const int i = k % 5;
+    if (!(on >> i & 1)) continue;
+    if (want-- > 0) continue;
+    if (!PAGES[i](0, 0, true, w, h)) continue;
+    place(w, h, x, y);
+    PAGES[i](x, y, false, w, h);
+    return;
+  }
+}
+
+// PWR segurado: o anel enche até a PMU cortar a energia, com o mascote pegando no sono.
+void drawShutdown(float p) {
+  gfx::clear(0);
+  const int cx = W() / 2, cy = gfx::height() / 2, r = W() / 2 - u(30), px = u(7);
+  gfx::ring(cx, cy, r, u(12), p, ORANGE, REST_TRACK, 0);
+  mascot::draw(cx - mascot::W * px / 2, cy - u(70), px, mascot::IDLE, 0);
+  text(p < 1 ? "desligando" : "até logo", cx, cy + u(36), gfx::TITLE, REST_TEXT, middle_center, 0);
+  if (p < 1) text("solte para cancelar", cx, cy + u(66), gfx::SMALL, REST_MUTED, middle_center, 0);
+}
+
 // Sem dados do Mac: o que está funcionando e o que falta, em ordem, com o que fazer em cada caso.
 void drawWaiting() {
   char buf[64];
@@ -397,7 +582,7 @@ void drawWaiting() {
   const bool land = L();
   const int lw = land ? W() * 2 / 5 : W(), lcx = lw / 2, px = u(8);
   const int sx = land ? lw + u(8) : M(), sw = W() - M() - sx;  // coluna dos passos
-  mascot::draw(lcx - mascot::W * px / 2, u(land ? 76 : 70), px, mascot::IDLE, BG);
+  mascot::draw(lcx - mascot::W_OFFLINE * px / 2, u(land ? 76 : 70), px, mascot::OFFLINE, BG);
   text("sem dados do Mac", lcx, u(land ? 178 : 172), gfx::TITLE, TEXT, middle_center);
   const bool usb = hostlink::usbPlugged(), port = usb && hostlink::portOpen();
   const uint32_t id = hostlink::lastIdMs();
@@ -741,90 +926,215 @@ void drawHistory(bool live, int page, int sel) {
   dots(page);
 }
 
-// Ajustes: o nome em cima e as opções num controle segmentado embaixo. Em pé, um por linha na largura
-// toda; deitada, os de 4 opções na largura toda e os outros em duas colunas, para caber em 320 px.
+// Ajustes, como no celular: uma lista de grupos com o valor de agora e "›"; o toque abre o grupo, com
+// o nome em cima e as opções num controle segmentado embaixo. Deitada, os controles de até 3 opções
+// ficam em duas colunas, para caber em 320 px. Toque no título do grupo volta para a lista.
 namespace {
+enum Kind : uint8_t { SEG, MASK, CYCLE };  // um valor; vários ligados (bits); um entre muitos, com ‹ ›
 struct Row {
   const char* name;
   uint8_t* value;
-  const char* opts[4];
+  const char* opts[5];
   uint8_t count;
+  Kind kind = SEG;
 };
 int SET_Y() { return u(L() ? 58 : 62); }
 int ROW_H() { return u(L() ? 62 : 68); }
 int SEG_TOP() { return below(gfx::SMALL, 20); }
 int SEG_H() { return u(38); }
 
-Row settingRows[] = {
-    {"Brilho", &settings::v.bright, {"25%", "50%", "75%", "100%"}, 4},
-    {"Escurecer quando parada", &settings::v.idle, {"5 min", "10 min", "30 min", "nunca"}, 4},
-    {"Tema", &settings::v.theme, {"auto", "claro", "escuro"}, 3},
-    // 4 rotações (ESP32-2432S028R): o cabo pode sair por qualquer lado. Em graus, porque "vertical invertida"
-    // não cabe no botão
-    board::ROTATIONS == 4 ? Row{"Tela", &settings::v.orient, {"0°", "90°", "180°", "270°"}, 4}
-                          : Row{"Tela", &settings::v.orient, {"vertical", "horizontal"}, 2},
-    {"Custo em US$", &settings::v.hideCost, {"mostrar", "ocultar"}, 2},
-};
-constexpr int ROWS = sizeof settingRows / sizeof *settingRows;
+// Som do alerta, no controle: 0 desligado, 1 a 3 o volume (settings::web.alerts e .volume).
+uint8_t soundLevel = 0;
 
-// Onde fica o item i (o nome em y, o controle em y + SEG_TOP). O item ROWS são os botões Conta e Sobre.
-Cell cell(int i) {
-  const int full = W() - 2 * M();
-  if (!L()) return {M(), SET_Y() + i * ROW_H() + (i == ROWS ? u(4) : 0), full};
-  const int gap = u(12), half = (full - gap) / 2;
-  static const int8_t ROW[] = {0, 1, 2, 2, 3, 3}, COL[] = {-1, -1, 0, 1, 0, 1};  // -1: largura toda
-  const int y = SET_Y() + ROW[i] * ROW_H();
-  return COL[i] < 0 ? Cell{M(), y, full} : Cell{M() + COL[i] * (half + gap), y, half};
+Row screenRows[] = {
+    {"Brilho", &settings::v.bright, {"25%", "50%", "75%", "100%"}, 4},
+    // OLED não tem "nunca": parada, ela precisa do descanso para não marcar
+    {"Escurecer quando parada", &settings::v.idle, {"5 min", "10 min", "30 min", "nunca"}, board::PROFILE.oled ? 3 : 4},
+    {"Tema", &settings::v.theme, {"auto", "claro", "escuro"}, 3},
+    {"Custo em US$", &settings::v.hideCost, {"mostrar", "ocultar"}, 2},
+    // a última, porque com IMU a tela gira sozinha e a linha some. 4 rotações (ESP32-2432S028R): o cabo
+    // pode sair por qualquer lado; em graus, porque "vertical invertida" não cabe no botão
+    board::ROTATIONS == 4 ? Row{"Posição", &settings::v.orient, {"0°", "90°", "180°", "270°"}, 4}
+                          : Row{"Posição", &settings::v.orient, {"vertical", "horizontal"}, 2},
+};
+Row soundRows[] = {
+    {"Som do alerta", &soundLevel, {"desligado", "baixo", "médio", "alto"}, 4},
+    {"Som", &settings::web.sound, {}, sound::COUNT, CYCLE},
+};
+Row restRows[] = {
+    {"Relógio", &settings::web.restSecs, {"HH:MM", "HH:MM:SS"}, 2},
+    {"Telas do descanso", &settings::web.restPages, {"relógio", "uso", "sessões", "modelos", "14 dias"}, 5, MASK},
+};
+struct Group {
+  const char* name;
+  Row* rows;
+  uint8_t n;
+};
+const Group GROUPS[] = {
+    {"Tela", screenRows, board::PROFILE.imu ? 4 : 5},
+    {"Som", soundRows, 2},
+    {"Descanso", restRows, 2},
+};
+int group = -1;  // -1: a lista
+
+// Os itens da lista, na ordem: grupos que a placa tem, depois Conta e Sobre.
+enum Item : int8_t { G_SCREEN, G_SOUND, G_REST, ACCOUNT, ABOUT };
+int items(Item* out) {
+  int n = 0;
+  out[n++] = G_SCREEN;
+  if (board::PROFILE.speaker) out[n++] = G_SOUND;
+  if (board::PROFILE.oled) out[n++] = G_REST;
+  out[n++] = ACCOUNT, out[n++] = ABOUT;
+  return n;
+}
+int MASK_LINE() { return u(46); }  // uma opção da lista de interruptores
+int rowHeight(const Row& r) { return r.kind == MASK ? SEG_TOP() + r.count * MASK_LINE() : ROW_H(); }
+int listRowH(int n) { return min(u(72), (gfx::height() - SET_Y() - M()) / n); }
+
+// Onde fica a linha i do grupo (o nome em y, o controle em y + SEG_TOP). Deitada, duas seguidas de até 3
+// opções dividem a linha.
+Cell cell(const Group& g, int i) {
+  const int full = W() - 2 * M(), gap = u(12), half = (full - gap) / 2;
+  int line = 0, col = -1;
+  for (int k = 0; k <= i; k++) {
+    const bool small = L() && g.rows[k].count <= 3 && g.rows[k].kind == SEG;
+    if (k > 0) line += !(small && col == 0) ? 1 : 0;
+    col = small ? (col == 0 ? 1 : 0) : -1;
+    if (small && col == 0 && !(k + 1 < g.n && g.rows[k + 1].count <= 3 && g.rows[k + 1].kind == SEG)) col = -1;
+  }
+  int y = SET_Y() + line * ROW_H();
+  for (int k = 0; k < i; k++)  // a lista de interruptores é mais alta que uma linha comum
+    if (g.rows[k].kind == MASK) y += rowHeight(g.rows[k]) - ROW_H();
+  return col < 0 ? Cell{M(), y, full} : Cell{M() + col * (half + gap), y, half};
+}
+
+void summary(Item it, char* buf, size_t n) {
+  const auto& v = settings::v;
+  const auto& w = settings::web;
+  static const char* BRIGHT[] = {"25%", "50%", "75%", "100%"};
+  static const char* THEME[] = {"auto", "claro", "escuro"};
+  static const char* VOL[] = {"", "baixo", "médio", "alto"};
+  static const char* PAGE[] = {"relógio", "uso", "sessões", "modelos", "14 dias"};
+  switch (it) {
+    case G_SCREEN: snprintf(buf, n, "%s · %s", BRIGHT[min<int>(v.bright, 3)], THEME[min<int>(v.theme, 2)]); break;
+    case G_SOUND:
+      if (w.alerts & 2) snprintf(buf, n, "%s · %s", sound::NAMES[w.sound], VOL[w.volume]);
+      else strlcpy(buf, "desligado", n);
+      break;
+    case G_REST: {
+      buf[0] = 0;
+      for (int i = 0; i < 5; i++)
+        if (w.restPages >> i & 1) snprintf(buf + strlen(buf), n - strlen(buf), "%s%s", buf[0] ? ", " : "", PAGE[i]);
+      break;
+    }
+    case ACCOUNT: strlcpy(buf, app::frame["org"] | "", n); break;
+    default: strlcpy(buf, hostlink::firmware(), n);
+  }
+}
+
+void drawRow(const Row& r, Cell c, uint16_t track) {
+  const int sy = c.y + SEG_TOP(), sh = SEG_H();
+  text(r.name, c.x, c.y, gfx::SMALL, MUTED);
+  fb().fillSmoothRoundRect(c.x, sy, c.w, sh, sh / 2, track);
+  if (r.kind == CYCLE) {  // ‹ nome ›: os lados trocam
+    text("‹", c.x + u(18), sy + sh / 2, gfx::TITLE, ACCENT, middle_center, track);
+    text(sound::NAMES[*r.value], c.x + c.w / 2, sy + sh / 2, gfx::SMALL, TEXT, middle_center, track);
+    text("›", c.x + c.w - u(18), sy + sh / 2, gfx::TITLE, ACCENT, middle_center, track);
+    return;
+  }
+  if (r.kind == MASK) {  // uma opção por linha, com o interruptor à direita
+    fb().fillSmoothRoundRect(c.x, sy, c.w, r.count * MASK_LINE() - u(6), u(12), track);
+    for (int k = 0; k < r.count; k++) {
+      const int ly = sy + k * MASK_LINE(), mid = ly + (MASK_LINE() - u(6)) / 2;
+      const bool on = *r.value >> k & 1;
+      text(r.opts[k], c.x + u(14), mid, gfx::LABEL, TEXT, middle_left, track);
+      const int sw = u(44), sh2 = u(24), sx = c.x + c.w - u(14) - sw;
+      fb().fillSmoothRoundRect(sx, mid - sh2 / 2, sw, sh2, sh2 / 2, on ? ACCENT : blend(track, TEXT, 0.25f));
+      fb().fillSmoothCircle(on ? sx + sw - sh2 / 2 : sx + sh2 / 2, mid, sh2 / 2 - u(3), on ? BG : MUTED);
+      if (k < r.count - 1) fb().drawFastHLine(c.x + u(14), ly + MASK_LINE() - u(3), c.w - u(28), BG);
+    }
+    return;
+  }
+  for (int k = 0; k < r.count; k++) {
+    // bordas calculadas do mesmo jeito para todos: segmentos de largura igual, texto no centro
+    const int x0 = c.x + c.w * k / r.count, x1 = c.x + c.w * (k + 1) / r.count;
+    const bool on = r.kind == MASK ? *r.value >> k & 1 : *r.value == k;
+    if (on) fb().fillSmoothRoundRect(x0 + 3, sy + 3, x1 - x0 - 6, sh - 6, (sh - 6) / 2, ACCENT);
+    text(r.opts[k], (x0 + x1) / 2, sy + sh / 2, gfx::SMALL, on ? BG : TEXT, middle_center, on ? ACCENT : track);
+  }
 }
 }  // namespace
 
+void settingsHome() { group = -1; }
+
 void drawSettings(bool live) {
   gfx::clear();
-  header(live, "ajustes");
   const uint16_t track = blend(BG, TRACK, 0.7f);
-  for (int i = 0; i < ROWS; i++) {
-    const Row& r = settingRows[i];
-    const Cell c = cell(i);
-    const int sy = c.y + SEG_TOP(), sh = SEG_H();
-    text(r.name, c.x, c.y, gfx::SMALL, MUTED);
-    fb().fillSmoothRoundRect(c.x, sy, c.w, sh, sh / 2, track);
-    for (int k = 0; k < r.count; k++) {
-      // bordas calculadas do mesmo jeito para todos: segmentos de largura igual, texto no centro
-      const int x0 = c.x + c.w * k / r.count, x1 = c.x + c.w * (k + 1) / r.count;
-      const bool on = *r.value == k;
-      if (on) fb().fillSmoothRoundRect(x0 + 3, sy + 3, x1 - x0 - 6, sh - 6, (sh - 6) / 2, ACCENT);
-      text(r.opts[k], (x0 + x1) / 2, sy + sh / 2, gfx::SMALL, on ? BG : TEXT, middle_center, on ? ACCENT : track);
-    }
+  soundLevel = settings::web.alerts & 2 ? settings::web.volume : 0;
+  if (group >= 0) {
+    const Group& g = GROUPS[group];
+    char title[32];
+    snprintf(title, sizeof title, "‹ %s", g.name);
+    header(live, title);
+    for (int i = 0; i < g.n; i++) drawRow(g.rows[i], cell(g, i), track);
+    return;
   }
-  // dois botões lado a lado: a conta (org) e o Sobre. Deitada eles ficam na altura dos controles.
-  const Cell c = cell(ROWS);
-  const uint16_t btn = blend(BG, TRACK, 0.7f);
-  const int half = (c.w - u(8)) / 2, ay = L() ? c.y + SEG_TOP() : c.y, bh = L() ? SEG_H() : u(44);
-  const char* org = app::frame["org"] | "Conta";
-  fb().fillSmoothRoundRect(c.x, ay, half, bh, u(10), btn);
-  text(gfx::textWidth(org, gfx::LABEL) <= half - u(40) ? org : "Conta", c.x + u(14), ay + bh / 2, gfx::LABEL, TEXT, middle_left, btn);
-  text("›", c.x + half - u(12), ay + bh / 2, gfx::TITLE, MUTED, middle_right, btn);
-  fb().fillSmoothRoundRect(c.x + half + u(8), ay, half, bh, u(10), btn);
-  text("Sobre", c.x + half + u(22), ay + bh / 2, gfx::LABEL, TEXT, middle_left, btn);
-  text("›", c.x + c.w - u(12), ay + bh / 2, gfx::TITLE, MUTED, middle_right, btn);
+  header(live, "ajustes");
+  Item list[5];
+  const int n = items(list), rh = listRowH(n), w = W() - 2 * M();
+  static const char* NAMES[] = {"Tela", "Som", "Descanso", "Conta", "Sobre"};
+  char buf[48];
+  for (int i = 0; i < n; i++) {
+    const int y = SET_Y() + i * rh, h = rh - u(8);
+    fb().fillSmoothRoundRect(M(), y, w, h, u(10), track);
+    text(NAMES[list[i]], M() + u(14), y + h / 2, gfx::LABEL, TEXT, middle_left, track);
+    text("›", M() + w - u(12), y + h / 2, gfx::TITLE, MUTED, middle_right, track);
+    summary(list[i], buf, sizeof buf);
+    const int room = w - u(60) - gfx::textWidth(NAMES[list[i]], gfx::LABEL);
+    text(fit(buf, gfx::SMALL, room).c_str(), M() + w - u(32), y + h / 2, gfx::SMALL, MUTED, middle_right, track);
+  }
 }
 
-// Toque nos ajustes: 0 trocou um ajuste, 1 abriu o Sobre, 2 abriu a Conta, -1 nada aqui
+// Toque nos ajustes: 0 trocou um ajuste (ou abriu/fechou um grupo), 1 abriu o Sobre, 2 abriu a Conta, -1 nada
 int settingsTap(int x, int y) {
-  for (int i = 0; i <= ROWS; i++) {
-    const Cell c = cell(i);
-    const bool buttons = i == ROWS;
-    const bool tall = buttons && !L();  // em pé, os botões ficam numa linha própria, sem nome em cima
-    const int top = tall ? c.y : c.y + SEG_TOP();
-    const int h = tall ? u(44) : SEG_H();
-    if (x < c.x || x >= c.x + c.w || y < top - 6 || y > top + h + 4) continue;
-    if (buttons) return x < c.x + c.w / 2 ? 2 : 1;
-    Row& r = settingRows[i];
-    const int k = min<int>((x - c.x) * r.count / c.w, r.count - 1);
-    const bool turned = r.value == &settings::v.orient && *r.value != k;
-    *r.value = k;
+  if (group < 0) {
+    Item list[5];
+    const int n = items(list), rh = listRowH(n);
+    const int i = (y - SET_Y()) / rh;
+    if (y < SET_Y() || i >= n || x < M() || x > W() - M()) return -1;
+    if (list[i] == ACCOUNT) return 2;
+    if (list[i] == ABOUT) return 1;
+    group = list[i];
+    return 0;
+  }
+  if (y < SET_Y() - u(4)) return void(group = -1), 0;  // o título: volta para a lista
+  const Group& g = GROUPS[group];
+  for (int i = 0; i < g.n; i++) {
+    const Cell c = cell(g, i);
+    const int top = c.y + SEG_TOP();
+    Row& r = g.rows[i];
+    const int bottom = r.kind == MASK ? top + r.count * MASK_LINE() : top + SEG_H() + 4;
+    if (x < c.x || x >= c.x + c.w || y < top - 6 || y > bottom) continue;
+    auto& web = settings::web;
+    if (r.kind == CYCLE) {
+      *r.value = (*r.value + (x - c.x < c.w / 3 ? r.count - 1 : 1)) % r.count;
+    } else {
+      const int k = r.kind == MASK ? constrain((y - top) / MASK_LINE(), 0, r.count - 1)
+                                   : min<int>((x - c.x) * r.count / c.w, r.count - 1);
+      if (r.kind == MASK) {
+        if ((*r.value ^ 1 << k) & 31) *r.value ^= 1 << k;  // ao menos uma tela fica ligada
+      } else if (r.value == &soundLevel) {
+        web.alerts = k ? web.alerts | 2 : web.alerts & ~2;
+        if (k) web.volume = k;
+      } else {
+        const bool turned = r.value == &settings::v.orient && *r.value != k;
+        *r.value = k;
+        if (turned) gfx::setRotation(k), anim::reset();
+      }
+    }
     settings::save();
-    if (turned) gfx::setRotation(k), anim::reset();
+    settings::saveWeb();
+    if (group == G_SOUND && web.alerts & 2) board::play(web.sound, settings::volumePct());  // a prévia
     return 0;
   }
   return -1;

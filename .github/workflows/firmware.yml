@@ -39,6 +39,7 @@ jobs:
         include:  # o ESP32 clássico tem o bootloader em 0x1000; o S3, em 0x0
           - {board: guition-jc3248w535, chip: esp32s3, boot: "0x0"}
           - {board: waveshare-s3-lcd-147b, chip: esp32s3, boot: "0x0"}
+          - {board: waveshare-amoled-216, chip: esp32s3, boot: "0x0"}
           - {board: cyd-2432s028r, chip: esp32, boot: "0x1000"}
           - {board: smalltv-ultra, chip: esp8266}
     steps:

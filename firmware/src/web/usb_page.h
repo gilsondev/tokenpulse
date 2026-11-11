@@ -25,8 +25,20 @@ static const char USB_PAGE[] PROGMEM = R"HTML(<!doctype html>
 <label>Modelos de hoje <input type=checkbox name=models></label>
 <label>Histórico de 14 dias <input type=checkbox name=history></label>
 </section>
+<section id=rest hidden><h2>Descanso</h2>
+<p class=hint>Parada, a tela OLED troca o painel por versões resumidas, que mudam de lugar para não marcar o vidro.</p>
+<label>Relógio <select name=restSecs><option value=0>HH:MM<option value=1>HH:MM:SS</select></label>
+<label>Relógio <input type=checkbox name=rp0></label>
+<label>Uso (5h e semana) <input type=checkbox name=rp1></label>
+<label>Sessões <input type=checkbox name=rp2></label>
+<label>Modelos de hoje <input type=checkbox name=rp3></label>
+<label>Histórico de 14 dias <input type=checkbox name=rp4></label>
+</section>
 <section><h2>Alertas</h2>
 <label>Sessão pedindo aprovação: abrir as sessões e pulsar o brilho <input type=checkbox name=alerts></label>
+<label id=srow hidden>Sessão pedindo aprovação: tocar um som <input type=checkbox name=beep></label>
+<label id=prow hidden>Som <span><select name=sound id=snd></select> <button id=play type=button>ouvir</button></span></label>
+<label id=vrow hidden>Volume <select name=volume><option value=1>baixo<option value=2>médio<option value=3>alto</select></label>
 </section>
 <section><h2>Rede</h2>
 <label>Nome na rede <span><input type=text name=host size=14 pattern="[a-z0-9\-]{1,31}">.local</span></label>
@@ -48,7 +60,8 @@ let host='';
 async function state(){
   const s=await(await fetch('/api/state',{cache:'no-store'})).json();
   $('sub').textContent=s.board+' em http://'+s.host+'.local';
-  $('orow').hidden=s.imu;
+  $('orow').hidden=s.imu;$('rest').hidden=!s.oled;$('srow').hidden=$('prow').hidden=$('vrow').hidden=!s.speaker;
+  if(s.sounds&&!f.sound.options.length)s.sounds.forEach((n,i)=>f.sound.add(new Option(n,i)));
   for(const o of f.orient.options)if(o.value>1)o.hidden=s.rotations<4;
   const rows=[['Firmware',s.fw],['Agente (tokend)',s.agent||'ainda não falou com a placa'],['Endereço','http://'+s.host+'.local'],
     ['IP',s.ip||'—'],['Rede',s.ssid?s.ssid+' ('+s.rssi+' dBm)':'sem WiFi'],['Último dado',ago(s.frame)],
@@ -61,14 +74,14 @@ async function state(){
 state().then(s=>{
   const c=s.cfg;host=c.host;
   for(const k of['bright','idle','theme','orient','interval'])f[k].value=c[k];
-  f.hideCost.checked=!!c.hideCost;f.alerts.checked=!!c.alerts;f.host.value=c.host;
+  f.hideCost.checked=!!c.hideCost;f.alerts.checked=!!(c.alerts&1);f.beep.checked=!!(c.alerts&2);f.sound.value=c.sound;f.volume.value=c.volume;f.restSecs.value=c.restSecs;for(let i=0;i<5;i++)f['rp'+i].checked=!!(c.restPages>>i&1);f.host.value=c.host;
   f.sessions.checked=!!(c.pages&1);f.models.checked=!!(c.pages&2);f.history.checked=!!(c.pages&4);
 });
 setInterval(state,5000);
 f.addEventListener('change',async e=>{
   if(e.target.name==='host'&&!f.host.checkValidity())return say('Nome: letras minúsculas, números e hífen.');
   const b=new URLSearchParams({bright:f.bright.value,idle:f.idle.value,theme:f.theme.value,orient:f.orient.value,
-    hideCost:+f.hideCost.checked,interval:f.interval.value,alerts:+f.alerts.checked,host:f.host.value,
+    hideCost:+f.hideCost.checked,interval:f.interval.value,alerts:(f.alerts.checked?1:0)|(f.beep.checked?2:0),sound:f.sound.value||0,volume:f.volume.value||2,restSecs:f.restSecs.value||0,restPages:[0,1,2,3,4].reduce((m,i)=>m|(f['rp'+i].checked?1<<i:0),0)||1,host:f.host.value,
     pages:(f.sessions.checked?1:0)|(f.models.checked?2:0)|(f.history.checked?4:0)});
   const r=await fetch('/api/config',{method:'POST',body:b});
   if(!r.ok)return say(await r.text());
@@ -77,6 +90,7 @@ f.addEventListener('change',async e=>{
   else say('Salvo.');
   host=j.host;
 });
+$('play').onclick=()=>fetch('/api/play',{method:'POST',body:new URLSearchParams({i:f.sound.value})});
 $('rb').onclick=()=>{fetch('/api/reboot',{method:'POST'});say('Reiniciando; a página volta em ~15 s.')};
 $('fg').onclick=()=>{if(!confirm('A placa esquece esta rede e desliga o WiFi. Continuar?'))return;fetch('/api/forget',{method:'POST'});say('WiFi esquecido. A placa segue pelo cabo.')};
 $('pp').onclick=()=>{if(!confirm('A placa volta ao padrão, esquece este WiFi e reinicia. Continuar?'))return;fetch('/api/prepare',{method:'POST'});say('Pronta para entrega. Pode desplugar a placa.')};

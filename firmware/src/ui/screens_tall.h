@@ -7,6 +7,8 @@ namespace screens::tall {
 constexpr int PAGES = 4;  // principal, sessões, modelos, histórico; os ajustes abrem pela engrenagem
 
 void drawWaiting();
+void drawShutdown(float p);  // PWR segurado: p de 0 a 1 até a PMU desligar
+void drawSaver();   // OLED parada: só o relógio, em cinza sobre preto, mudando de lugar a cada minuto
 void drawInstall();  // QR code da página /comecar, para quem ainda não instalou o daemon
 void drawMain(bool live, int page);
 void drawSessions(bool live, int page, int ws, int scroll);  // ws -1: lista de workspaces
@@ -14,6 +16,7 @@ void drawModels(bool live, int page);
 void drawModelDetail(bool live, int page, int idx);
 void drawHistory(bool live, int page, int sel);
 void drawSettings(bool live);
+void settingsHome();  // os ajustes abrem na lista de grupos
 void drawAbout(bool live, bool armed);
 void drawWeb(bool live);  // QR da página web, ou do WiFi da placa para configurá-la
 void drawAccount(bool live);

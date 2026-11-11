@@ -11,9 +11,23 @@
 #include "ui/gfx.h"
 #include "ui/screens.h"
 
+#ifdef BOARD_HAS_PSRAM
+// O VLW de 120 px do descanso estoura os 8 KB padrão da loopTask; com PSRAM a RAM interna sobra.
+SET_LOOP_TASK_STACK_SIZE(16 * 1024);
+#endif
+
 namespace {
 
 constexpr int16_t TILT_MIN = 9000;  // ~0,55 g no plano da tela; abaixo disso a placa está deitada
+
+// Lado para onde a gravidade aponta (0 +X, 1 -X, 2 +Y, 3 -Y), ou -1 deitada ou na diagonal.
+int gravitySide() {
+  int16_t x, y;
+  if (!board::gravity(x, y)) return -1;
+  if (abs(x) > TILT_MIN && abs(x) > abs(y) * 3 / 2) return x > 0 ? 0 : 1;
+  if (abs(y) > TILT_MIN && abs(y) > abs(x) * 3 / 2) return y > 0 ? 2 : 3;
+  return -1;
+}
 
 // Gira a tela pela gravidade. Lê a cada 150 ms e só gira depois de 3 leituras iguais, para não piscar.
 void checkOrientation() {
@@ -21,16 +35,12 @@ void checkOrientation() {
   static int candidate = -1, count = 0;
   if (millis() - lastMs < 150) return;
   lastMs = millis();
-  int16_t x, y;
-  if (!board::gravity(x, y)) return;
-  int side = -1;
-  if (abs(x) > TILT_MIN && abs(x) > abs(y) * 3 / 2) side = x > 0 ? 0 : 1;
-  if (abs(y) > TILT_MIN && abs(y) > abs(x) * 3 / 2) side = y > 0 ? 2 : 3;
+  const int side = gravitySide();
   if (side < 0) return;  // deitada ou na diagonal: mantém a rotação atual
   count = side == candidate ? count + 1 : 1;
   candidate = side;
   if (count == 3 && board::ROT_FOR[side] != gfx::rotation()) {
-    Serial.printf("gira: lado=%d rot=%d acc=%d,%d\n", side, board::ROT_FOR[side], x, y);
+    Serial.printf("gira: lado=%d rot=%d\n", side, board::ROT_FOR[side]);
     gfx::setRotation(board::ROT_FOR[side]);
     anim::reset();
   }
@@ -40,14 +50,36 @@ void checkOrientation() {
 void checkButton() {
   static bool down = false;
   static uint32_t downMs = 0;
+  static bool swallow = false;  // aperto que só acendeu a tela
   bool pressed = board::buttonPressed();
-  if (pressed && !down) down = true, downMs = millis(), power::wake();
+  if (pressed && !down) down = true, downMs = millis(), swallow = power::dimmed(), power::wake();
   if (!pressed && down) {
     down = false;
+    if (swallow) return;
     uint32_t held = millis() - downMs;
     if (held > 700) screens::home();
     else if (held > 30) screens::next();
   }
+}
+
+// PWR: um toque entra no descanso ou sai dele; segurar desliga.
+constexpr uint32_t SHUT_MS = 2000;  // PWR segurado: a tela avisa a partir de 0,5 s e desliga aos 2 s
+
+void checkRest() {
+  static bool down = false;
+  static uint32_t downMs = 0;
+  const bool pressed = board::restPressed();
+  if (pressed && !down) downMs = millis();
+  if (pressed) {
+    const uint32_t held = millis() - downMs;
+    screens::shuttingDown(held);
+    if (held > SHUT_MS + 400) board::powerOff();  // o "até logo" fica 0,4 s na tela
+  }
+  if (!pressed && down) {
+    if (millis() - downMs < 500) power::idle() || power::dimmed() ? power::wake() : power::rest();
+    screens::shuttingDown(0);  // soltou antes dos 4 s: cancela
+  }
+  down = pressed;
 }
 
 // Gestos: arrastar para os lados troca de tela, para cima/baixo rola, da borda de baixo para cima volta
@@ -91,7 +123,13 @@ void setup() {
   settings::begin();
   gfx::begin();
   board::begin();
-  if (settings::v.orient) gfx::setRotation(settings::v.orient);
+  if (board::PROFILE.imu) {  // já na posição em que a placa está, desde a abertura
+    int side = -1;
+    for (uint32_t t0 = millis(); side < 0 && millis() - t0 < 300; delay(20)) side = gravitySide();
+    if (side >= 0) gfx::setRotation(board::ROT_FOR[side]);
+  } else if (settings::v.orient) {
+    gfx::setRotation(settings::v.orient);
+  }
   screens::bootSplash();
   // touch resistivo sem calibração gravada: calibra antes de tudo, senão os toques caem longe da caneta
   if (board::PROFILE.calibrate && !settings::cal.ok) screens::calibrateTouch();
@@ -102,6 +140,7 @@ void loop() {
   static uint32_t lastRenderMs = 0;
   if (board::PROFILE.imu) checkOrientation();
   if (board::PROFILE.button) checkButton();
+  checkRest();
   if (board::PROFILE.touch) checkTouch();
   hostlink::poll();
   webui::loop();

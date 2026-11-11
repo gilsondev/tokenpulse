@@ -125,6 +125,7 @@ envio da tela em paralelo no segundo núcleo (~30 fps). As ações que a placa p
 | [Guition JC3248W535](https://www.atomic14.com/esp32/boards/guition-jc3248w535/) (ESP32-S3 N16R8) | 3,5" IPS 320×480, AXS15231B QSPI | capacitivo | — | `guition-jc3248w535` (padrão) |
 | [ESP32-2432S028R](https://github.com/witnessmenow/ESP32-Cheap-Yellow-Display), a "Cheap Yellow Display" (ESP32 sem PSRAM) | 2,8" 240×320, ST7789 | resistivo | LED RGB na cor da faixa | `cyd-2432s028r` |
 | [Waveshare ESP32-S3-LCD-1.47B](https://www.waveshare.com/wiki/ESP32-S3-LCD-1.47B) | 1,47" 172×320, ST7789 | — (botão BOOT) | IMU (gira sozinha), LED RGB na cor da faixa | `waveshare-s3-lcd-147b` |
+| [Waveshare ESP32-S3-Touch-AMOLED-2.16](https://docs.waveshare.com/ESP32-S3-Touch-AMOLED-2.16) | 2,16" AMOLED 480×480, CO5300 QSPI | capacitivo | IMU (gira sozinha), alto-falante, botões KEY3 e PWR (desliga), descanso contra burn-in | `waveshare-amoled-216` |
 | GeekMagic SmallTV-Ultra (ESP8266, 4 MB, sem PSRAM) | 1,54" 240×240, ST7789 | — | telas que passam sozinhas, dados e OTA pelo WiFi, página de configuração | `smalltv-ultra` |
 
 **SmallTV-Ultra.** O USB-C dele só alimenta, e o ESP8266 tem ~40 KB de heap: roda uma versão mínima à parte
@@ -163,7 +164,8 @@ A UI não pergunta o nome da placa. Ela decide por duas coisas:
   bitmap e navegação por swipe ou botão. De 220 a 299 px é média e acima disso é grande. As duas têm todas
   as telas, os toques e a engrenagem; a média escala o layout pela altura e usa fontes de 12 a 40 px.
 - **O perfil** (`board::PROFILE`, em [`boards/profile.h`](firmware/src/boards/profile.h)): `touch`, `calibrate`
-  (touch resistivo), `imu` (gira sozinha), `led` (alerta de faixa) e `button`. A PSRAM é lida em tempo de execução: sem ela, a tela é
+  (touch resistivo), `imu` (gira sozinha), `led` (alerta de faixa), `button`, `speaker` (som no alerta de
+  aprovação), `oled` (descanso e deslocamento contra burn-in) e `dense` (cabeçalho um tamanho acima). A PSRAM é lida em tempo de execução: sem ela, a tela é
   desenhada em duas faixas de meia altura, a troca de tela não desliza e o texto não fica em cache.
 
 | Placa | Classe | touch | calibrate | imu | led | button | PSRAM |
@@ -171,12 +173,20 @@ A UI não pergunta o nome da placa. Ela decide por duas coisas:
 | Guition JC3248W535 | grande | sim | — | — | — | sim | 8 MB |
 | ESP32-2432S028R | média | sim | sim | — | sim | sim | — |
 | Waveshare 1,47" | compacta | — | — | sim | sim | sim | 8 MB |
+| Waveshare AMOLED 2,16" | grande | sim | — | sim | — | sim | 8 MB |
 
 Touch resistivo (`calibrate`): na primeira vez a placa pede quatro toques com a caneta, um em cada canto, e
 guarda a calibração na memória dela, que sobrevive a reinício e OTA. Para refazer: Ajustes → Sobre →
 **calibrar o toque**. A leitura só vale com pressão firme e é a mediana de 5 amostras, para tirar os pulos.
 
 A tela Sobre mostra a placa, o perfil e a memória de quem está rodando.
+
+**AMOLED 2,16".** A interface ocupa o quadrado de 424 px do meio: os cantos do vidro são redondos. Tela OLED
+marca com imagem parada, então a imagem inteira anda até 6 px por minuto e, parada, a placa entra no
+descanso: fundo preto e versões resumidas das telas (relógio flip, anel de uso, sessões, modelos e 14 dias),
+uma a cada 15 s, cada uma num lugar novo. Em Ajustes → Descanso dá para escolher as telas e o relógio com ou sem
+segundos. Uma sessão pedindo aprovação toca um som (8 opções, com volume, em Ajustes → Som ou na página web). O
+KEY3 avança a tela; o PWR entra e sai do descanso e, segurado por 2 s, desliga a placa.
 
 **Em pé ou deitada** (Ajustes → Tela): as placas com touch têm uma versão horizontal de cada tela. O anel
 vai para a esquerda, as sessões ficam em 3 colunas e os ajustes, o Sobre e a troca de org em 2. O toque gira
@@ -352,5 +362,9 @@ Waveshare de 1,47", em OpenSCAD, inspirado no
 ## Créditos
 
 [LovyanGFX](https://github.com/lovyan03/LovyanGFX), [Arduino_GFX](https://github.com/moononournation/Arduino_GFX),
-[ArduinoJson](https://arduinojson.org/) e a fonte [Inter](https://rsms.me/inter/) (SIL OFL 1.1,
-`firmware/tools/fonts/OFL.txt`). Feito com o Claude Code.
+[ArduinoJson](https://arduinojson.org/), [SensorLib](https://github.com/lewisxhe/SensorLib), a fonte
+[Inter](https://rsms.me/inter/) (SIL OFL 1.1, `firmware/tools/fonts/OFL.txt`) e os sons do
+[Interface Sounds](https://kenney.nl/assets/interface-sounds), da [Kenney](https://www.kenney.nl) (CC0,
+`firmware/data/sounds/LICENSE-kenney.txt`). O driver do ES8311 em `firmware/lib/ES8311` é da Espressif
+(Apache-2.0), e a configuração do áudio e da PMU da AMOLED veio do
+[claude-desktop-buddy-esp32](https://github.com/vthinkxie/claude-desktop-buddy-esp32) (MIT). Feito com o Claude Code.

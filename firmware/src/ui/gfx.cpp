@@ -359,6 +359,10 @@ void text(const char* s, int x, int y, Font f, uint16_t c, uint8_t datum, uint16
   blit(hit->spr, x - hit->ax, y - hit->ay, __builtin_bswap16(bg));
 }
 
+void fontOn(LGFX_Sprite& s, Font f) {
+  if (full() && vlwOk) s.setFont(&(uiClass == MEDIUM ? vlwM : vlw)[f].font);
+}
+
 int textWidth(const char* s, Font f) {
   setFont(f);
   return S().textWidth(s);

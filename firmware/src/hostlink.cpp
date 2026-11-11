@@ -4,6 +4,8 @@
 #include <Update.h>
 
 #include "app.h"
+#include "power.h"
+#include "settings.h"
 #include "boards/board.h"
 #include "ui/anim.h"
 #include "ui/gfx.h"
@@ -32,10 +34,11 @@ void runOta(size_t size, const char* md5) {
   for (int block = 0; done < size; block++) {
     size_t n = Serial.readBytes(chunk, min(sizeof chunk, size - done));
     if (n == 0 || Update.write(chunk, n) != n) {
+      if (n) Serial.printf("ERRO ota write em %u B: %s\n", done, Update.errorString());
       Update.abort();
       Serial.setTimeout(50);
       gfx::loading(gfx::FAIL, "atualizando firmware", "falhou, mantendo a versão atual", (float)done / size, color::RED);
-      return (void)Serial.printf("ERRO ota write em %u B\n", done);
+      return (void)Serial.printf("ERRO ota write em %u B: %s\n", done, n ? Update.errorString() : "3 s sem dados na serial");
     }
     done += n;
     Serial.println("OK");
@@ -78,8 +81,15 @@ void handle(const String& line) {
   } else if (line.startsWith("page ")) {
     screens::goTo(line.substring(5).toInt());
   } else if (line.startsWith("tap ")) {
+    power::wake();  // como um toque de verdade: tira do descanso
     const int sp = line.indexOf(' ', 4);
     screens::tap(line.substring(4, sp).toInt(), line.substring(sp + 1).toInt());
+  } else if (line == "rest") {  // descanso na hora, para testar e capturar
+    power::rest();
+  } else if (line.startsWith("play ")) {  // prévia de um som do alerta (sound.h)
+    board::play(line.substring(5).toInt(), settings::volumePct());
+  } else if (line == "offline") {  // a tela de sem dados por 5 s, para screenshot com o daemon rodando
+    screens::offlinePreview();
   } else if (line == "install") {  // a tela do QR de instalação por 5 s, para screenshot com o daemon rodando
     screens::installPreview();
   } else if (line == "splash") {  // redesenha a abertura e a segura 3 s: para screenshot da tela de boot
@@ -106,6 +116,7 @@ void handle(const String& line) {
       return;
     }
     app::frame = std::move(next);
+    app::syncClock(app::frame["t"] | 0);
     app::lastFrameMs = millis();
     anim::onFrame();
   } else if (line.length()) {

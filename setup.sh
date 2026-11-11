@@ -1,16 +1,16 @@
 #!/bin/bash
 # Instala o tokenpulse de uma vez: grava na placa plugada o firmware do último release, pela USB, e liga o
 # daemon no login do macOS. Serve para a primeira vez e para reinstalar (a gravação apaga os ajustes).
-#   ./setup.sh <placa>     guition-jc3248w535, cyd-2432s028r ou waveshare-s3-lcd-147b
+#   ./setup.sh <placa>     guition-jc3248w535, cyd-2432s028r, waveshare-s3-lcd-147b ou waveshare-amoled-216
 set -euo pipefail
 cd "$(dirname "$0")"
 
 board=${1:-}
 case $board in
-  guition-jc3248w535 | waveshare-s3-lcd-147b) chip=esp32s3 ;;
+  guition-jc3248w535 | waveshare-s3-lcd-147b | waveshare-amoled-216) chip=esp32s3 ;;
   cyd-2432s028r) chip=esp32 ;;
   *)
-    echo "uso: ./setup.sh <placa>, com a placa sendo guition-jc3248w535, cyd-2432s028r ou waveshare-s3-lcd-147b" >&2
+    echo "uso: ./setup.sh <placa>, com a placa sendo guition-jc3248w535, cyd-2432s028r, waveshare-s3-lcd-147b ou waveshare-amoled-216" >&2
     exit 1
     ;;
 esac

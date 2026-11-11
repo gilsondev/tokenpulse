@@ -28,6 +28,9 @@
 //   bool gravity(int16_t& x, int16_t& y)  eixos X/Y do acelerômetro; false se não há IMU ou ela não respondeu
 //   void setLed(uint8_t r, uint8_t g, uint8_t b)
 //   bool buttonPressed()
+//   bool restPressed()                    botão de descanso (PWR); as placas sem ele devolvem false
+//   void powerOff()                       desliga a placa (PMU); as placas sem PMU não fazem nada
+//   void play(uint8_t i, uint8_t vol)     toca o som i de sound.h no volume vol (0-100), sem bloquear
 //   bool touch(int16_t& x, int16_t& y)   um dedo na tela, em pixels da tela; false sem touch ou sem toque
 //   bool touchRaw(int16_t& x, int16_t& y) a leitura crua do touch resistivo, para a calibração
 //                                        (PROFILE.calibrate); as outras placas devolvem false
@@ -44,6 +47,8 @@
 #include "guition_jc3248w535.h"
 #elif defined(BOARD_CYD_2432S028R)
 #include "cyd_2432s028r.h"
+#elif defined(BOARD_WAVESHARE_AMOLED_216)
+#include "waveshare_amoled_216.h"
 #else
 #error "Defina a placa no env do platformio.ini, por exemplo -DBOARD_WAVESHARE_S3_LCD_147B"
 #endif

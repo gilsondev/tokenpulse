@@ -58,7 +58,7 @@ void updateLed() {
   float k = !app::live() || p5 < 0 ? 0 : app::stale() ? 0.3f : 1;
   k *= 0.15f + 0.85f * breath(p5 >= 90 ? 1200 : 3200);
   const uint8_t* c = RGB[level(max(p5, 0))];
-  if (app::blocks > 0 && settings::web.alerts) k = breath(800), c = RGB[3];
+  if (app::blocks > 0 && settings::web.alerts & 1) k = breath(800), c = RGB[3];
   uint8_t r = c[0] * k, g = c[1] * k, b = c[2] * k;
   uint32_t packed = r << 16 | g << 8 | b;
   if (packed != last) board::setLed(r, g, b), last = packed;
@@ -275,6 +275,13 @@ uint32_t installUntil = 0;
 // Nos próximos 5 s o render desenha a tela do QR: o screenshot de placa sem PSRAM sai no quadro seguinte, e
 // segurar o quadro atual (como no splash) não servia para ela.
 void installPreview() { installUntil = millis() + 5000; }
+uint32_t offlineUntil = 0;
+uint32_t shutHeldMs = 0;
+void shuttingDown(uint32_t heldMs) {
+  shutHeldMs = heldMs;
+  if (heldMs) power::wake();
+}
+void offlinePreview() { offlineUntil = millis() + 5000; }
 
 // Calibração do touch resistivo: um alvo perto de cada canto, a leitura crua média de cada toque e, dos
 // quatro, a leitura nas bordas da tela. Sem toque em 60 s desiste e fica a calibração que havia.
@@ -365,7 +372,8 @@ void checkApproval() {
     if (n++ == 0) ws = r[5] | -1;
   }
   app::blocks = n;
-  if (last >= 0 && n > last && settings::web.alerts) {
+  if (last >= 0 && n > last && settings::web.alerts & 2 && board::PROFILE.speaker) board::play(settings::web.sound, settings::volumePct());
+  if (last >= 0 && n > last && settings::web.alerts & 1) {
     app::approveMs = millis();
     power::wake();
     if (gfx::full() && !settingsOpen && ws >= 0) {
@@ -382,7 +390,7 @@ void checkApproval() {
 void autoTurn() {
   static uint32_t lastMs = 0;
   const auto& w = settings::web;
-  if (!w.interval || settingsOpen || (w.alerts && app::blocks > 0 && page == 1)) return;
+  if (!w.interval || settingsOpen || (w.alerts & 1 && app::blocks > 0 && page == 1)) return;
   if (millis() - max(power::lastActiveMs(), lastMs) < w.interval * 1000UL) return;
   lastMs = millis();
   // tela cheia: 0 principal, 1 sessões, 2 modelos, 3 histórico; compacta: 0 principal, 1 modelos, 2 projetos
@@ -415,13 +423,18 @@ void render() {
   webDone();
   if (millis() < holdUntil) return;
   power::update();
+  if (shutHeldMs > 500 && gfx::full()) {  // o main desliga a placa aos 2 s
+    const float p = min(1.f, (shutHeldMs - 500) / 1500.f);
+    return gfx::frame([p] { tall::drawShutdown(p); });
+  }
+  if (board::PROFILE.oled && power::idle()) return gfx::frame(tall::drawSaver);
   const bool dark = settings::v.theme == 0 ? (bool)(app::frame["dark"] | true) : settings::v.theme == 2;
   if (dark != color::dark) color::apply(dark);
   if (!gfx::ready()) return board::setLed(breath(800) > 0.5f ? 40 : 0, 0, 0);  // sem canvas: LED vermelho piscando
   if (millis() < installUntil) return gfx::frame([] { gfx::full() ? tall::drawInstall() : drawInstall(); });
   // sem dados há mais de 1 min a tela grande troca os números velhos pelo diagnóstico da conexão
   const bool lost = gfx::full() && app::hasData() && millis() - app::lastFrameMs > 60000;
-  if (!app::hasData() || lost) {
+  if (!app::hasData() || lost || millis() < offlineUntil) {
     board::setLed(0, 0, 0);
     return gfx::frame([] { gfx::full() ? tall::drawWaiting() : drawWaiting(); });
   }
@@ -475,7 +488,7 @@ void tap(int x, int y) {
   }
   if (tall::gearAt(x, y)) {  // engrenagem: abre ou fecha os ajustes
     gfx::slide(settingsOpen ? 1 : -1);
-    settingsOpen = !settingsOpen, about = 0, orgFromHeader = false;
+    settingsOpen = !settingsOpen, about = 0, orgFromHeader = false, tall::settingsHome();
     anim::reset();
     return;
   }

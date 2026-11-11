@@ -11,6 +11,7 @@
 #include "boards/board.h"
 #include "hostlink.h"
 #include "settings.h"
+#include "sound.h"
 #include "ui/anim.h"
 #include "ui/gfx.h"
 #include "web/assets.h"
@@ -56,11 +57,15 @@ void handleState() {
   d["apName"] = ap;
   d["imu"] = board::PROFILE.imu;  // a tela gira sozinha: sem escolha de em pé ou deitada
   d["rotations"] = board::ROTATIONS;
+  d["speaker"] = board::PROFILE.speaker;
+  d["oled"] = board::PROFILE.oled;
+  if (board::PROFILE.speaker)
+    for (const char* s : sound::NAMES) d["sounds"].add(s);
   JsonObject c = d["cfg"].to<JsonObject>();
   const auto& v = settings::v;
   const auto& w = settings::web;
   c["bright"] = v.bright, c["idle"] = v.idle, c["theme"] = v.theme, c["orient"] = v.orient, c["hideCost"] = v.hideCost;
-  c["interval"] = w.interval, c["pages"] = w.pages, c["alerts"] = w.alerts, c["host"] = host();
+  c["interval"] = w.interval, c["pages"] = w.pages, c["alerts"] = w.alerts, c["sound"] = w.sound, c["volume"] = w.volume, c["restSecs"] = w.restSecs, c["restPages"] = w.restPages, c["host"] = host();
   String out;
   serializeJson(d, out);
   server.send(200, "application/json", out);
@@ -90,7 +95,11 @@ void handleConfig() {
   num("hideCost", 0, 1, v.hideCost);
   num("interval", 0, 120, w.interval);
   num("pages", 0, 7, w.pages);
-  num("alerts", 0, 1, w.alerts);
+  num("alerts", 0, 3, w.alerts);
+  num("sound", 0, sound::COUNT - 1, w.sound);
+  num("volume", 1, 3, w.volume);
+  num("restSecs", 0, 1, w.restSecs);
+  num("restPages", 1, 31, w.restPages);
   settings::save();
   settings::saveWeb();
   if (v.orient != orient) gfx::setRotation(v.orient), anim::reset();
@@ -183,6 +192,12 @@ void startServer() {
   });
   server.on("/api/state", HTTP_GET, handleState);
   server.on("/api/config", HTTP_POST, handleConfig);
+  server.on("/api/play", HTTP_POST, [] {  // prévia do som escolhido
+    const int i = server.arg("i").toInt();
+    if (i < 0 || i >= sound::COUNT) return server.send(400);
+    board::play(i, settings::volumePct());
+    server.send(204);
+  });
   server.on("/api/scan", HTTP_GET, handleScan);
   server.on("/api/wifi", HTTP_GET, handleWifiState);
   server.on("/wifi", HTTP_POST, handleWifi);

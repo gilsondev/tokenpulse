@@ -5,9 +5,10 @@
 
 namespace mascot {
 
-enum Mood : uint8_t { WORK, TURN, IDLE, BLOCK };  // BLOCK: esperando você aprovar algo
+enum Mood : uint8_t { WORK, TURN, IDLE, BLOCK, OFFLINE };  // BLOCK: esperando você aprovar algo; OFFLINE: sem dados do Mac
 
 constexpr int W = 12;  // em pixels do sprite; na tela cada um vira um bloco de `px` × `px`
+constexpr int W_OFFLINE = 23;  // com o cabo e a tomada ao lado
 
 // (x, y): canto superior esquerdo; `seed` desencontra a animação de mascotes vizinhos
 void draw(int x, int y, int px, Mood mood, uint16_t bg, uint32_t seed = 0);

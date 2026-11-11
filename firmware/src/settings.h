@@ -19,9 +19,14 @@ extern Values v;
 struct Web {
   uint8_t interval = 0;  // s em cada tela antes de passar sozinha para a próxima; 0 só troca pelo toque
   uint8_t pages = 7;     // telas na volta automática: 1 sessões, 2 modelos, 4 histórico (a principal sempre)
-  uint8_t alerts = 1;    // 1: sessão nova pedindo aprovação abre as sessões e pulsa o brilho
+  uint8_t alerts = 3;    // sessão nova pedindo aprovação: 1 abre as sessões e pulsa o brilho, 2 toca um som
   uint8_t wifi = 0;      // 1: a pessoa configurou o WiFi pela placa; ela entra na rede ao ligar
   char host[32] = "";    // nome na rede (<host>.local); vazio: tokenpulse-<id do chip>
+  uint8_t sound = 0;     // som do alerta (sound.h)
+  uint8_t volume = 2;    // 1 baixo, 2 médio, 3 alto
+  uint8_t restSecs = 1;  // relógio do descanso (OLED): 0 HH:MM, 1 HH:MM:SS
+  uint8_t restPages = 7; // telas do descanso: 1 relógio, 2 uso, 4 sessões, 8 modelos, 16 histórico
+  // campo novo entra sempre no fim: o gravado por um firmware antigo é menor e o resto fica no padrão
 };
 extern Web web;
 void saveWeb();
@@ -42,5 +47,6 @@ void save();   // grava na NVS
 
 uint8_t brightness();       // 0-255 a partir do ajuste
 uint32_t idleMs();          // 0: nunca escurece
+uint8_t volumePct();        // volume do alto-falante, 0-100
 
 }  // namespace settings

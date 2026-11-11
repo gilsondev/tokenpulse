@@ -90,4 +90,8 @@ inline bool buttonPressed() { return digitalRead(PIN_BUTTON) == LOW; }
 inline bool touch(int16_t&, int16_t&) { return false; }
 inline bool touchRaw(int16_t&, int16_t&) { return false; }
 
+inline void play(uint8_t, uint8_t) {}
+inline bool restPressed() { return false; }
+inline void powerOff() {}
+
 }  // namespace board

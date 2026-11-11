@@ -8,6 +8,8 @@ class Qmi8658 {
     wire_ = &wire;
     addr_ = addr;
     wire.begin(sda, scl, 400000);
+    write(0x60, 0xB0);  // reset: sem ele, depois de um reboot quente X e Y podem ficar travados em +2 g
+    delay(15);
     write(0x02, 0x40);  // CTRL1: auto-incremento de endereço, little-endian
     write(0x03, 0x05);  // CTRL2: acelerômetro ±2 g
     write(0x08, 0x01);  // CTRL7: liga o acelerômetro

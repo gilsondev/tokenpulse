@@ -1005,12 +1005,18 @@ def demo_frame():
                  "rows": sessions},
         "hist": hist,
         "p5": DEMO_P5, "r5": "reset às 17h", "pw": 38, "rw": "seg 6h", "wf": 49, "age": 30,
-        "clk": now.strftime("%H:%M"), "org": "Acme Labs", "dark": dark_mode(),
+        "clk": now.strftime("%H:%M"), "t": local_time(), "org": "Acme Labs", "dark": dark_mode(),
         "accts": [[1, "Acme Labs", 1, 0, DEMO_P5, 38, 0], [2, "Side Project", 0, 0, 7, 12, 180]], "act": ["", "", ""],
     }
 
 
 FRAME_MAX = 7500  # o buffer serial da placa tem 8 KB
+
+
+def local_time():
+    """Segundos desde 1970 no fuso do Mac: o relógio das placas mostra a hora com segundos sem saber de fuso."""
+    now = datetime.now().astimezone()
+    return int(now.timestamp() + now.utcoffset().total_seconds())
 
 
 def encode_frame(frame):
@@ -1263,7 +1269,7 @@ def main():
                 usage.poll()
             org_name = org()  # antes de limits(), que depende de saber se a org mudou
             frame = (usage.snapshot() | limits() | account_frame()
-                     | {"clk": datetime.now().strftime("%H:%M"), "org": org_name, "dark": dark_mode(), "agv": AGENT})
+                     | {"clk": datetime.now().strftime("%H:%M"), "t": local_time(), "org": org_name, "dark": dark_mode(), "agv": AGENT})
         _latest["frame"] = frame
         if "--once" in sys.argv:
             print(json.dumps(frame, ensure_ascii=False))
