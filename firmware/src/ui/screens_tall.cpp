@@ -17,6 +17,7 @@ using gfx::fb;
 using gfx::text;
 
 namespace screens::tall {
+int pagesOf(int ws);
 namespace {
 
 int W() { return gfx::width(); }
@@ -30,13 +31,25 @@ int M() { return u(16); }  // margem
 int below(gfx::Font f, int gap) { return max(u(gap), gfx::lineHeight(f)); }  // próxima linha de texto
 
 // Pontos de página no rodapé: todos com 6 px de altura no mesmo eixo; a página atual é uma pílula.
+// Na lista de workspaces cada página de cartões conta uma página; dentro de um workspace, os pontos são só
+// as páginas das sessões dele.
+int shownWs = -1, shownSessPage = 0;
 void dots(int page) {
+  const bool inWs = page == 1 && shownWs >= 0;
+  const int lp = pagesOf(-1);
+  const int n = inWs ? pagesOf(shownWs) : PAGES - 1 + lp;
+  const int at = inWs ? shownSessPage : page == 0 ? 0 : page == 1 ? 1 + shownSessPage : page + lp - 1;
   const int H = u(6), DOT = u(6), PILL = u(18), GAP = u(8);
-  const int total = PILL + (PAGES - 1) * (DOT + GAP), y = gfx::height() - u(14) - H / 2;
+  if (n > 12) {  // muitas páginas de sessões: os pontos não cabem na largura, vai o número
+    char buf[12];
+    snprintf(buf, sizeof buf, "%d/%d", at + 1, n);
+    return text(buf, W() / 2, gfx::height() - u(14), gfx::SMALL, DIM, middle_center);
+  }
+  const int total = PILL + (n - 1) * (DOT + GAP), y = gfx::height() - u(14) - H / 2;
   int x = W() / 2 - total / 2;
-  for (int i = 0; i < PAGES; i++) {
-    const int w = i == page ? PILL : DOT;
-    fb().fillSmoothRoundRect(x, y, w, H, H / 2, i == page ? TEXT : DIM);
+  for (int i = 0; i < n; i++) {
+    const int w = i == at ? PILL : DOT;
+    fb().fillSmoothRoundRect(x, y, w, H, H / 2, i == at ? TEXT : DIM);
     x += w + GAP;
   }
 }
@@ -97,13 +110,21 @@ void gear(int cx, int cy, int r, uint16_t c) {
 }
 
 // Cabeçalho: org e relógio; embaixo modelo, ponto de status e sessões abertas.
-void header(bool live, const char* title, bool dropdown = false) {
+// sub: a linha do modelo e de CLI/Desk embaixo do título. Offline ela sempre aparece: é onde está o aviso.
+void header(bool live, const char* title, bool dropdown = false, bool sub = true) {
   const auto& f = app::frame;
   const gfx::Font HT = board::PROFILE.dense ? gfx::TITLE : gfx::LABEL, HS = board::PROFILE.dense ? gfx::LABEL : gfx::SMALL;
   const char* clk = f["clk"] | "";
   const int clkLeft = W() - M() - u(30) - gfx::textWidth(clk, gfx::TITLE);
   const String t = fit(title, HT, clkLeft - M() - u(10) - (dropdown ? u(18) : 0));
-  text(t.c_str(), M(), u(10), HT, TEXT);
+  if (!strncmp(title, "‹", strlen("‹"))) {  // título que volta: um botão em pílula, para ver que dá para tocar
+    const uint16_t pill = blend(BG, TRACK, 0.85f);
+    const int ph = gfx::lineHeight(HT) + u(8);
+    fb().fillSmoothRoundRect(M() - u(8), u(10) - u(4), gfx::textWidth(t.c_str(), HT) + u(18), ph, ph / 2, pill);
+    text(t.c_str(), M(), u(10), HT, TEXT, top_left, pill);
+  } else {
+    text(t.c_str(), M(), u(10), HT, TEXT);
+  }
   if (dropdown) {  // a org abre a lista de orgs: um "v" pequeno depois do nome
     const int x = M() + gfx::textWidth(t.c_str(), HT) + u(8), y = u(10) + gfx::lineHeight(HT) / 2, d = max(3, u(4));
     gfx::wideLine(x, y - d / 2, x + d, y + d / 2, 1.0f, MUTED);
@@ -111,6 +132,7 @@ void header(bool live, const char* title, bool dropdown = false) {
   }
   text(clk, W() - M() - u(30), u(8), gfx::TITLE, TEXT, top_right);
   gear(W() - M() - u(10), u(19), u(10), gearActive ? ACCENT : MUTED);
+  if (!sub && live) return;
   char buf[32];
   if (live) snprintf(buf, sizeof buf, "CLI %d · Desk %d", (int)(f["cli"] | 0), (int)(f["desk"] | 0));
   else snprintf(buf, sizeof buf, "offline há %lu min", (millis() - app::lastFrameMs) / 60000);
@@ -621,12 +643,24 @@ void drawWaiting() {
   text(buf, W() / 2, gfx::height() - u(16), gfx::SMALL, DIM, middle_center);
 }
 
-// Cartões em 2 colunas em pé e 3 deitada. As sessões são sempre 6 por página (3 × 2 ou 2 × 3).
-int COLS() { return L() ? 3 : 2; }
-int GRID_Y() { return u(62); }
+// Workspaces e sessões em grade, em páginas com quantos cartões a tela comporta sem apertar. O cartão
+// precisa do mascote, de duas linhas de título e do status; a grade sai disso.
+// sem a linha do modelo (header com sub = false), a grade sobe para logo abaixo do título
+int GRID_Y() { return app::live() ? u(10) + max(gfx::lineHeight(gfx::TITLE), u(22)) + u(12) : u(62); }
 int CARD_GAP() { return u(8); }
-int CARD_H() { return L() ? (gfx::height() - GRID_Y() - u(44) - CARD_GAP()) / 2 : u(120); }  // deitada: sobra a linha da dica
+int GRID_BOTTOM() { return gfx::height() - u(30); }  // acima dos pontos de página
+int COLS() { return W() >= 460 ? 3 : 2; }
+int CARD_MIN_H() { return u(56) + 2 * gfx::lineHeight(gfx::LABEL) + gfx::lineHeight(gfx::SMALL) + u(8); }
+int ROWS() {
+  const int fixed = board::GRID_ROWS[L() ? 1 : 0];
+  return fixed ? fixed : max(1, (GRID_BOTTOM() - GRID_Y() + CARD_GAP()) / (CARD_MIN_H() + CARD_GAP()));
+}
+int PER_PAGE() { return COLS() * ROWS(); }
+int CARD_H() { return (GRID_BOTTOM() - GRID_Y() - (ROWS() - 1) * CARD_GAP()) / ROWS(); }
 int CARD_W() { return (W() - 2 * M() - (COLS() - 1) * CARD_GAP()) / COLS(); }
+bool COMPACT() { return CARD_H() < CARD_MIN_H(); }  // cartão baixo: mascote menor e título numa linha
+int MASCOT_PX() { return COMPACT() ? 2 : max(2, u(4)); }
+int TITLE_Y() { return COMPACT() ? u(10) + 8 * MASCOT_PX() + u(4) : u(56); }  // a partir do topo do cartão
 int focusReqIdx = -1;  // cartão tocado por último, para piscar a borda enquanto o Mac responde
 uint32_t focusReqMs = 0;
 
@@ -639,8 +673,16 @@ void card(int x, int y, int w, int h, int r, uint16_t fill, bool focused) {
     fb().fillSmoothRoundRect(x, y, w, h, r, fill);
   }
 }
+int cardX(int i) { return M() + (i % COLS()) * (CARD_W() + CARD_GAP()); }
+int cardY(int i) { return GRID_Y() + (i / COLS()) * (CARD_H() + CARD_GAP()); }
+// O cartão da grade sob o toque (0 a PER_PAGE() - 1), ou -1
+int cardAt(int x, int y) {
+  const int row = (y - GRID_Y()) / (CARD_H() + CARD_GAP()), col = (x - M()) / (CARD_W() + CARD_GAP());
+  return y < GRID_Y() || row >= ROWS() || col < 0 || col >= COLS() ? -1 : row * COLS() + col;
+}
 
-// Índices em sess.rows das sessões do workspace `ws`, na ordem do daemon (já por estado); devolve quantas.
+// Índices em sess.rows das sessões do workspace, por prioridade: pedem aprovação, trabalhando, sua vez,
+// paradas (a ordem que o daemon já manda). Devolve quantas.
 int sessionsOf(int ws, int* ids, int max) {
   JsonArrayConst rows = app::frame["sess"]["rows"];
   int n = 0;
@@ -648,139 +690,188 @@ int sessionsOf(int ws, int* ids, int max) {
     if ((int)rows[r][5] == ws) ids[n++] = r;
   return n;
 }
-int sessFrom(int scroll, int n) { return min(scroll * 6, max(0, n - 1) / 6 * 6); }
 
-// Primeiro workspace à mostra: o desenho e o toque usam a mesma conta (a lista pode encolher).
-int wsFrom(int scroll, int n) { return min(scroll * wsPerPage(), max(0, n - 1) / wsPerPage() * wsPerPage()); }
+mascot::Mood moodOf(const char* state) {
+  return !strcmp(state, "work") ? mascot::WORK : !strcmp(state, "turn") ? mascot::TURN : !strcmp(state, "block") ? mascot::BLOCK : mascot::IDLE;
+}
+uint16_t moodBg(mascot::Mood m) { return m == mascot::BLOCK ? blend(BG, RED, 0.16f) : blend(BG, TRACK, m == mascot::IDLE ? 0.35f : 0.6f); }
 
-// Lista de workspaces do herdr: cartões 2 × 5 (deitada, 3 × 3) com o nome e quantas sessões estão em cada estado.
-int WS_Y() { return u(60); }
-int WS_H() { return u(L() ? 64 : 70); }
-int WS_GAP() { return u(7); }
+int pagesOf(int ws) {
+  int ids[48];
+  const int n = ws < 0 ? (int)app::frame["sess"]["ws"].size() : sessionsOf(ws, ids, 48);
+  return max(1, (n + PER_PAGE() - 1) / PER_PAGE());
+}
 
-void drawWorkspaces(bool live, int page, int scroll) {
+void sessionCard(int r, int k, bool desk = false);  // mais abaixo
+
+// O ícone do Claude Desktop, desenhado aqui: asterisco branco de 12 raios numa caixa laranja arredondada.
+void spark(int cx, int cy, int r) {
+  constexpr uint16_t ORANGE_CLAUDE = 0xDBAA;  // #D97757
+  fb().fillSmoothRoundRect(cx - r, cy - r, 2 * r, 2 * r, r * 9 / 20, ORANGE_CLAUDE);
+  const float s = r * 0.66f;  // os raios ocupam o meio da caixa
+  for (int i = 0; i < 12; i++) {
+    const float a = i * PI / 6 + 0.13f, len = s * (i % 2 ? 0.72f : 1.f);
+    gfx::wideLine(cx + cosf(a) * s * 0.18f, cy + sinf(a) * s * 0.18f, cx + cosf(a) * len, cy + sinf(a) * len,
+                  max(1.f, s * 0.11f), 0xFFFF);
+  }
+}
+
+// O Claude Desktop com uma sessão só aparece na lista como a própria sessão: o toque só consegue abrir o
+// app, então não há o que escolher num nível a mais. Devolve o índice em sess.rows, ou -1.
+int directSession(int ws) {
+  JsonArrayConst w = app::frame["sess"]["ws"][ws];
+  int ids[1];
+  return (int)(w[6] | 0) && (int)(w[1] | 0) == 1 && sessionsOf(ws, ids, 1) == 1 ? ids[0] : -1;
+}
+
+// Pasta em pixel art, do tamanho do mascote: o ícone de um workspace, na cor do estado mais urgente.
+void folder(int x, int y, int px, uint16_t c, uint16_t bg) {
+  static const char* const ROWS[] = {".oooo.......", "oooooo......", "oooooooooooo", "o----------o",
+                                     "oooooooooooo", "oooooooooooo", "oooooooooooo", "oooooooooooo"};
+  const uint16_t flap = blend(c, bg, 0.45f);  // a dobra da frente, mais escura
+  for (int r = 0; r < 8; r++)
+    for (int k = 0; k < 12; k++)
+      if (ROWS[r][k] != '.') fb().fillRect(x + k * px, y + r * px, px, px, ROWS[r][k] == '-' ? flap : c);
+}
+
+// Página da lista de workspaces: cada cartão com a pasta na cor do estado mais urgente, o nome e quantas
+// sessões estão em cada estado.
+void drawWorkspacePage(bool live, int sp) {
   char buf[48];
   JsonArrayConst ws = app::frame["sess"]["ws"];
-  const int n = ws.size(), from = wsFrom(scroll, n);
-  snprintf(buf, sizeof buf, "sessões · %d", (int)(app::frame["sess"]["n"] | 0));
-  header(live, buf);
+  const int n = ws.size(), per = PER_PAGE(), pages = pagesOf(-1);
+  sp = constrain(sp, 0, pages - 1);
+  if (pages > 1) snprintf(buf, sizeof buf, "sessões · %d · %d/%d", (int)(app::frame["sess"]["n"] | 0), sp + 1, pages);
+  else snprintf(buf, sizeof buf, "sessões · %d", (int)(app::frame["sess"]["n"] | 0));
+  header(live, buf, false, false);
   if (n == 0) {
     const int px = u(6);
-    mascot::draw(W() / 2 - mascot::W * px / 2, u(180), px, mascot::IDLE, BG);
-    text("nenhuma sessão aberta", W() / 2, u(260), gfx::LABEL, DIM, middle_center);
+    mascot::draw(W() / 2 - mascot::W * px / 2, gfx::height() / 2 - u(40), px, mascot::IDLE, BG);
+    text("nenhuma sessão aberta", W() / 2, gfx::height() / 2 + u(40), gfx::LABEL, DIM, middle_center);
   }
-  for (int i = from; i < min(from + wsPerPage(), n); i++) {
+  for (int k = 0, i = sp * per; i < min(sp * per + per, n); i++, k++) {
     JsonArrayConst w = ws[i];
-    const int k = i - from, x = M() + (k % COLS()) * (CARD_W() + CARD_GAP()), y = WS_Y() + (k / COLS()) * (WS_H() + WS_GAP());
     const int total = w[1], work = w[2], block = w[3], turn = w[4];
-    const uint16_t cardBg = block ? blend(BG, RED, 0.16f) : blend(BG, TRACK, work || turn ? 0.6f : 0.35f);
-    const float in = anim::entrance(k);
-    card(x, y + (int)((1 - in) * u(12)), CARD_W(), WS_H(), u(12), cardBg, (int)(w[5] | 0));
-    if (in < 0.9f) continue;
-    text(fit(w[0], gfx::LABEL, CARD_W() - u(24)).c_str(), x + u(12), y + u(10), gfx::LABEL, TEXT, top_left, cardBg);
-    snprintf(buf, sizeof buf, total == 1 ? "1 sessão" : "%d sessões", total);
-    int cx = x + u(12);
-    const int ly = y + u(10) + below(gfx::LABEL, 30);  // linha da contagem
-    if (!work && !block && !turn) {
-      text(buf, cx, ly, gfx::SMALL, DIM, top_left, cardBg);
+    const int direct = directSession(i);
+    if (direct >= 0) {  // o Claude Desktop com uma sessão só: o cartão já é ela
+      sessionCard(direct, k, true);
       continue;
     }
-    // um ponto colorido com a contagem para cada estado que importa, uma cor por estado sem tons vizinhos
-    // (verde trabalha, vermelho pede aprovação, amarelo é sua vez), as mesmas do SmallTV
-    const struct { int count; uint16_t c; } chips[] = {{work, GREEN}, {block, RED}, {turn, YELLOW}};
-    for (auto& ch : chips) {
-      if (!ch.count) continue;
+    const mascot::Mood mood = block ? mascot::BLOCK : turn ? mascot::TURN : work ? mascot::WORK : mascot::IDLE;
+    const uint16_t bg = moodBg(mood);
+    const int x = cardX(k), y = cardY(k), cw = CARD_W(), ch = CARD_H(), pad = u(12);
+    const float in = anim::entrance(k);
+    card(x, y + (int)((1 - in) * u(16)), cw, ch, u(14), bg, (int)(w[5] | 0));
+    if (in < 0.9f) continue;
+    const uint16_t fc = mood == mascot::BLOCK ? RED : mood == mascot::TURN ? YELLOW : mood == mascot::WORK ? GREEN : blend(DIM, bg, 0.3f);
+    if ((int)(w[6] | 0)) spark(x + pad + 4 * MASCOT_PX(), y + (COMPACT() ? u(10) : u(14)) + 4 * MASCOT_PX(), 4 * MASCOT_PX() + MASCOT_PX() / 2);
+    else folder(x + pad, y + (COMPACT() ? u(10) : u(14)), MASCOT_PX(), fc, bg);
+    snprintf(buf, sizeof buf, total == 1 ? "1 sessão" : "%d sessões", total);
+    text(buf, x + cw - u(10), y + (COMPACT() ? u(10) : u(14)), gfx::SMALL, DIM, top_right, bg);
+    const int maxW = cw - 2 * pad, t1 = y + TITLE_Y(), t2 = t1 + max(u(19), gfx::lineHeight(gfx::LABEL) - 1);
+    String l2, name = wrap2(w[0] | "", gfx::LABEL, maxW, l2);
+    if (COMPACT()) name = w[0] | "", l2 = "";
+    text(fit(name.c_str(), gfx::LABEL, maxW).c_str(), x + pad, t1, gfx::LABEL, TEXT, top_left, bg);
+    if (l2.length()) text(fit(l2.c_str(), gfx::LABEL, maxW).c_str(), x + pad, t2, gfx::LABEL, TEXT, top_left, bg);
+    // um ponto colorido com a contagem de cada estado que importa (verde trabalha, vermelho pede aprovação,
+    // amarelo é sua vez), as mesmas cores do SmallTV
+    const int ly = y + ch - max(u(20), gfx::lineHeight(gfx::SMALL) + 2);
+    const struct { int count; uint16_t c; } chips[] = {{block, RED}, {work, GREEN}, {turn, YELLOW}};
+    int cx = x + pad;
+    if (!work && !block && !turn) text("todas paradas", cx, ly, gfx::SMALL, DIM, top_left, bg);
+    for (auto& c : chips) {
+      if (!c.count) continue;
       const int d = max(3, u(4));
-      fb().fillSmoothCircle(cx + d, ly + gfx::lineHeight(gfx::SMALL) / 2 - 1, d, ch.c);
-      snprintf(buf, sizeof buf, "%d", ch.count);
-      text(buf, cx + 3 * d, ly, gfx::SMALL, ch.c, top_left, cardBg);
+      fb().fillSmoothCircle(cx + d, ly + gfx::lineHeight(gfx::SMALL) / 2 - 1, d, c.c);
+      snprintf(buf, sizeof buf, "%d", c.count);
+      text(buf, cx + 3 * d, ly, gfx::SMALL, c.c, top_left, bg);
       cx += 3 * d + gfx::textWidth(buf, gfx::SMALL) + u(10);
     }
   }
-  if (n > wsPerPage()) text("arraste para cima: mais grupos", W() / 2, gfx::height() - u(30), gfx::SMALL, DIM, middle_center);
 }
 
-int wsPerPage() { return L() ? 9 : 10; }
-
-int workspaceAt(int x, int y, int scroll) {
-  const int n = app::frame["sess"]["ws"].size(), row = (y - WS_Y()) / (WS_H() + WS_GAP()), col = (x - M()) / (CARD_W() + CARD_GAP());
-  const int i = wsFrom(scroll, n) + row * COLS() + col;
-  return y >= WS_Y() && row < wsPerPage() / COLS() && col >= 0 && col < COLS() && i < n ? i : -1;
-}
-
-// Sessões de um workspace em cartões 2 × 3, cada um com o mascote no estado da sessão; arrastar na
-// vertical mostra as próximas 6. Tocar no título volta para a lista de workspaces.
-void drawSessions(bool live, int page, int ws, int scroll) {
+// Cartão de uma sessão (índice em sess.rows) na posição k da grade. desk: o asterisco do Claude Desktop no
+// lugar do mascote (o cartão do Desktop na lista de workspaces).
+void sessionCard(int r, int k, bool desk) {
   char buf[48];
-  gfx::clear();
-  if (ws < 0) {
-    drawWorkspaces(live, page, scroll);
-    return dots(page);
-  }
-  // as sessões do workspace, na ordem em que vieram (já ordenadas por estado)
-  JsonArrayConst rows = app::frame["sess"]["rows"];
-  int ids[48];
-  const int shown = sessionsOf(ws, ids, 48), from = sessFrom(scroll, shown);
+  JsonArrayConst row = app::frame["sess"]["rows"][r];
+  const int cw = CARD_W(), ch = CARD_H(), x = cardX(k), y = cardY(k);
+  const mascot::Mood mood = moodOf(row[2] | "");
+  const uint16_t cardBg = moodBg(mood);
+  // tocado agora há pouco: a borda pisca enquanto o Mac traz a sessão para a frente
+  const bool asked = focusReqIdx == r && anim::since(focusReqMs, 900) < 1;
+  const bool focused = (int)(row[7] | 0) || (asked && (millis() - focusReqMs) / 150 % 2);
+  const float in = anim::entrance(k);
+  card(x, y + (int)((1 - in) * u(16)), cw, ch, u(14), cardBg, focused);
+  if (in < 0.9f) return;
+  const int pad = u(12), statusY = y + ch - max(u(20), gfx::lineHeight(gfx::SMALL) + 2);
+  const int iconY = y + (COMPACT() ? u(10) : u(14)), px = MASCOT_PX();
+  if (desk) spark(x + pad + 4 * px, iconY + 4 * px, 4 * px + px / 2);
+  else mascot::draw(x + pad, iconY, px, mood, cardBg, k);
+  const char* origin = row[1] | "CLI";
+  const int by = y + (COMPACT() ? u(6) : u(12)), bw = gfx::textWidth(origin, gfx::SMALL) + 2 * u(10);
+  badge(origin, x + cw - u(10), by, !strcmp(origin, "Desk") ? ACCENT : GREEN, cardBg);
+  // os tokens na linha do selo, à esquerda dele, depois do mascote: embaixo do selo encostariam no título
+  const int room = cw - u(10) - bw - u(8) - (pad + mascot::W * MASCOT_PX() + u(14));
+  if (room >= gfx::textWidth(row[3] | "", gfx::SMALL))  // inteiro ou nada: "135,…" não diz nada
+    text(row[3] | "", x + cw - u(10) - bw - u(8), by + u(11), gfx::SMALL, DIM, middle_right, cardBg);
+  // título da sessão em até duas linhas, quebrado nas palavras; se a segunda não couber, uma linha só
+  const int maxW = cw - u(24), t1 = y + TITLE_Y(), t2 = t1 + max(u(19), gfx::lineHeight(gfx::LABEL) - 1);
+  String l2, name = wrap2(row[0] | "", gfx::LABEL, maxW, l2);
+  if (l2.length() && (COMPACT() || t2 + gfx::lineHeight(gfx::LABEL) > statusY)) name = row[0] | "", l2 = "";
+  text(fit(name.c_str(), gfx::LABEL, maxW).c_str(), x + pad, t1, gfx::LABEL, TEXT, top_left, cardBg);
+  if (l2.length()) text(fit(l2.c_str(), gfx::LABEL, maxW).c_str(), x + pad, t2, gfx::LABEL, TEXT, top_left, cardBg);
+  const int mins = row[4];
+  if (mood == mascot::WORK) strcpy(buf, "trabalhando");
+  else if (mood == mascot::BLOCK) strcpy(buf, "aprovar");  // o mesmo rótulo do SmallTV
+  else if (mood == mascot::TURN) snprintf(buf, sizeof buf, mins ? "sua vez · %d min" : "sua vez", mins);
+  else if (mins < 0) strcpy(buf, "parada");
+  else if (mins >= 120) snprintf(buf, sizeof buf, "parada há %dh", mins / 60);
+  else snprintf(buf, sizeof buf, "parada há %d min", mins);
+  const uint16_t sc = mood == mascot::WORK ? GREEN : mood == mascot::BLOCK ? RED : mood == mascot::TURN ? YELLOW : DIM;
+  text(fit(buf, gfx::SMALL, maxW).c_str(), x + pad, statusY, gfx::SMALL, sc, top_left, cardBg);
+}
+
+// Página das sessões de um workspace, por prioridade. O título volta para a lista.
+void drawSessionPage(bool live, int ws, int sp) {
+  char buf[48];
   JsonArrayConst w = app::frame["sess"]["ws"][ws];
-  if (shown > 6) snprintf(buf, sizeof buf, "‹ %s · %d–%d de %d", (const char*)(w[0] | "?"), from + 1, min(from + 6, shown), (int)(w[1] | 0));
+  int ids[48];
+  const int n = sessionsOf(ws, ids, 48), per = PER_PAGE(), pages = pagesOf(ws);
+  sp = constrain(sp, 0, pages - 1);
+  if (pages > 1) snprintf(buf, sizeof buf, "‹ %s · %d/%d", (const char*)(w[0] | "?"), sp + 1, pages);
   else snprintf(buf, sizeof buf, "‹ %s", (const char*)(w[0] | "?"));
-  header(live, buf);
-  if (shown > 6) text("arraste para cima: mais sessões", W() / 2, gfx::height() - u(30), gfx::SMALL, DIM, middle_center);
-  int i = 0;
-  for (int idx = from; idx < min(from + 6, shown); idx++) {
-    JsonArrayConst row = rows[ids[idx]];
-    const int cw = CARD_W(), x = M() + (i % COLS()) * (cw + CARD_GAP()), y = GRID_Y() + (i / COLS()) * (CARD_H() + CARD_GAP());
-    const char* state = row[2] | "";
-    const mascot::Mood mood = !strcmp(state, "work")    ? mascot::WORK
-                              : !strcmp(state, "turn")  ? mascot::TURN
-                              : !strcmp(state, "block") ? mascot::BLOCK
-                                                        : mascot::IDLE;
-    const uint16_t cardBg = mood == mascot::BLOCK ? blend(BG, RED, 0.16f) : blend(BG, TRACK, mood == mascot::IDLE ? 0.35f : 0.6f);
-    // tocado agora há pouco: a borda pisca enquanto o Mac traz a sessão para a frente
-    const bool asked = focusReqIdx == ids[idx] && anim::since(focusReqMs, 900) < 1;
-    const bool focused = (int)(row[7] | 0) || (asked && (millis() - focusReqMs) / 150 % 2);
-    const float in = anim::entrance(i);
-    card(x, y + (int)((1 - in) * u(16)), cw, CARD_H(), u(14), cardBg, focused);
-    if (in < 0.9f) {
-      i++;
-      continue;
-    }
-    const int pad = u(12), statusY = y + CARD_H() - max(u(20), gfx::lineHeight(gfx::SMALL) + 2);
-    mascot::draw(x + pad, y + u(14), max(2, u(4)), mood, cardBg, i);
-    const char* origin = row[1] | "CLI";
-    badge(origin, x + cw - u(10), y + u(12), !strcmp(origin, "Desk") ? ACCENT : GREEN, cardBg);
-    text(row[3], x + cw - u(10), y + u(12) + below(gfx::SMALL, 28), gfx::SMALL, DIM, top_right, cardBg);
-    // título da sessão em até duas linhas, quebrado nas palavras; se a segunda não couber, uma linha só
-    const int maxW = cw - u(24), t1 = y + u(56), t2 = t1 + max(u(19), gfx::lineHeight(gfx::LABEL) - 1);
-    String l2, name = wrap2(row[0] | "", gfx::LABEL, maxW, l2);
-    if (l2.length() && t2 + gfx::lineHeight(gfx::LABEL) > statusY) name = row[0] | "", l2 = "";
-    text(fit(name.c_str(), gfx::LABEL, maxW).c_str(), x + pad, t1, gfx::LABEL, TEXT, top_left, cardBg);
-    if (l2.length()) text(fit(l2.c_str(), gfx::LABEL, maxW).c_str(), x + pad, t2, gfx::LABEL, TEXT, top_left, cardBg);
-    const int mins = row[4];
-    if (mood == mascot::WORK) strcpy(buf, "trabalhando");
-    else if (mood == mascot::BLOCK) strcpy(buf, "aprovar");  // o mesmo rótulo do SmallTV
-    else if (mood == mascot::TURN) snprintf(buf, sizeof buf, mins ? "sua vez · %d min" : "sua vez", mins);
-    else if (mins < 0) strcpy(buf, "parada");
-    else if (mins >= 120) snprintf(buf, sizeof buf, "parada há %dh", mins / 60);
-    else snprintf(buf, sizeof buf, "parada há %d min", mins);
-    const uint16_t sc = mood == mascot::WORK ? GREEN : mood == mascot::BLOCK ? RED : mood == mascot::TURN ? YELLOW : DIM;
-    text(fit(buf, gfx::SMALL, maxW).c_str(), x + pad, statusY, gfx::SMALL, sc, top_left, cardBg);  // cartão estreito deitado
-    i++;
-  }
+  header(live, buf, false, false);
+  for (int k = 0, idx = sp * per; idx < min(sp * per + per, n); idx++, k++) sessionCard(ids[idx], k);
+}
+
+void drawSessions(bool live, int page, int ws, int sp) {
+  gfx::clear();
+  shownWs = ws, shownSessPage = sp;
+  if (ws < 0) drawWorkspacePage(live, sp);
+  else drawSessionPage(live, ws, sp);
   dots(page);
 }
 
-// Toque num cartão de sessão: pede ao Mac para trazer a sessão (painel do herdr ou Claude Desktop).
-bool sessionTap(int x, int y, int ws, int scroll) {
-  int ids[48];
-  const int shown = sessionsOf(ws, ids, 48), row = (y - GRID_Y()) / (CARD_H() + CARD_GAP()), col = (x - M()) / (CARD_W() + CARD_GAP());
-  const int i = sessFrom(scroll, shown) + row * COLS() + col;
-  if (y < GRID_Y() || row >= 6 / COLS() || col < 0 || col >= COLS() || i >= shown) return false;
-  const char* sid = app::frame["sess"]["rows"][ids[i]][6] | "";
+int workspaceAt(int x, int y, int sp) {
+  const int k = cardAt(x, y), i = sp * PER_PAGE() + k;
+  return k >= 0 && i < (int)app::frame["sess"]["ws"].size() ? i : -1;
+}
+bool backAt(int, int y) { return y < GRID_Y() - u(4); }
+
+// Pede ao Mac para trazer a sessão (índice em sess.rows) para a frente: o painel do herdr ou o Claude Desktop.
+bool focusRow(int r) {
+  const char* sid = app::frame["sess"]["rows"][r][6] | "";
   if (!*sid) return false;
   Serial.printf("ACTION focus %s\n", sid);
-  focusReqIdx = ids[i], focusReqMs = millis();
+  focusReqIdx = r, focusReqMs = millis();
   return true;
+}
+
+bool sessionTap(int x, int y, int ws, int sp) {
+  int ids[48];
+  const int n = sessionsOf(ws, ids, 48), k = cardAt(x, y), i = sp * PER_PAGE() + k;
+  return k >= 0 && i < n && focusRow(ids[i]);
 }
 
 int modelAt(int x, int y) {
@@ -939,9 +1030,11 @@ struct Row {
   Kind kind = SEG;
 };
 int SET_Y() { return u(L() ? 58 : 62); }
-int ROW_H() { return u(L() ? 62 : 68); }
+// Sobrando altura no grupo, cada linha comum cresce até u(18): o controle mais alto erra menos o toque.
+int rowGrow = 0;
+int ROW_H() { return u(L() ? 62 : 68) + rowGrow; }
 int SEG_TOP() { return below(gfx::SMALL, 20); }
-int SEG_H() { return u(38); }
+int SEG_H() { return u(38) + rowGrow; }
 
 // Som do alerta, no controle: 0 desligado, 1 a 3 o volume (settings::web.alerts e .volume).
 uint8_t soundLevel = 0;
@@ -1006,6 +1099,16 @@ Cell cell(const Group& g, int i) {
   for (int k = 0; k < i; k++)  // a lista de interruptores é mais alta que uma linha comum
     if (g.rows[k].kind == MASK) y += rowHeight(g.rows[k]) - ROW_H();
   return col < 0 ? Cell{M(), y, full} : Cell{M() + col * (half + gap), y, half};
+}
+
+// Distribui a altura livre do grupo entre as linhas comuns (a lista de interruptores fica como está).
+void fitRows(const Group& g) {
+  rowGrow = 0;
+  const Cell last = cell(g, g.n - 1);
+  const int bottom = last.y + rowHeight(g.rows[g.n - 1]), free = gfx::height() - u(10) - bottom;
+  int lines = 0;
+  for (int k = 0; k < g.n; k++) lines += g.rows[k].kind != MASK && cell(g, k).x == M();  // a 2ª coluna não soma
+  if (lines && free > 0) rowGrow = min(u(18), free / lines);
 }
 
 void summary(Item it, char* buf, size_t n) {
@@ -1073,6 +1176,7 @@ void drawSettings(bool live) {
   soundLevel = settings::web.alerts & 2 ? settings::web.volume : 0;
   if (group >= 0) {
     const Group& g = GROUPS[group];
+    fitRows(g);
     char title[32];
     snprintf(title, sizeof title, "‹ %s", g.name);
     header(live, title);
@@ -1109,6 +1213,7 @@ int settingsTap(int x, int y) {
   }
   if (y < SET_Y() - u(4)) return void(group = -1), 0;  // o título: volta para a lista
   const Group& g = GROUPS[group];
+  fitRows(g);
   for (int i = 0; i < g.n; i++) {
     const Cell c = cell(g, i);
     const int top = c.y + SEG_TOP();

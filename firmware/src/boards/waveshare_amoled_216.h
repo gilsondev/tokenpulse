@@ -16,6 +16,7 @@ constexpr uint8_t DEFAULT_ROTATION = 0;
 constexpr uint8_t ROTATIONS = 4;  // tela quadrada: as quatro posições custam o mesmo
 constexpr uint8_t ROT_FOR[4] = {0, 2, 3, 1};  // medido segurando a placa nas 4 posições
 constexpr Profile PROFILE{.touch = true, .calibrate = false, .imu = true, .led = false, .button = true, .speaker = true, .oled = true, .dense = true};
+constexpr uint8_t GRID_ROWS[2] = {0, 0};
 constexpr uint32_t SERIAL_BAUD = 115200;
 
 constexpr int PIN_SDA = 15, PIN_SCL = 14;

@@ -27,8 +27,9 @@ int histSel = -1;  // dia tocado no histórico (-1: hoje)
 bool settingsOpen = false;  // ajustes abertos pela engrenagem, por cima da tela atual
 bool orgFromHeader = false;  // a lista de orgs veio do título da tela principal, não dos ajustes
 int about = 0;              // dentro dos ajustes: 1 Sobre, 2 Sobre com o reiniciar armado, 3 Conta, 4 página web
-int sessScroll = 0;  // grupo de cartões à mostra
+int sessScroll = 0;  // a página à mostra: da lista de workspaces ou das sessões do aberto
 int sessWs = -1;     // workspace aberto na tela de sessões (-1: a lista)
+int wsListPage = 0;  // a página da lista de onde o workspace foi aberto: o voltar cai nela
 // O daemon reordena workspaces e modelos a cada frame: o aberto é lembrado pelo nome e o índice é
 // recalculado, senão a tela trocaria de conteúdo sozinha.
 String detailName, sessWsName;
@@ -45,6 +46,7 @@ int indexOf(JsonArrayConst list, const String& name) {
 void resolveOpen() {
   if (detailName.length() && (detail = indexOf(app::frame["mods"], detailName)) < 0) detailName = "";
   if (sessWsName.length() && (sessWs = indexOf(app::frame["sess"]["ws"], sessWsName)) < 0) sessWsName = "", sessScroll = 0;
+  if (gfx::full()) sessScroll = min(sessScroll, tall::pagesOf(sessWs) - 1);  // a lista encolheu
 }
 
 int count() { return gfx::full() ? tall::PAGES : COUNT; }
@@ -376,7 +378,7 @@ void checkApproval() {
   if (last >= 0 && n > last && settings::web.alerts & 1) {
     app::approveMs = millis();
     power::wake();
-    if (gfx::full() && !settingsOpen && ws >= 0) {
+    if (gfx::full() && !settingsOpen && ws >= 0) {  // abre o workspace dela: quem pede aprovação vem primeiro
       if (page != 1) go(1, -1);
       sessWs = ws, sessScroll = 0;
       sessWsName = (const char*)(app::frame["sess"]["ws"][ws][0] | "");
@@ -461,22 +463,34 @@ void render() {
   });
 }
 
-void next() { go((page + 1) % count(), -1); }
-void prev() { go((page + count() - 1) % count(), 1); }
-
-void scroll(int dir) {
-  if (!gfx::full() || page != 1) return;
-  int items = app::frame["sess"]["ws"].size(), per = tall::wsPerPage();
-  if (sessWs >= 0) {
-    items = 0, per = 6;
-    for (JsonArrayConst r : app::frame["sess"]["rows"].as<JsonArrayConst>()) items += (int)r[5] == sessWs;
-  }
-  const int groups = max(1, (items + per - 1) / per);
-  const int to = constrain(sessScroll + dir, 0, groups - 1);
-  if (to == sessScroll) return;
-  sessScroll = to;
+// Sessões: a lista de workspaces ocupa uma página por grupo de cartões, no caminho das outras telas (da
+// última vem a próxima). Dentro de um workspace, as páginas são as sessões dele; antes da primeira, a lista.
+void closeWs() {
+  sessWs = -1, sessWsName = "", sessScroll = wsListPage;
+  gfx::slide(1);
   anim::reset();
 }
+bool sessionStep(int dir) {
+  if (!gfx::full() || page != 1) return false;
+  const int to = sessScroll + dir;
+  if (sessWs >= 0 && to < 0) return closeWs(), true;
+  if (to < 0 || to >= tall::pagesOf(sessWs)) return sessWs >= 0;  // dentro do workspace, a última página para
+  sessScroll = to;
+  gfx::slide(-dir);
+  anim::reset();
+  return true;
+}
+void next() {
+  if (!sessionStep(1)) go((page + 1) % count(), -1);
+}
+void prev() {
+  if (sessionStep(-1)) return;
+  const int to = (page + count() - 1) % count();
+  go(to, 1);
+  if (to == 1 && gfx::full()) sessScroll = tall::pagesOf(-1) - 1;  // voltando dos modelos: a última página
+}
+
+void scroll(int dir) { sessionStep(dir); }  // arrastar na vertical também passa as páginas
 
 void tap(int x, int y) {
   if (!gfx::full()) return next();
@@ -531,22 +545,19 @@ void tap(int x, int y) {
     anim::reset();
     return;
   }
+  if (page == 1 && sessWs >= 0) {
+    if (tall::backAt(x, y)) return closeWs();  // o título: volta para a lista
+    tall::sessionTap(x, y, sessWs, sessScroll);  // toque num cartão: traz a sessão para a frente no Mac
+    return;
+  }
   if (page == 1) {
-    if (sessWs >= 0 && y < 56) {  // título: volta para a lista de workspaces
-      gfx::slide(1);
-      sessWs = -1, sessScroll = 0, sessWsName = "";
-      anim::reset();
-      return;
-    }
-    const int w = sessWs < 0 ? tall::workspaceAt(x, y, sessScroll) : -1;
+    const int w = tall::workspaceAt(x, y, sessScroll);
+    if (w >= 0 && tall::directSession(w) >= 0) return void(tall::focusRow(tall::directSession(w)));
     if (w >= 0) {
       gfx::slide(-1);
+      wsListPage = sessScroll;
       sessWs = w, sessScroll = 0, sessWsName = app::frame["sess"]["ws"][w][0] | "";
       anim::reset();
-      return;
-    }
-    if (sessWs >= 0) {  // toque num cartão: traz a sessão para a frente no Mac
-      tall::sessionTap(x, y, sessWs, sessScroll);
       return;
     }
   }

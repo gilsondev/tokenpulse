@@ -18,6 +18,7 @@ constexpr uint8_t DEFAULT_ROTATION = 0;  // retrato
 constexpr uint8_t ROTATIONS = 4;  // o cabo USB pode sair por qualquer lado: em pé e deitada, nos dois sentidos
 constexpr uint8_t ROT_FOR[4] = {0, 0, 0, 0};
 constexpr Profile PROFILE{.touch = true, .calibrate = true, .imu = false, .led = true, .button = true};
+constexpr uint8_t GRID_ROWS[2] = {3, 2};  // 6 cartões em pé e 4 deitada, no layout compacto
 constexpr uint32_t SERIAL_BAUD = 460800;  // o CH340 desta placa perde bytes acima disso
 
 class Lcd : public lgfx::LGFX_Device {

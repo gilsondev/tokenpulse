@@ -11,7 +11,12 @@ void drawShutdown(float p);  // PWR segurado: p de 0 a 1 até a PMU desligar
 void drawSaver();   // OLED parada: só o relógio, em cinza sobre preto, mudando de lugar a cada minuto
 void drawInstall();  // QR code da página /comecar, para quem ainda não instalou o daemon
 void drawMain(bool live, int page);
-void drawSessions(bool live, int page, int ws, int scroll);  // ws -1: lista de workspaces
+void drawSessions(bool live, int page, int ws, int sp);  // ws -1: a lista de workspaces; sp: a página
+int pagesOf(int ws);  // páginas da lista de workspaces (ws -1) ou das sessões de um workspace
+int workspaceAt(int x, int y, int sp);  // workspace sob o toque, ou -1
+bool backAt(int x, int y);  // o título que volta para a lista
+int directSession(int ws);  // o Claude Desktop com uma sessão só: a sessão (índice em sess.rows), ou -1
+bool focusRow(int r);       // pede ao Mac para trazer a sessão para a frente
 void drawModels(bool live, int page);
 void drawModelDetail(bool live, int page, int idx);
 void drawHistory(bool live, int page, int sel);
@@ -21,8 +26,6 @@ void drawAbout(bool live, bool armed);
 void drawWeb(bool live);  // QR da página web, ou do WiFi da placa para configurá-la
 void drawAccount(bool live);
 
-int workspaceAt(int x, int y, int scroll);  // workspace sob o toque, ou -1
-int wsPerPage();                 // workspaces por página: 10 em pé, 9 deitada
 int modelAt(int x, int y);       // modelo sob o toque, ou -1
 int historyBarAt(int x, int y);  // dia do histórico sob o toque, ou -1
 int settingsTap(int x, int y);   // 0 trocou um ajuste, 1 abriu o Sobre, 2 abriu a Conta, -1 nada
@@ -31,7 +34,7 @@ int aboutButtonAt(int x, int y); // sob o toque: 1 reiniciar, 2 calibrar o toque
 bool gearAt(int x, int y);       // o toque caiu na engrenagem do cabeçalho
 bool orgTitleAt(int x, int y);   // o toque caiu no nome da org (tela principal)
 bool suggestionAt(int x, int y); // o toque caiu no botão "esgotado · trocar para…" (tela principal)
-bool sessionTap(int x, int y, int ws, int scroll);  // pediu ao Mac para trazer a sessão tocada
+bool sessionTap(int x, int y, int ws, int sp);  // pediu ao Mac para trazer a sessão tocada
 void setGearActive(bool on);     // engrenagem acesa enquanto os ajustes estão abertos
 
 }  // namespace screens::tall

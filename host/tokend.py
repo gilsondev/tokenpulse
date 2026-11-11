@@ -397,12 +397,13 @@ def first_prompt(sid):
 
 MAX_SESSIONS = 40   # o frame fica em ~5 KB, abaixo do buffer serial de 8 KB da placa
 MAX_PER_WS = 12
-OUTSIDE = (1000, "fora do herdr")  # Desktop e terminais sem herdr, depois dos workspaces
+OUTSIDE = (1000, "fora do herdr")  # terminais sem herdr, depois dos workspaces
+DESKTOP = (1001, "Claude Desktop")  # sempre o último: o Desktop não deixa escolher a conversa, só abrir o app
 
 
 def sessions(state, titles, herdr, events, now):
     """Sessões agrupadas pelos workspaces do herdr.
-    ws: [nome, sessões, trabalhando, precisa de você, sua vez, em foco], na ordem do herdr.
+    ws: [nome, sessões, trabalhando, precisa de você, sua vez, em foco, é o Claude Desktop], na ordem do herdr.
     rows: [nome, CLI/Desk, estado, tokens, minutos desde a última atividade (-1: sem dado), índice do workspace,
            id curto da sessão (para o toque trazê-la à frente), em foco no herdr].
     Entram todos os painéis de Claude do herdr e as outras sessões com atividade na última hora.
@@ -436,7 +437,7 @@ def sessions(state, titles, herdr, events, now):
                int(age // 60) if age is not None else -1]
         _known_sessions[sid[:8]] = {"pane": h["pane"] if h else None, "desk": origin == "Desk"}
         # sem herdr na máquina, o agrupamento natural é o projeto (pasta) da sessão
-        group = h["ws"] if h else OUTSIDE if herdr else (0, folder)
+        group = h["ws"] if h else DESKTOP if origin == "Desk" else OUTSIDE if herdr else (0, folder)
         groups.setdefault(group, []).append((st, -(s["ts"] if s else 0), row, sid[:8],
                                               bool(seen and h and h["focused"])))
     order = {"block": 0, "work": 1, "turn": 2, "idle": 3}
@@ -445,7 +446,7 @@ def sessions(state, titles, herdr, events, now):
         items.sort(key=lambda r: (order[r[0]], r[1]))
         count = lambda st: sum(1 for r in items if r[0] == st)
         ws.append([cut(key[1], 32), len(items), count("work"), count("block"), count("turn"),
-                   1 if seen and key == _herdr.get("focused_ws") else 0])
+                   1 if seen and key == _herdr.get("focused_ws") else 0, 1 if key == DESKTOP else 0])
         rows += [r[2] + [i, r[3], 1 if r[4] else 0] for r in items[:MAX_PER_WS]]
     return {"n": sum(w[1] for w in ws), "ws": ws, "rows": rows[:MAX_SESSIONS]}
 
@@ -986,11 +987,11 @@ def demo_frame():
         ["Refatorar o checkout", "CLI", "work", "12,4M", 0, 0, "0000000a", 1],
         ["Revisar PR de pagamentos", "CLI", "block", "3,1M", 1, 0, "0000000b", 0],
         ["Testes do carrinho", "CLI", "turn", "6,8M", 4, 0, "0000000c", 0],
-        ["Migração do banco", "Desk", "idle", "1,2M", 52, 0, "0000000d", 0],
         ["Pipeline de deploy", "CLI", "turn", "2,2M", 9, 1, "0000000e", 0],
         ["Alertas do cluster", "CLI", "idle", "--", -1, 1, "0000000f", 0],
         ["Terraform da VPC", "CLI", "idle", "540k", 130, 1, "00000010", 0],
         ["Blog pessoal", "CLI", "idle", "--", -1, 2, "00000011", 0],
+        ["Migração do banco", "Desk", "turn", "1,2M", 6, 3, "0000000d", 0],
     ]
     return {
         "m": "Opus 5.5 · high", "tot": "84,2M", "rate": fmt_tokens(sum(sp[-5:]) / 5), "sp": sp, "cli": 3, "desk": 1,
@@ -1001,7 +1002,8 @@ def demo_frame():
                   [["infra", "6,2M"], ["blog", "3,1M"]]],
                  ["Haiku 5.5", "1,7M", 2, "2k", "31k", "1,6M", "90k", "US$ 0,06", [["scripts", "1,7M"]]]],
         "projs": [[r[0], r[1], r[3], max(r[4], 0)] for r in sessions[:5]],
-        "sess": {"n": len(sessions), "ws": [["Produto", 4, 1, 1, 1, 1], ["Infra", 3, 0, 0, 1, 0], ["Pessoal", 1, 0, 0, 0, 0]],
+        "sess": {"n": len(sessions), "ws": [["Produto", 3, 1, 1, 1, 1, 0], ["Infra", 3, 0, 0, 1, 0, 0], ["Pessoal", 1, 0, 0, 0, 0, 0],
+                                            ["Claude Desktop", 1, 0, 0, 1, 0, 1]],
                  "rows": sessions},
         "hist": hist,
         "p5": DEMO_P5, "r5": "reset às 17h", "pw": 38, "rw": "seg 6h", "wf": 49, "age": 30,

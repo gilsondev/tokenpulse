@@ -15,6 +15,7 @@ constexpr uint8_t ROTATIONS = 2;  // gira sozinha pelo IMU; o ajuste não vale n
 // Calibrado segurando a placa nas 4 posições. Se uma ficar de cabeça para baixo, troque o valor dela.
 constexpr uint8_t ROT_FOR[4] = {3, 1, 2, 0};
 constexpr Profile PROFILE{.touch = false, .calibrate = false, .imu = true, .led = true, .button = true};
+constexpr uint8_t GRID_ROWS[2] = {0, 0};
 constexpr uint32_t SERIAL_BAUD = 115200;
 
 class Lcd : public lgfx::LGFX_Device {

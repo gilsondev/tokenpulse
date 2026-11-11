@@ -23,6 +23,8 @@
 //                                         (byte alto primeiro, o formato que painéis SPI recebem). Com
 //                                         PSRAM chega sempre o quadro inteiro (y = 0); sem ela, faixas.
 //
+//   constexpr uint8_t GRID_ROWS[2]        linhas de cartões de workspaces e sessões, em pé e deitada; 0: pela
+//                                         altura mínima do cartão. Cartão mais baixo que ela usa o layout compacto
 //   constexpr bool PUSH_CLEARS            true: o displayPush limpa o quadro na cor board::pushFill depois de
 //                                         ler (fica livre enquanto o DMA transmite); o gfx pula a limpeza seguinte
 //
