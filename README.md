@@ -24,11 +24,11 @@ fazendo e quanto esse uso custaria pela API. Tudo ao vivo, pela USB, sem Wi-Fi.
 | | | |
 |:-:|:-:|:-:|
 | ![Principal](docs/screenshots/01-principal.png) | ![Workspaces](docs/screenshots/02-workspaces.png) | ![Sessões de um workspace](docs/screenshots/03-sessoes.png) |
-| **Principal**: a janela de 5 h no anel (verde, amarelo a 70%, laranja a 80%, vermelho a 90%), a semana com o ritmo esperado, tokens do dia, tokens por minuto e a última hora. | **Sessões por workspace** do [herdr](https://herdr.dev), com quantas estão trabalhando, esperando você ou na sua vez. O workspace em foco no Mac ganha borda laranja. Sem herdr, as sessões vêm dos logs e se agrupam por projeto. | **Sessões** de um workspace, cada uma com um mascote no estado dela: anda trabalhando, pula na sua vez, treme quando precisa de aprovação, dorme parada. A sessão em foco tem borda; tocar num cartão traz a sessão para a frente no Mac (o painel do herdr no seu terminal, ou o Claude Desktop). |
+| **Principal**: a janela de 5 h no anel (verde, amarelo a 70%, laranja a 80%, vermelho a 90%), a semana com o ritmo esperado, tokens do dia, tokens por minuto e a última hora. | **Sessões por workspace** do [herdr](https://herdr.dev), em páginas com quantos cartões a tela comporta: a pasta tem a cor do estado mais urgente e a contagem de quem trabalha, espera você ou está na sua vez. O Claude Desktop fica num workspace fixo no fim; com uma sessão só, o cartão já é ela. Sem herdr, as sessões se agrupam por projeto. | **Sessões** de um workspace, em páginas, por prioridade (aprovar, trabalhando, sua vez, paradas), cada uma com um mascote no estado dela. O título "‹ workspace" volta para a lista; tocar num cartão traz a sessão para a frente no Mac (o painel do herdr no seu terminal, ou o Claude Desktop). |
 | ![Modelos](docs/screenshots/04-modelos.png) | ![Detalhe do modelo](docs/screenshots/05-modelo.png) | ![Histórico](docs/screenshots/06-historico.png) |
 | **Modelos** usados hoje e a fatia de cada um. | **Detalhe do modelo**: entrada, saída e cache, custo equivalente na API e os projetos que mais usaram. | **Histórico** de 14 dias; toque numa barra para ver o dia. |
 | ![Ajustes](docs/screenshots/07-ajustes.png) | ![Trocar de org](docs/screenshots/08-org.png) | ![Sobre](docs/screenshots/09-sobre.png) |
-| **Ajustes** pela engrenagem: brilho, escurecer quando parada, tema (segue o macOS), tela em pé ou deitada, ocultar custo. | **Trocar de org** pelo nome no topo, com o último % de cada uma. Usa o [claude-swap](https://github.com/realiti4/claude-swap) e pede dois toques, porque troca o login de todas as sessões do Mac. | **Sobre**: placa, firmware, memória, conexão, reiniciar e o endereço da página web (toque para abrir o QR). |
+| **Ajustes** pela engrenagem, numa lista de grupos como no celular: Tela (brilho, escurecer, tema, posição, custo), Som e Descanso nas placas que têm, Conta e Sobre. | **Trocar de org** pelo nome no topo, com o último % de cada uma. Usa o [claude-swap](https://github.com/realiti4/claude-swap) e pede dois toques, porque troca o login de todas as sessões do Mac. | **Sobre**: placa, firmware, memória, conexão, reiniciar e o endereço da página web (toque para abrir o QR). |
 
 <p align="center"><img src="docs/screenshots/10-esgotado.png" alt="Janela de 5 h esgotada, com o botão para trocar de org" width="32%"></p>
 
@@ -41,10 +41,19 @@ em 3 colunas e o detalhe do modelo com os projetos ao lado.
 <p align="center"><img src="docs/screenshots/deitada.png" alt="As telas deitadas: principal com o anel à esquerda, sessões em 3 colunas e o detalhe do modelo" width="100%"></p>
 
 **Na ESP32-2432S028R.** A placa de 2,8" (240×320, touch resistivo) roda as mesmas telas num layout
-menor, em 4 posições (Ajustes → Tela: 0°, 90°, 180°, 270°), para o cabo USB sair por qualquer lado. No Sobre fica o
-botão para recalibrar o toque.
+menor, em 4 posições (Ajustes → Tela → lado do cabo USB: embaixo, direita, em cima, esquerda). As sessões vêm em
+cartões compactos, 6 por página em pé e 4 deitada. No Sobre fica o botão para recalibrar o toque.
 
-<p align="center"><img src="docs/screenshots/cyd-2432s028r.png" alt="ESP32-2432S028R deitada: principal, sessões e Sobre com o botão de calibrar o toque" width="100%"></p>
+<p align="center"><img src="docs/screenshots/cyd-2432s028r.png" alt="ESP32-2432S028R deitada, com dados fictícios: principal, sessões de um workspace e a lista de ajustes" width="100%"></p>
+
+**Na Waveshare AMOLED 2,16".** A tela de 480×480 tem cantos redondos: a interface ocupa o quadrado do meio,
+gira sozinha pelo acelerômetro e roda a ~29 quadros por segundo. Parada, ela entra no descanso, que alterna
+versões resumidas das telas (relógio flip, anel de uso, sessões, modelos e 14 dias) num fundo preto, cada uma num
+lugar novo, para o vidro não marcar. Uma sessão pedindo aprovação toca um som.
+
+<p align="center"><img src="docs/screenshots/waveshare-amoled-216.png" alt="Waveshare AMOLED 2,16 com dados fictícios: principal, workspaces e as sessões de um workspace" width="100%"></p>
+<p align="center"><img src="docs/screenshots/amoled-descanso.png" alt="O descanso da AMOLED: relógio flip, anel de uso, sessões, modelos e 14 dias" width="100%"></p>
+<p align="center"><img src="docs/screenshots/amoled-ajustes.png" alt="Ajustes da AMOLED: a lista de grupos e o grupo Descanso, com as telas do descanso" width="66%"></p>
 
 **Alertas.** Quando uma sessão passa a pedir aprovação, a tela abre o workspace dela e o brilho pulsa por 20 s;
 nas placas com LED ele pisca vermelho enquanto houver sessão para aprovar. Cada estado de sessão tem a sua cor:
@@ -263,7 +272,7 @@ Com a placa plugada:
 
 ```bash
 git clone https://github.com/gilsondev/tokenpulse && cd tokenpulse
-./setup.sh cyd-2432s028r      # ou guition-jc3248w535, waveshare-s3-lcd-147b
+./setup.sh cyd-2432s028r      # ou guition-jc3248w535, waveshare-s3-lcd-147b, waveshare-amoled-216
 ```
 
 O `setup.sh` pausa o daemon se ele já roda, acha a porta da placa, grava o firmware do último release pela

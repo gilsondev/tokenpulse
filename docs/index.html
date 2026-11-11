@@ -136,6 +136,7 @@
   [data-not].off { display: none; }
   span[data-only].on { display: inline; }
   .model img.cfg { max-width: 270px; margin: 20px 0 0; border: 1px solid var(--line); }
+  .model img.wide { margin: 20px 0 0; border-radius: 0; }
   footer { padding: 40px 0 60px; border-top: 1px solid var(--line); color: var(--dim); font-size: 14px; }
   footer .wrap { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: center; }
 </style>
@@ -177,13 +178,13 @@
     <p class="sub">Arraste para os lados para trocar de tela. Toque para abrir detalhes. Da borda de baixo para cima, volta para a principal de qualquer lugar.</p>
     <div class="grid">
       <div class="shot"><img src="screenshots/01-principal.png" alt="Tela principal" loading="lazy"><div><h3>Principal</h3><p>A janela de 5 h no anel, que muda de cor com o uso: verde, amarelo a 70%, laranja a 80%, vermelho a 90%. A semana com o ritmo esperado, tokens do dia, por minuto e a última hora.</p></div></div>
-      <div class="shot"><img src="screenshots/02-workspaces.png" alt="Sessões agrupadas por workspace" loading="lazy"><div><h3>Sessões por workspace</h3><p>Os workspaces do <a href="https://herdr.dev">herdr</a>, com quantas sessões estão trabalhando, esperando você ou na sua vez. Sem herdr, as sessões do terminal e do Desktop se agrupam por projeto.</p></div></div>
-      <div class="shot"><img src="screenshots/03-sessoes.png" alt="Cartões de sessão com mascote" loading="lazy"><div><h3>Sessões</h3><p>Cada sessão com um mascote que anda trabalhando, pula na sua vez, treme quando precisa de aprovação e dorme parada. Toque para trazê-la à frente no Mac.</p></div></div>
+      <div class="shot"><img src="screenshots/02-workspaces.png" alt="Sessões agrupadas por workspace" loading="lazy"><div><h3>Sessões por workspace</h3><p>Os workspaces do <a href="https://herdr.dev">herdr</a> em páginas, com quantos cartões a tela comporta. A pasta tem a cor do estado mais urgente. O Claude Desktop fica num workspace fixo no fim e, com uma sessão só, o cartão já é ela. Sem herdr, as sessões se agrupam por projeto.</p></div></div>
+      <div class="shot"><img src="screenshots/03-sessoes.png" alt="Cartões de sessão com mascote" loading="lazy"><div><h3>Sessões</h3><p>As sessões de um workspace, em páginas e por prioridade: aprovar, trabalhando, sua vez, paradas. Cada uma com um mascote no estado dela. O título "‹ workspace" volta para a lista; toque num cartão para trazer a sessão à frente no Mac.</p></div></div>
       <div class="shot"><img src="screenshots/04-modelos.png" alt="Modelos usados hoje" loading="lazy"><div><h3>Modelos</h3><p>Os modelos usados hoje e a fatia de cada um, com entrada, saída e cache.</p></div></div>
       <div class="shot"><img src="screenshots/05-modelo.png" alt="Detalhe de um modelo" loading="lazy"><div><h3>Detalhe do modelo</h3><p>Composição dos tokens, custo equivalente na API e os projetos que mais usaram.</p></div></div>
       <div class="shot"><img src="screenshots/06-historico.png" alt="Histórico de 14 dias" loading="lazy"><div><h3>Histórico</h3><p>Tokens e custo por dia nas últimas duas semanas. Toque numa barra para ver o dia.</p></div></div>
       <div class="shot"><img src="screenshots/10-esgotado.png" alt="Janela esgotada com sugestão de trocar de org" loading="lazy"><div><h3>Limite esgotado</h3><p>Com outra org salva no <a href="https://github.com/realiti4/claude-swap">claude-swap</a>, a tela sugere a troca para a de menor uso.</p></div></div>
-      <div class="shot"><img src="screenshots/07-ajustes.png" alt="Ajustes" loading="lazy"><div><h3>Ajustes</h3><p>Brilho, escurecer quando parada, tema que segue o macOS, tela em pé ou deitada e ocultar o custo. Pela engrenagem ao lado do relógio.</p></div></div>
+      <div class="shot"><img src="screenshots/07-ajustes.png" alt="Ajustes" loading="lazy"><div><h3>Ajustes</h3><p>Pela engrenagem ao lado do relógio, numa lista de grupos como no celular: Tela, Som e Descanso nas placas que têm, Conta e Sobre.</p></div></div>
       <div class="shot"><img src="screenshots/00-boot.png" alt="Tela de abertura com o logo" loading="lazy"><div><h3>Abertura</h3><p>E uma tela de diagnóstico que diz o que falta quando o Mac some: cabo, daemon ou dados.</p></div></div>
     </div>
     <div class="strip"><h3>Deitada</h3><p>Em Ajustes → Tela → horizontal, cada tela ganha uma versão deitada: o anel à esquerda, as sessões em 3 colunas e o detalhe do modelo com os projetos ao lado.</p><img src="screenshots/deitada.png" alt="As telas deitadas: principal, sessões em 3 colunas e detalhe do modelo" loading="lazy"></div>
@@ -250,6 +251,7 @@ flowchart LR
       <button type="button" data-board="guition-jc3248w535" aria-pressed="true">Guition JC3248W535</button>
       <button type="button" data-board="cyd-2432s028r" aria-pressed="false">ESP32-2432S028R</button>
       <button type="button" data-board="waveshare-s3-lcd-147b" aria-pressed="false">Waveshare ESP32-S3-LCD-1.47B</button>
+      <button type="button" data-board="waveshare-amoled-216" aria-pressed="false">Waveshare AMOLED 2.16</button>
       <button type="button" data-board="smalltv-ultra" aria-pressed="false">GeekMagic SmallTV-Ultra</button>
     </div>
 
@@ -271,7 +273,7 @@ flowchart LR
     </div>
 
     <div class="model" data-only="cyd-2432s028r">
-      <img src="screenshots/cyd-2432s028r.png" alt="ESP32-2432S028R deitada: principal, sessões e Sobre com o botão de calibrar o toque" loading="lazy">
+      <img src="screenshots/cyd-2432s028r.png" alt="ESP32-2432S028R deitada, com dados fictícios: principal, sessões de um workspace e a lista de ajustes" loading="lazy">
       <div>
         <h3>ESP32-2432S028R</h3>
         <dl>
@@ -279,7 +281,7 @@ flowchart LR
           <dt>Chip</dt><dd>ESP32-D0WD-V3: 4 MB de flash, sem PSRAM (a tela é desenhada em duas faixas)</dd>
           <dt>Tela</dt><dd>2,8" 240×320, ST7789</dd>
           <dt>Toque</dt><dd>resistivo XPT2046, com a caneta; calibração na primeira vez</dd>
-          <dt>Interface</dt><dd>todas as telas no layout médio, em 4 posições (0°, 90°, 180°, 270°) para o cabo sair por qualquer lado; LED RGB na cor da faixa, vermelho piscando quando uma sessão pede aprovação</dd>
+          <dt>Interface</dt><dd>todas as telas no layout médio, em 4 posições, escolhidas pelo lado do cabo USB; sessões em cartões compactos, 6 por página em pé e 4 deitada; LED RGB na cor da faixa, vermelho piscando quando uma sessão pede aprovação</dd>
           <dt>Página web</dt><dd>a mesma da Guition, com o WiFi ligado só quando pedido em Ajustes → Sobre</dd>
           <dt>Atualização</dt><dd>OTA pela USB (ponte CH340) em ~40 s</dd>
         </dl>
@@ -298,6 +300,24 @@ flowchart LR
           <dt>Interface</dt><dd>layout compacto (principal, modelos, projetos); gira sozinha pelo acelerômetro; LED RGB na cor da faixa</dd>
           <dt>Atualização</dt><dd>OTA pela USB em ~15 s</dd>
         </dl>
+      </div>
+    </div>
+
+    <div class="model" data-only="waveshare-amoled-216">
+      <img src="screenshots/waveshare-amoled-216.png" alt="Waveshare AMOLED 2,16 com dados fictícios: principal, workspaces e as sessões de um workspace" loading="lazy">
+      <div>
+        <h3>Waveshare ESP32-S3-Touch-AMOLED-2.16</h3>
+        <dl>
+          <dt>Chip</dt><dd>ESP32-S3R8: 16 MB de flash, 8 MB de PSRAM</dd>
+          <dt>Tela</dt><dd>2,16" AMOLED 480×480 com cantos redondos, CO5300 por QSPI, a ~29 quadros por segundo</dd>
+          <dt>Toque</dt><dd>capacitivo, com o dedo</dd>
+          <dt>Interface</dt><dd>todas as telas no layout grande; gira sozinha pelo acelerômetro; descanso contra marcas no vidro</dd>
+          <dt>Som</dt><dd>alto-falante: um som quando uma sessão pede aprovação, com 8 opções e volume em Ajustes → Som</dd>
+          <dt>Botões</dt><dd>KEY3 troca de tela; PWR entra e sai do descanso e, segurado por 2 s, desliga a placa</dd>
+          <dt>Atualização</dt><dd>OTA pela USB em ~25 s</dd>
+        </dl>
+        <p class="note">Parada, a tela troca o painel por versões resumidas em fundo preto, uma a cada 15 s e cada uma num lugar novo. Em Ajustes → Descanso você escolhe quais telas entram e o relógio com ou sem segundos.</p>
+        <img class="wide" src="screenshots/amoled-descanso.png" alt="O descanso da AMOLED: relógio flip, anel de uso, sessões, modelos e 14 dias" loading="lazy">
       </div>
     </div>
 
@@ -334,11 +354,13 @@ flowchart LR
         <button type="button" data-board="guition-jc3248w535" aria-pressed="true">Guition JC3248W535</button>
         <button type="button" data-board="cyd-2432s028r" aria-pressed="false">ESP32-2432S028R</button>
         <button type="button" data-board="waveshare-s3-lcd-147b" aria-pressed="false">Waveshare 1.47B</button>
+        <button type="button" data-board="waveshare-amoled-216" aria-pressed="false">Waveshare AMOLED 2.16</button>
         <button type="button" data-board="smalltv-ultra" aria-pressed="false">SmallTV-Ultra</button>
       </div>
       <div class="callout on" data-only="guition-jc3248w535">A JC3248W535 só passa dados pela USB-C num dos lados do plugue. Se a placa liga mas o Mac não a vê, gire o plugue.</div>
       <div class="callout" data-only="cyd-2432s028r">A ESP32-2432S028R tem touch resistivo: use a caneta que vem com ela. Na primeira vez ela pede quatro toques, um em cada canto, para calibrar. Use um cabo USB que passe dados.</div>
       <div class="callout" data-only="waveshare-s3-lcd-147b">A Waveshare de 1,47" não tem touch: o botão BOOT troca de tela e segurar volta para a principal. Ela gira sozinha pelo acelerômetro.</div>
+      <div class="callout" data-only="waveshare-amoled-216">Mesmo na versão com bateria, a AMOLED 2,16" recebe os dados pelo cabo USB-C ligado ao Mac. Segurar o botão PWR por 2 s desliga a placa.</div>
       <div class="callout" data-only="smalltv-ultra">O SmallTV-Ultra não tem USB de dados: tudo vai pelo WiFi, e o <code>setup.sh</code> não serve para ele. O firmware de fábrica da GeekMagic é substituído e só volta com o <code>.bin</code> dele.</div>
     </div>
     <ol class="steps">
@@ -397,6 +419,7 @@ cd tokenpulse</code></pre></li>
     "guition-jc3248w535": { chip: "esp32s3", ota: 15 },
     "cyd-2432s028r": { chip: "esp32", ota: 40 },
     "waveshare-s3-lcd-147b": { chip: "esp32s3", ota: 15 },
+    "waveshare-amoled-216": { chip: "esp32s3", ota: 25 },
     "smalltv-ultra": { chip: "esp8266", ota: 10 },
   };
   const buttons = document.querySelectorAll(".pick button");
