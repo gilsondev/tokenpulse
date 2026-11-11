@@ -12,6 +12,7 @@
 namespace board {
 
 constexpr const char* NAME = "waveshare-amoled-216";
+constexpr const char* BLE_LABEL = "AMOLED";  // no nome Bluetooth: "TokenPulse AMOLED XXXXXX"
 constexpr uint8_t DEFAULT_ROTATION = 0;
 constexpr uint8_t ROTATIONS = 4;  // tela quadrada: as quatro posições custam o mesmo
 constexpr uint8_t ROT_FOR[4] = {0, 2, 3, 1};  // medido segurando a placa nas 4 posições

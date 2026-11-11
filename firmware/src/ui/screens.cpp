@@ -75,16 +75,16 @@ void drawInstall() {
   if (gfx::wide()) {
     const int side = h - s(16), cx = (side + s(8) + w) / 2;
     fb().qrcode(app::START_URL, s(8), s(8), side);
-    label("falta o tokenpulse", cx, h / 2 - s(30), TEXT, middle_center);
-    label("no Mac. escaneie, ou", cx, h / 2 - s(12), MUTED, middle_center);
+    label("Falta o tokenpulse", cx, h / 2 - s(30), TEXT, middle_center);
+    label("no Mac. Escaneie, ou", cx, h / 2 - s(12), MUTED, middle_center);
     label("abra no Mac:", cx, h / 2 + s(4), MUTED, middle_center);
     label(app::START_SHORT, cx, h / 2 + s(24), ACCENT, middle_center);
     return;
   }
   const int side = w - s(16);
-  label("falta o tokenpulse no Mac", w / 2, s(14), TEXT, middle_center);
+  label("Falta o tokenpulse no Mac", w / 2, s(14), TEXT, middle_center);
   fb().qrcode(app::START_URL, s(8), s(30), side);
-  label("escaneie, ou abra no Mac:", w / 2, s(30) + side + s(16), MUTED, middle_center);
+  label("Escaneie, ou abra no Mac:", w / 2, s(30) + side + s(16), MUTED, middle_center);
   label(app::START_SHORT, w / 2, s(30) + side + s(34), ACCENT, middle_center);
 }
 
@@ -95,8 +95,8 @@ void drawWaiting() {
   fb().fillScreen(BG);
   fb().fillArc(cx, cy - s(20), s(12), s(16), 0, 360, TRACK);
   fb().fillArc(cx, cy - s(20), s(12), s(16), start, start + 90, ACCENT);
-  label("aguardando o Mac…", cx, cy + s(14), MUTED, middle_center);
-  label("o daemon tokend.py abre a porta USB", cx, cy + s(30), DIM, middle_center);
+  label("Aguardando o Mac…", cx, cy + s(14), MUTED, middle_center);
+  label("O daemon tokend.py abre a porta USB", cx, cy + s(30), DIM, middle_center);
 }
 
 void drawMain(bool live) {
@@ -122,7 +122,7 @@ void drawMain(bool live) {
   float pulse = breath(1500);
   if (live) fb().fillCircle(L.statusX + s(3), L.statusY + s(6), s(2) + pulse * s(2), blend(DARK_GREEN, GREEN, pulse));
   else fb().fillCircle(L.statusX + s(3), L.statusY + s(6), s(3), RED);
-  label(live ? "ao vivo" : "offline", L.statusX + s(10), L.statusY, live ? GREEN : RED);
+  label(live ? "Ao vivo" : "Offline", L.statusX + s(10), L.statusY, live ? GREEN : RED);
   snprintf(buf, sizeof buf, "CLI %d · Desk %d", (int)(f["cli"] | 0), (int)(f["desk"] | 0));
   label(buf, L.sessX, L.sessY, DIM, L.sessDatum);
   fb().drawFastHLine(m, L.statusY + s(18), gfx::width() - 2 * m, TRACK);
@@ -135,24 +135,24 @@ void drawMain(bool live) {
   if (anim::p5 >= 0.5f) fb().fillArc(L.ringX, L.ringY, L.ringR - s(9), L.ringR, 270, 270 + 3.6f * min(anim::p5, 100.f), ringColor);
   snprintf(buf, sizeof buf, p5 < 0 ? "--" : "%d%%", (int)lroundf(anim::p5));
   big(buf, L.ringX, L.ringY, stale ? DIM : p5 < 0 ? TEXT : levelColor(p5), middle_center);
-  label("sessão 5h", L.ringX, L.ringLabelY, MUTED, middle_center);
+  label("Sessão 5h", L.ringX, L.ringLabelY, MUTED, middle_center);
   if (stale) {
-    snprintf(buf, sizeof buf, "atualizado há %d min", app::dataAge() / 60);
+    snprintf(buf, sizeof buf, "Atualizado há %d min", app::dataAge() / 60);
     label(buf, L.ringX, L.resetY, AMBER, middle_center);
   } else {
     label(f["r5"] | "", L.ringX, L.resetY, p5 >= 70 ? levelColor(p5) : MUTED, middle_center);
   }
 
   const int pw = f["pw"] | -1;
-  label("semana", L.weekX, L.weekY, MUTED);
+  label("Semana", L.weekX, L.weekY, MUTED);
   snprintf(buf, sizeof buf, pw < 0 ? "--" : "%d%% · %s", pw, (const char*)(f["rw"] | ""));
   label(buf, L.weekX + L.weekW, L.weekY, stale ? DIM : MUTED, top_right);
   bar(L.weekX, L.weekY + s(16), L.weekW, s(6), anim::pw / 100, stale ? DIM : levelColor(pw));
 
   float glow = anim::since(anim::tokensMs, 900);
-  label("tokens hoje", L.tokX, L.tokY, MUTED);
+  label("Tokens hoje", L.tokX, L.tokY, MUTED);
   big(f["tot"] | "0", L.tokX, L.tokY + s(16), blend(ACCENT, TEXT, glow));
-  label("ritmo/min", L.rateX, L.tokY, MUTED);
+  label("Ritmo/min", L.rateX, L.tokY, MUTED);
   big(f["rate"] | "0", L.rateX, L.tokY + s(16));
   label(f["sub"] | "", L.tokX, L.subY, DIM);
 
@@ -165,7 +165,7 @@ void drawMain(bool live) {
   if (glow < 1 && n) fb().fillCircle(L.spX + L.spW, yAt(n - 1), s(2) + (1 - glow) * s(3), ACCENT);
   fb().drawFastHLine(L.spX, L.spY + 1, L.spW, TRACK);
   label("-60 min", L.spX, L.spY + s(4), DIM);
-  label("agora", L.spX + L.spW, L.spY + s(4), DIM, top_right);
+  label("Agora", L.spX + L.spW, L.spY + s(4), DIM, top_right);
 
 }
 
@@ -192,9 +192,9 @@ void drawModels(bool live) {
   const int x0 = s(8), right = gfx::width() - x0, w = gfx::width() - 2 * x0, rowH = s(wide ? 46 : 62);
   char buf[64];
   fb().fillScreen(BG);
-  drawHeader("modelos · hoje", live);
+  drawHeader("Modelos · hoje", live);
   JsonArrayConst mods = app::frame["mods"];
-  if (mods.size() == 0) label("sem uso hoje", gfx::width() / 2, gfx::height() / 2, DIM, middle_center);
+  if (mods.size() == 0) label("Sem uso hoje", gfx::width() / 2, gfx::height() / 2, DIM, middle_center);
   int y = s(34);
   for (JsonArrayConst m : mods) {
     const char* name = m[0] | "?";
@@ -204,12 +204,12 @@ void drawModels(bool live) {
     label(buf, right, y, MUTED, top_right);
     bar(x0, y + s(15), w, s(6), anim::grow * share / 100, modelColor(name));
     if (wide) {
-      snprintf(buf, sizeof buf, "in %s · out %s · lido %s · escrito %s", (const char*)m[3], (const char*)m[4], (const char*)m[5], (const char*)m[6]);
+      snprintf(buf, sizeof buf, "In %s · out %s · lido %s · escrito %s", (const char*)m[3], (const char*)m[4], (const char*)m[5], (const char*)m[6]);
       label(buf, x0, y + s(24), DIM);
     } else {
-      snprintf(buf, sizeof buf, "in %s · out %s", (const char*)m[3], (const char*)m[4]);
+      snprintf(buf, sizeof buf, "In %s · out %s", (const char*)m[3], (const char*)m[4]);
       label(buf, x0, y + s(24), DIM);
-      snprintf(buf, sizeof buf, "lido %s · escrito %s", (const char*)m[5], (const char*)m[6]);
+      snprintf(buf, sizeof buf, "Lido %s · escrito %s", (const char*)m[5], (const char*)m[6]);
       label(buf, x0, y + s(38), DIM);
     }
     y += rowH;
@@ -221,9 +221,9 @@ void drawProjects(bool live) {
   const int rowH = s(32), rows = min(8, (gfx::height() - rowH) / rowH);
   char buf[64];
   fb().fillScreen(BG);
-  drawHeader("projetos · 1h", live);
+  drawHeader("Projetos · 1h", live);
   JsonArrayConst projs = app::frame["projs"];
-  if (projs.size() == 0) label("nenhuma sessão na última hora", gfx::width() / 2, gfx::height() / 2, DIM, middle_center);
+  if (projs.size() == 0) label("Nenhuma sessão na última hora", gfx::width() / 2, gfx::height() / 2, DIM, middle_center);
   int y = rowH, i = 0;
   for (JsonArrayConst p : projs) {
     if (i++ == rows) break;
@@ -263,13 +263,13 @@ void go(int to, int dir) {
 }  // namespace
 
 void bootSplash() {
-  const char* steps[] = {"iniciando a tela", "lendo o sensor de movimento", "pronto"};
+  const char* steps[] = {"Iniciando a tela", "Lendo o sensor de movimento", "Pronto"};
   uint32_t t0 = millis();
   for (float p = 0; p < 1; p = (millis() - t0) / 1400.f) {
     gfx::loading(gfx::BOOT, "tokenpulse", steps[min(2, (int)(p * 3))], p);
     board::setLed(0, 0, 18 * breath(1400));
   }
-  gfx::loading(gfx::BOOT, "tokenpulse", "pronto", 1);
+  gfx::loading(gfx::BOOT, "tokenpulse", "Pronto", 1);
 }
 
 uint32_t holdUntil = 0;
@@ -309,7 +309,7 @@ bool calibrateNative() {
     const int x = nx[i], y = ny[i];
     gfx::frame([&] {
       gfx::clear();
-      gfx::text("calibrar o toque", W / 2, H / 2 - 30, gfx::TITLE, TEXT, middle_center);
+      gfx::text("Calibrar o toque", W / 2, H / 2 - 30, gfx::TITLE, TEXT, middle_center);
       gfx::text(status, W / 2, H / 2, gfx::SMALL, c, middle_center);
       char step[16];
       snprintf(step, sizeof step, "%d de 4", i + 1);
@@ -321,7 +321,7 @@ bool calibrateNative() {
     });
   };
   for (int i = 0; i < 4; i++) {
-    draw(i, "toque no centro do alvo com a caneta", MUTED);
+    draw(i, "Toque no centro do alvo com a caneta", MUTED);
     int16_t x, y;
     uint32_t t0 = millis(), quiet = millis();
     while (millis() - quiet < 300) {  // espera soltar o toque anterior
@@ -441,7 +441,7 @@ void checkAttention() {
   const auto& w = settings::web;
   const uint8_t snd = w.sound;
   Serial.printf("destaque: %s (%s), som %d%s\n", (const char*)(app::frame["sess"]["rows"][pick][6] | ""),
-                pickBlock ? "aprovar" : "sua vez", snd, app::muted() ? " silenciado" : "");
+                pickBlock ? "Aprovar" : "Sua vez", snd, app::muted() ? " silenciado" : "");
   if (board::PROFILE.speaker && w.alerts & 2 && !app::muted() && snd < sound::COUNT) board::play(snd, settings::volumePct(), 0, 2);
   if (gfx::full() && w.alerts & 1) {
     attnSid = (const char*)(app::frame["sess"]["rows"][pick][6] | "");
@@ -608,6 +608,7 @@ void prev() {
 
 void scroll(int dir) {  // arrastar na vertical rola o Sobre ou passa as páginas de sessões
   if (settingsOpen && (about == 1 || about == 2)) return void(tall::aboutScroll(dir));
+  if (settingsOpen && !about) return void(tall::settingsScroll(dir));
   sessionStep(dir);
 }
 
@@ -647,7 +648,7 @@ void tap(int x, int y) {
       }
       if (b == 0) return void(about = 0);
       if (b == 2) {  // calibrar o toque: some o Sobre e volta para os ajustes
-        if (!calibrateTouch()) Serial.println("calibração: desistiu ou toques fora dos alvos");
+        if (!calibrateTouch()) Serial.println("Calibração: desistiu ou toques fora dos alvos");
         about = 0;
         return;
       }

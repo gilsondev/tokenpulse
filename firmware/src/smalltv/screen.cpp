@@ -98,7 +98,7 @@ void drawMain() {
   text(org.c_str(), 8, 6, LABEL, TEXT);
   text(f["clk"] | "", W - 8, 6, LABEL, DIM, top_right);
   text(f["m"] | "Claude", 8, 22, LABEL, MUTED);
-  const char* st = live ? "ao vivo" : "offline";
+  const char* st = live ? "Ao vivo" : "Offline";
   text(st, W - 8, 22, LABEL, live ? GREEN : RED, top_right);
   ui.dotX = W - 16 - textWidth(st, LABEL);
   band.fillCircle(ui.dotX, 30 - oy, 3, live ? GREEN : RED);
@@ -113,9 +113,9 @@ void drawMain() {
   snprintf(buf, sizeof buf, p5 < 0 ? "--" : "%d%%", (int)lroundf(shown));
   Vlw& pf = textWidth(buf, HERO) <= 2 * (r - 9) - 12 ? HERO : NUM;  // "42%" na fonte grande não cabe no anel
   text(buf, cx, cy - (&pf == &HERO ? 18 : 12), pf, p5 < 0 ? TEXT : ring, top_center);
-  text("sessão 5h", cx, 162, LABEL, MUTED, top_center);
+  text("Sessão 5h", cx, 162, LABEL, MUTED, top_center);
   if (stale) {
-    snprintf(buf, sizeof buf, "há %d min", (int)(f["age"] | 0) / 60);
+    snprintf(buf, sizeof buf, "Há %d min", (int)(f["age"] | 0) / 60);
     text(buf, cx, 178, LABEL, AMBER, top_center);
   } else {
     text(f["r5"] | "", cx, 178, LABEL, p5 >= 70 ? ring : MUTED, top_center);
@@ -123,17 +123,17 @@ void drawMain() {
 
   // coluna da direita: semana, tokens do dia, ritmo
   const int x = 130, w = W - 8 - x, pw = f["pw"] | -1;
-  text("semana", x, 50, LABEL, MUTED);
+  text("Semana", x, 50, LABEL, MUTED);
   snprintf(buf, sizeof buf, pw < 0 ? "--" : "%d%%", pw);
   text(buf, x + w, 50, LABEL, stale ? DIM : TEXT, top_right);
   band.fillRoundRect(x, 68 - oy, w, 6, 3, TRACK);
   const float pwShown = ui.pw < 0 ? pw : ui.pw;
   if (pwShown >= 0.5f) band.fillRoundRect(x, 68 - oy, max(6, (int)(w * min(pwShown, 100.f) / 100)), 6, 3, stale ? DIM : levelColor(pw));
   text(f["rw"] | "", x, 80, LABEL, DIM);
-  text("tokens hoje", x, 104, LABEL, MUTED);
+  text("Tokens hoje", x, 104, LABEL, MUTED);
   const uint32_t glow = since(ui.tokMs);  // subiu: o número acende em branco e volta à cor em 0,9 s
   text(f["tot"] | "0", x, 120, NUM, glow < 900 ? blend(TEXT, ACCENT, glow / 900.f) : ACCENT);
-  text("ritmo/min", x, 150, LABEL, MUTED);
+  text("Ritmo/min", x, 150, LABEL, MUTED);
   text(f["rate"] | "0", x, 166, NUM, TEXT);
 
   // última hora
@@ -145,7 +145,7 @@ void drawMain() {
   for (int i = 1; i < n; i++) band.drawLine(sx + (i - 1) * sw / (n - 1), yAt(i - 1), sx + i * sw / (n - 1), yAt(i), ACCENT);
   band.drawFastHLine(sx, base + 1 - oy, sw, TRACK);
   text("-60 min", sx, 216, LABEL, DIM);
-  text("agora", sx + sw, 216, LABEL, DIM, top_right);
+  text("Agora", sx + sw, 216, LABEL, DIM, top_right);
 }
 
 void step(int y, bool ok, const char* name, const char* hint) {
@@ -170,7 +170,7 @@ uint16_t modelColor(const char* name) {
 
 void drawModels() {
   char buf[64];
-  header("modelos · hoje");
+  header("Modelos · hoje");
   int y = 36;
   for (JsonArrayConst m : app::frame["mods"].as<JsonArrayConst>()) {  // até 3
     const char* name = m[0] | "?";
@@ -180,9 +180,9 @@ void drawModels() {
     text(buf, W - 8, y, LABEL, MUTED, top_right);
     band.fillRoundRect(8, y + 18 - oy, W - 16, 6, 3, TRACK);
     if (share > 0) band.fillRoundRect(8, y + 18 - oy, max(6, (W - 16) * min(share, 100) / 100), 6, 3, modelColor(name));
-    snprintf(buf, sizeof buf, "in %s · out %s", (const char*)(m[3] | ""), (const char*)(m[4] | ""));
+    snprintf(buf, sizeof buf, "In %s · out %s", (const char*)(m[3] | ""), (const char*)(m[4] | ""));
     text(buf, 8, y + 28, LABEL, DIM);
-    snprintf(buf, sizeof buf, "lido %s · escrito %s", (const char*)(m[5] | ""), (const char*)(m[6] | ""));
+    snprintf(buf, sizeof buf, "Lido %s · escrito %s", (const char*)(m[5] | ""), (const char*)(m[6] | ""));
     text(buf, 8, y + 43, LABEL, DIM);
     y += 62;
   }
@@ -190,7 +190,7 @@ void drawModels() {
 
 void drawProjects() {
   char buf[64];
-  header("projetos · 1h");
+  header("Projetos · 1h");
   JsonArrayConst projs = app::frame["projs"];
   constexpr int ROWS = 6;
   int y = 34, i = 0;
@@ -223,7 +223,7 @@ String fit(String s, int maxW, Vlw& f) {
 
 void ago(char* buf, size_t n, int mins) {
   if (mins < 0) *buf = 0;
-  else if (mins < 1) snprintf(buf, n, "agora");
+  else if (mins < 1) snprintf(buf, n, "Agora");
   else if (mins < 60) snprintf(buf, n, "%d min", mins);
   else if (mins < 1440) snprintf(buf, n, "%d h", mins / 60);
   else snprintf(buf, n, "%d d", mins / 1440);
@@ -233,15 +233,15 @@ void ago(char* buf, size_t n, int mins) {
 // já manda ordenado, com espera de mais de 1 h contada como parada.
 void drawSessions() {
   char buf[48], when[16];
-  header("sessões");
+  header("Sessões");
   // o contador é a legenda das cores: cada estado com o número na cor do seu ponto, só os que têm sessão
   JsonArrayConst n = app::frame["sesn"];
   int blocks = 0;
   for (JsonArrayConst s : app::frame["ses"].as<JsonArrayConst>()) blocks += !strcmp(s[1] | "", "block");
   const int act = n[0] | 0, idle = n[2] | 0, turns = max(0, (int)(n[1] | 0) - blocks);
   struct { int count; const char *one, *many; uint16_t c; } parts[] = {
-      {act, "ativa", "ativas", GREEN}, {blocks, "aprovar", "aprovar", RED},
-      {turns, "sua vez", "sua vez", YELLOW}, {idle, "parada", "paradas", DIM}};
+      {act, "ativa", "Ativas", GREEN}, {blocks, "Aprovar", "Aprovar", RED},
+      {turns, "Sua vez", "Sua vez", YELLOW}, {idle, "Parada", "Paradas", DIM}};
   char seg[4][24];
   int shown = 0;
   for (auto& pt : parts)
@@ -270,7 +270,7 @@ void drawSessions() {
     const uint16_t c = work ? GREEN : block ? RED : turn ? YELLOW : DIM;
     ago(when, sizeof when, s[2] | -1);
     // à direita só o essencial, para sobrar nome: a cor e o contador do topo dizem o resto
-    snprintf(buf, sizeof buf, "%s", work ? "ativa" : block ? "aprovar" : when);
+    snprintf(buf, sizeof buf, "%s", work ? "ativa" : block ? "Aprovar" : when);
     band.fillCircle(12, y + 7 - oy, 4, c);
     const int rw = textWidth(buf, LABEL);
     text(fit(s[0] | "?", W - 8 - 22 - rw - 8, LABEL).c_str(), 22, y, LABEL, work || block || turn ? TEXT : MUTED);
@@ -292,7 +292,7 @@ void drawModel(int i) {
   text(buf, W - 8, 40, LABEL, MUTED, top_right);
   band.fillRoundRect(8, 64 - oy, W - 16, 6, 3, TRACK);
   if (share > 0) band.fillRoundRect(8, 64 - oy, max(6, (W - 16) * min(share, 100) / 100), 6, 3, c);
-  const char* names[] = {"entrada", "saída", "cache lido", "cache escrito"};
+  const char* names[] = {"Entrada", "Saída", "Cache lido", "Cache escrito"};
   for (int k = 0; k < 4; k++) {
     const int x = k % 2 ? W / 2 + 4 : 8, y = 80 + k / 2 * 34;
     text(names[k], x, y, LABEL, MUTED);
@@ -300,7 +300,7 @@ void drawModel(int i) {
   }
   int y = 150;
   if (!config::v.hideCost) {
-    text("custo na API", 8, y, LABEL, MUTED);
+    text("Custo na API", 8, y, LABEL, MUTED);
     text(m[7] | "", W - 8, y, LABEL, ACCENT, top_right);
     y += 22;
   }
@@ -322,17 +322,17 @@ void comma(char* s) {
 // Histórico: [dia da semana, dia do mês, tokens em milhões, custo em US$], hoje por último.
 void drawHistory() {
   char buf[48];
-  header("histórico · 14 dias");
+  header("Histórico · 14 dias");
   JsonArrayConst hist = app::frame["hist"];
   const int n = hist.size();
   if (!n) return;
   float peak = 0.1f, sum = 0;
   int cost = 0;
   for (JsonArrayConst d : hist) peak = max(peak, (float)(d[2] | 0.f)), sum += d[2] | 0.f, cost += d[3] | 0;
-  snprintf(buf, sizeof buf, "hoje %.1fM", (float)(hist[n - 1][2] | 0.f));
+  snprintf(buf, sizeof buf, "Hoje %.1fM", (float)(hist[n - 1][2] | 0.f));
   comma(buf);
   text(buf, 8, 34, LABEL, TEXT);
-  snprintf(buf, sizeof buf, "média %.0fM/dia", sum / n);
+  snprintf(buf, sizeof buf, "Média %.0fM/dia", sum / n);
   text(buf, W - 8, 34, LABEL, MUTED, top_right);
   const int top = 58, base = 188, gap = 4, bw = (W - 16 - gap * (n - 1)) / n;
   for (int i = 0; i < n; i++) {
@@ -362,12 +362,12 @@ void drawOrgs() {
     const int p5 = a[4] | -1, pw = a[5] | -1;
     text(fit(a[1] | "?", 150, LABEL).c_str(), 8, y, LABEL, active ? TEXT : MUTED);
     if (active) text("ativa", W - 8, y, LABEL, ACCENT, top_right);
-    else if (relogin) text("precisa de login", W - 8, y, LABEL, AMBER, top_right);
+    else if (relogin) text("Precisa de login", W - 8, y, LABEL, AMBER, top_right);
     band.fillRoundRect(8, y + 20 - oy, 96, 6, 3, TRACK);
     if (p5 > 0) band.fillRoundRect(8, y + 20 - oy, max(6, 96 * min(p5, 100) / 100), 6, 3, levelColor(p5));
     snprintf(buf, sizeof buf, p5 < 0 ? "5h --" : "5h %d%%", p5);
     text(buf, 112, y + 15, LABEL, p5 < 0 ? DIM : levelColor(p5));
-    snprintf(buf, sizeof buf, pw < 0 ? "sem --" : "sem %d%%", pw);
+    snprintf(buf, sizeof buf, pw < 0 ? "Sem --" : "Sem %d%%", pw);
     text(buf, W - 8, y + 15, LABEL, MUTED, top_right);
     y += 46;
   }
@@ -436,8 +436,8 @@ void drawOta() {
   band.fillScreen(BG);
   const bool failed = since(otaMs) > 3000;
   const float frac = min(1.f, (float)otaDone / max<size_t>(otaTotal, 1));
-  text(failed ? "falhou" : frac >= 1 ? "firmware gravado" : "atualizando firmware", W / 2, 64, NUM, failed ? RED : TEXT, top_center);
-  text(failed ? "a placa continua na versão atual" : frac >= 1 ? "reiniciando…" : "não desligue a placa", W / 2, 96, LABEL, MUTED, top_center);
+  text(failed ? "Falhou" : frac >= 1 ? "Firmware gravado" : "Atualizando firmware", W / 2, 64, NUM, failed ? RED : TEXT, top_center);
+  text(failed ? "A placa continua na versão atual" : frac >= 1 ? "Reiniciando…" : "Não desligue a placa", W / 2, 96, LABEL, MUTED, top_center);
   band.fillRoundRect(24, 132 - oy, W - 48, 10, 5, TRACK);
   if (otaDone) band.fillRoundRect(24, 132 - oy, max(10, (int)((W - 48) * frac)), 10, 5, failed ? RED : frac >= 1 ? GREEN : ACCENT);
   snprintf(buf, sizeof buf, "%d%% · %u de %u KB", (int)(frac * 100), otaDone / 1024, otaTotal / 1024);
@@ -448,10 +448,10 @@ void drawOta() {
 // ensina a instalar o daemon no Mac, por QR code e pelo endereço escrito.
 void drawInstall() {
   band.fillScreen(BG);
-  text("falta o tokenpulse no Mac", W / 2, 4, LABEL, TEXT, top_center);
+  text("Falta o tokenpulse no Mac", W / 2, 4, LABEL, TEXT, top_center);
   band.qrcode("https://gilsondev.github.io/tokenpulse/comecar/", (W - 148) / 2, 22 - oy, 148);
   // o QR leva ao github.io, que não depende do encurtador; o endereço escrito é o curto, para digitar no Mac
-  text("escaneie, ou abra no Mac:", W / 2, 178, LABEL, MUTED, top_center);
+  text("Escaneie, ou abra no Mac:", W / 2, 178, LABEL, MUTED, top_center);
   text("tokenpulse.s.gy/comecar", W / 2, 198, LABEL, ACCENT, top_center);  // na fonte de 22 px não cabe em 240
 }
 
@@ -461,31 +461,31 @@ void drawAp() {
   char qr[48];
   snprintf(qr, sizeof qr, "WIFI:T:nopass;S:%s;;", net::apName());
   band.fillScreen(BG);
-  text("configure o WiFi da placa", W / 2, 4, LABEL, TEXT, top_center);
+  text("Configure o WiFi da placa", W / 2, 4, LABEL, TEXT, top_center);
   band.qrcode(qr, (W - 128) / 2, 22 - oy, 128);
   text("1. escaneie, ou entre no WiFi", W / 2, 156, LABEL, MUTED, top_center);
   text(net::apName(), W / 2, 172, LABEL, ACCENT, top_center);
   text("2. a página abre sozinha; se não,", W / 2, 192, LABEL, MUTED, top_center);
-  text("abra 192.168.4.1", W / 2, 208, LABEL, ACCENT, top_center);
+  text("Abra 192.168.4.1", W / 2, 208, LABEL, ACCENT, top_center);
 }
 
 void drawWaiting() {
   char buf[64];
   if (net::apOn() && !net::online()) return drawAp();
   band.fillScreen(BG);
-  text("sem dados do Mac", W / 2, 40, NUM, TEXT, top_center);
+  text("Sem dados do Mac", W / 2, 40, NUM, TEXT, top_center);
   if (app::lastFrameMs) {
-    snprintf(buf, sizeof buf, "último dado há %lu min", (millis() - app::lastFrameMs) / 60000);
+    snprintf(buf, sizeof buf, "Último dado há %lu min", (millis() - app::lastFrameMs) / 60000);
     text(buf, W / 2, 70, LABEL, MUTED, top_center);
   }
   const bool wifi = net::online();
   const bool daemon = wifi && net::lastDaemonMs() && millis() - net::lastDaemonMs() < 15000;
   // sem nenhum dado nunca e há 20 s no WiFi sem daemon: a tela de instalação no lugar das etapas
   if (wifi && !daemon && !app::lastFrameMs && millis() > 20000) return drawInstall();
-  String hint = net::apOn() ? String("conecte em ") + net::apName() : String("procurando a rede salva…");
+  String hint = net::apOn() ? String("Conecte em ") + net::apName() : String("Procurando a rede salva…");
   step(100, wifi, "WiFi", hint.c_str());
-  step(140, daemon, "daemon tokend", "rode host/install.sh no Mac");
-  step(180, false, "dados", nullptr);
+  step(140, daemon, "Daemon tokend", "Rode host/install.sh no Mac");
+  step(180, false, "Dados", nullptr);
   text(net::address().c_str(), W / 2, 208, LABEL, DIM, top_center);
 }
 

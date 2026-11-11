@@ -27,6 +27,7 @@ void drawModelDetail(bool live, int page, int idx);
 void drawHistory(bool live, int page, int sel);
 void drawSettings(bool live);
 void settingsHome();  // os ajustes abrem na lista de grupos
+bool settingsScroll(int dir);  // arrastar na vertical dentro de um grupo maior que a tela
 void drawAbout(bool live, bool armed);
 void aboutTop();             // o Sobre abre do começo
 bool aboutScroll(int dir);   // arrastar na vertical: +1 desce; false se já está na ponta

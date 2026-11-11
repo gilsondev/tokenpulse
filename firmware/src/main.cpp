@@ -161,7 +161,11 @@ void setup() {
   // touch resistivo sem calibração gravada: calibra antes de tudo, senão os toques caem longe da caneta
   if (board::PROFILE.calibrate && !settings::cal.ok) screens::calibrateTouch();
   webui::begin();
-  ble::begin(webui::apName());  // o mesmo nome do WiFi da placa; sem BLE no build, não faz nada
+#ifdef TOKENPULSE_BLE
+  // o nome que o Mac lista no Bluetooth: o produto, a placa e o mesmo final do WiFi dela (tokenpulse-XXXXXX)
+  static const String bleName = String("TokenPulse ") + board::BLE_LABEL + " " + (webui::apName() + 11);
+  ble::begin(bleName.c_str());
+#endif
 }
 
 void loop() {

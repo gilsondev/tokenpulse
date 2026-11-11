@@ -11,13 +11,15 @@ constexpr const char* UUID_TX = "6E400003-B5A3-F393-E0A9-E50E24DCCA9E";  // a pl
 constexpr size_t MAX_LINE = 8192;  // o mesmo teto do buffer da serial
 
 NimBLECharacteristic* tx = nullptr;
+String advName;
 volatile bool linked = false;
 // O NimBLE chama onWrite na tarefa dele: a linha montada vai por uma fila para o loop, que é quem desenha.
 QueueHandle_t lines = nullptr;
 String partial;
 
 class Rx : public NimBLECharacteristicCallbacks {
-  void onWrite(NimBLECharacteristic* c, NimBLEConnInfo&) override {
+  void onWrite(NimBLECharacteristic* c, NimBLEConnInfo& info) override {
+    if (!info.isEncrypted()) return;  // o frame traz a pergunta da sessão: só por link criptografado
     const std::string v = c->getValue();
     for (char ch : v) {
       if (ch != '\n') {
@@ -32,7 +34,13 @@ class Rx : public NimBLECharacteristicCallbacks {
 };
 
 class Server : public NimBLEServerCallbacks {
-  void onConnect(NimBLEServer*, NimBLEConnInfo&) override { linked = true; }
+  // Pareamento LE Secure Connections sem confirmação (a placa não tem teclado): a placa pede a criptografia
+  // assim que o Mac conecta, e só conta como conectada depois dela
+  void onConnect(NimBLEServer*, NimBLEConnInfo& info) override { NimBLEDevice::startSecurity(info.getConnHandle()); }
+  void onAuthenticationComplete(NimBLEConnInfo& info) override {
+    if (info.isEncrypted()) linked = true;
+    else NimBLEDevice::getServer()->disconnect(info.getConnHandle());
+  }
   void onDisconnect(NimBLEServer*, NimBLEConnInfo&, int) override {
     linked = false;
     partial = String();
@@ -42,14 +50,18 @@ class Server : public NimBLEServerCallbacks {
 }  // namespace
 
 void begin(const char* name) {
+  advName = name;
   lines = xQueueCreate(4, sizeof(String*));
   NimBLEDevice::init(name);
   NimBLEDevice::setMTU(517);
+  NimBLEDevice::setSecurityAuth(true, false, true);  // bond, sem MITM, Secure Connections (ECDH)
+  NimBLEDevice::setSecurityIOCap(BLE_HS_IO_NO_INPUT_OUTPUT);
   NimBLEServer* server = NimBLEDevice::createServer();
   server->setCallbacks(new Server());
   NimBLEService* svc = server->createService(UUID_SVC);
-  svc->createCharacteristic(UUID_RX, NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR)->setCallbacks(new Rx());
-  tx = svc->createCharacteristic(UUID_TX, NIMBLE_PROPERTY::NOTIFY);
+  svc->createCharacteristic(UUID_RX, NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR | NIMBLE_PROPERTY::WRITE_ENC)
+      ->setCallbacks(new Rx());
+  tx = svc->createCharacteristic(UUID_TX, NIMBLE_PROPERTY::NOTIFY | NIMBLE_PROPERTY::READ_ENC);
   svc->start();
   NimBLEAdvertising* adv = NimBLEDevice::getAdvertising();
   adv->setName(name);
@@ -73,6 +85,7 @@ void send(const char* line) {
 }
 
 bool connected() { return linked; }
+const char* name() { return advName.c_str(); }
 
 }  // namespace ble
 
@@ -83,6 +96,7 @@ void begin(const char*) {}
 bool poll(String&) { return false; }
 void send(const char*) {}
 bool connected() { return false; }
+const char* name() { return ""; }
 }  // namespace ble
 
 #endif

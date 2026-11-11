@@ -403,7 +403,7 @@ def first_prompt(sid):
 
 MAX_SESSIONS = 40   # o frame fica em ~5 KB, abaixo do buffer serial de 8 KB da placa
 MAX_PER_WS = 12
-OUTSIDE = (1000, "fora do herdr")  # terminais sem herdr, depois dos workspaces
+OUTSIDE = (1000, "Fora do herdr")  # terminais sem herdr, depois dos workspaces
 DESKTOP = (1001, "Claude Desktop")  # sempre o último: o Desktop não deixa escolher a conversa, só abrir o app
 
 
@@ -834,7 +834,7 @@ def limits():
     # depois do reset o % gravado é da janela anterior: vira "--" até chegar um dado novo
     out["p5"] = round(five.get("used_percentage") if five.get("used_percentage") is not None else -1)
     r5 = parse_reset(five.get("resets_at"))
-    out["r5"] = f"reset às {clock(r5)}" if r5 else ""  # horário, como o uso no app do Claude
+    out["r5"] = f"Reset às {clock(r5)}" if r5 else ""  # horário, como o uso no app do Claude
     if r5 and r5 <= now:  # a janela virou e o % gravado é da anterior: até chegar o novo, é "janela nova"
         start = r5
         out["p5"], out["r5"] = -1, "aguardando o 1º dado"
@@ -877,8 +877,11 @@ def known_ble():
 
 def remember_ble(name):
     known = known_ble()
+    # o final é o id da placa: um nome antigo da mesma placa (antes "tokenpulse-XXXXXX") sai da lista
+    now = {k for k in known if k[-6:] != name[-6:]} | {name}
+    if now != known:
+        json.dump(sorted(now), open(BLE_KNOWN, "w"))
     if name not in known:
-        json.dump(sorted(known | {name}), open(BLE_KNOWN, "w"))
         log(f"bluetooth: {name} pareada (veio pela USB)")
 
 
@@ -922,6 +925,9 @@ async def ble_main():
         try:
             async with BleakClient(dev) as client:
                 print(f"log [{name}] conectada por bluetooth", flush=True)
+                # uma escrita com resposta antes de tudo: a placa exige criptografia, e o macOS pareia (ou usa o
+                # pareamento guardado) ao receber a recusa; as escritas sem resposta seguintes já vão cifradas
+                await client.write_gatt_char(BLE_RX, b"\n", response=True)
                 await client.start_notify(BLE_TX, on_tx)
                 chunk = max(20, client.mtu_size - 3)
                 while client.is_connected and name not in usb:
@@ -1179,7 +1185,7 @@ def demo_frame():
                                             ["Claude Desktop", 1, 0, 0, 1, 0, 1]],
                  "rows": sessions},
         "hist": hist,
-        "p5": DEMO_P5, "r5": "reset às 17h", "pw": 38, "rw": "seg 6h", "wf": 49, "age": 30,
+        "p5": DEMO_P5, "r5": "Reset às 17h", "pw": 38, "rw": "seg 6h", "wf": 49, "age": 30,
         "clk": now.strftime("%H:%M"), "t": local_time(), "org": "Acme Labs", "dark": dark_mode(),
         "accts": [[1, "Acme Labs", 1, 0, DEMO_P5, 38, 0], [2, "Side Project", 0, 0, 7, 12, 180]], "act": ["", "", ""],
     }

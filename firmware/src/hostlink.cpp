@@ -75,7 +75,7 @@ void handle(const String& line) {
   if (line == "id") {
     idMs = millis();
 #ifdef TOKENPULSE_BLE  // o nome no BLE: com a placa na USB, o daemon não a usa também sem fio
-    Serial.printf("hello {\"board\":\"%s\",\"fw\":\"%s\",\"ble\":\"%s\"}\n", board::NAME, firmware(), webui::apName());
+    Serial.printf("hello {\"board\":\"%s\",\"fw\":\"%s\",\"ble\":\"%s\"}\n", board::NAME, firmware(), ble::name());
 #else
     Serial.printf("hello {\"board\":\"%s\",\"fw\":\"%s\"}\n", board::NAME, firmware());
 #endif

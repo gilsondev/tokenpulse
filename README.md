@@ -53,8 +53,9 @@ lugar novo, para o vidro não marcar. Ela usa o resto do hardware da placa:
 
 - **Bateria:** o ícone no cabeçalho mostra a carga e se a placa está na USB. O Sobre mostra a porcentagem e
   a previsão de carga completa. A carga para em 4,1 V em vez de 4,2 V, para a bateria durar mais ciclos.
-- **Bluetooth:** fora do cabo, a placa continua recebendo os dados sem fio. O Mac aprende o nome dela na
-  primeira conexão pela USB.
+- **Bluetooth:** fora do cabo, a placa continua recebendo os dados sem fio, por um link criptografado. O Mac
+  aprende o nome dela ("TokenPulse AMOLED" e o final do WiFi dela) na primeira conexão pela USB. Se a placa
+  for apagada por completo, remova-a nos ajustes de Bluetooth do Mac para parear de novo.
 - **Relógio** guardado no RTC, e o histórico diário num **cartão microSD**, além dos 14 dias que o Mac manda.
 - **Som:** um alerta quando uma sessão pede aprovação e sons para a janela de 5 h esgotada ou renovada, a
   semana esgotada, bateria fraca, Mac sem dados e Bluetooth. O botão BOOT silencia por 1 h.
@@ -103,7 +104,7 @@ abertas no [herdr](https://herdr.dev). O herdr é opcional e só acrescenta deta
 | Nome no cartão | título da sessão ou pasta | o nome que você deu à aba |
 | Sessão em foco e tocar para trazer à frente | Desktop: abre o app | sim, no painel do herdr |
 
-As duas convivem: com o herdr rodando, as sessões de fora dele aparecem num grupo "fora do herdr".
+As duas convivem: com o herdr rodando, as sessões de fora dele aparecem num grupo "Fora do herdr".
 
 ## Como funciona
 
