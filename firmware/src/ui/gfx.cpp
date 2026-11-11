@@ -36,6 +36,9 @@ struct Job {
 int bands = 1, bandRows = 0, rowLo = 0, rowHi = 0, fullW = 0, fullH = 0;
 uint16_t* bandBuf[2] = {nullptr, nullptr};
 bool capture = false;  // o próximo quadro sai também pela serial (screenshot)
+// board::PUSH_CLEARS: a cor em que o envio deixou cada canvas (-1: sujo) e a da última limpeza
+int32_t preCleared[2] = {-1, -1};
+uint16_t lastClear = 0;
 
 LGFX_Sprite& S() { return canvas[cur]; }
 
@@ -156,6 +159,8 @@ void setRotation(uint8_t rot) {
 bool ready() { return canvasOk; }
 
 void clear(uint16_t c) {
+  lastClear = c;
+  if (board::PUSH_CLEARS && preCleared[cur] == c) return void(preCleared[cur] = -1);  // o envio já limpou
   const uint32_t sw = __builtin_bswap16(c), v = sw | sw << 16;
   auto* p = reinterpret_cast<uint32_t*>(static_cast<uint16_t*>(S().getBuffer()) + rowLo * fullW);
   for (int i = 0, n = (rowHi - rowLo) * fullW / 2; i < n; i++) p[i] = v;
@@ -178,7 +183,7 @@ LGFX_Sprite& fb() { return S(); }
 const uint16_t* shown() { return lastShown; }
 
 void slide(int dir) {
-  if (!prev || !lastShown) return;
+  if (board::PUSH_CLEARS || !prev || !lastShown) return;  // o envio limpa o quadro mostrado: não há o que deslizar
   memcpy(prev, lastShown, S().width() * S().height() * 2);  // a foto do que está na tela agora
   slideDir = dir;
   slideMs = millis();
@@ -217,7 +222,7 @@ void presentBand() {
     }
     frame = out;
   }
-  lastShown = bands == 1 ? frame : nullptr;
+  lastShown = bands == 1 && !board::PUSH_CLEARS ? frame : nullptr;  // sem ele, o screenshot sai do próximo quadro
   if (capture) {  // screenshot: o mesmo formato do comando shot, faixa por faixa
     if (rowLo == 0) Serial.printf("SHOT %d %d %d\n", w, fullH, w * fullH * 2);
     // em blocos com pausa: a 460800 baud direto, a ponte USB-serial perde alguns bytes do quadro
@@ -231,6 +236,11 @@ void presentBand() {
     return;
   }
   Job j{frame, rowLo, w, h};
+  if (board::PUSH_CLEARS) {  // o envio do quadro anterior já acabou (pushDone): pode trocar a cor
+    const bool own = frame == static_cast<uint16_t*>(S().getBuffer());
+    board::pushFill = own ? lastClear : -1;
+    preCleared[cur] = own ? lastClear : -1;
+  }
   xQueueSend(pushQueue, &j, portMAX_DELAY);
   cur ^= 1;  // o próximo quadro (ou faixa) é desenhado no outro canvas
 }

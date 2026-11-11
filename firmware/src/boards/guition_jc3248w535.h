@@ -68,5 +68,7 @@ inline bool touchRaw(int16_t&, int16_t&) { return false; }  // capacitivo: já s
 inline void play(uint8_t, uint8_t) {}
 inline bool restPressed() { return false; }
 inline void powerOff() {}
+constexpr bool PUSH_CLEARS = false;
+inline int32_t pushFill = -1;
 
 }  // namespace board

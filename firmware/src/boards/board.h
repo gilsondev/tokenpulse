@@ -23,6 +23,9 @@
 //                                         (byte alto primeiro, o formato que painéis SPI recebem). Com
 //                                         PSRAM chega sempre o quadro inteiro (y = 0); sem ela, faixas.
 //
+//   constexpr bool PUSH_CLEARS            true: o displayPush limpa o quadro na cor board::pushFill depois de
+//                                         ler (fica livre enquanto o DMA transmite); o gfx pula a limpeza seguinte
+//
 //   Periféricos. Placa sem o recurso implementa a função vazia.
 //   void begin()                          pinos, I2C e sensores; roda depois do displayBegin()
 //   bool gravity(int16_t& x, int16_t& y)  eixos X/Y do acelerômetro; false se não há IMU ou ela não respondeu

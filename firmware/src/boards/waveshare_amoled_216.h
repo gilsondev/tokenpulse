@@ -30,6 +30,9 @@ constexpr int PANEL = 480, PAD = 28, SIDE = PANEL - 2 * PAD;
 inline uint8_t rotation = 0;
 void displayBegin();  // waveshare_amoled_216.cpp
 void displayPush(const uint16_t* px, int y, int w, int h);
+// O envio limpa o quadro na cor pushFill (-1: não limpa) enquanto a tela recebe, e o próximo desenho pula a limpeza.
+constexpr bool PUSH_CLEARS = true;
+inline volatile int32_t pushFill = -1;
 void setBrightness(uint8_t v);
 inline void displaySetRotation(uint8_t rot) { rotation = rot & 3; }
 inline int displayWidth() { return SIDE; }

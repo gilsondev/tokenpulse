@@ -33,6 +33,12 @@ void runOta(size_t size, const char* md5) {
   size_t done = 0;
   for (int block = 0; done < size; block++) {
     size_t n = Serial.readBytes(chunk, min(sizeof chunk, size - done));
+    // na USB nativa um "OK" às vezes se perde e o daemon fica esperando: pede de novo antes de desistir.
+    // Repetir o pedido não embaralha nada, a placa lê os bytes em sequência e o md5 confere no fim.
+    for (int retry = 0; n == 0 && retry < 3; retry++) {
+      Serial.println("OK");
+      n = Serial.readBytes(chunk, min(sizeof chunk, size - done));
+    }
     if (n == 0 || Update.write(chunk, n) != n) {
       if (n) Serial.printf("ERRO ota write em %u B: %s\n", done, Update.errorString());
       Update.abort();

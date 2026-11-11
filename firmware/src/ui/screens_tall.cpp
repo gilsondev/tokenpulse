@@ -953,8 +953,8 @@ Row screenRows[] = {
     {"Tema", &settings::v.theme, {"auto", "claro", "escuro"}, 3},
     {"Custo em US$", &settings::v.hideCost, {"mostrar", "ocultar"}, 2},
     // a última, porque com IMU a tela gira sozinha e a linha some. 4 rotações (ESP32-2432S028R): o cabo
-    // pode sair por qualquer lado; em graus, porque "vertical invertida" não cabe no botão
-    board::ROTATIONS == 4 ? Row{"Posição", &settings::v.orient, {"0°", "90°", "180°", "270°"}, 4}
+    // pode sair por qualquer lado, e o nome é o lado dele, que é o que a pessoa vê (rotação 1 deixa o cabo à direita)
+    board::ROTATIONS == 4 ? Row{"Lado do cabo USB", &settings::v.orient, {"embaixo", "direita", "em cima", "esquerda"}, 4}
                           : Row{"Posição", &settings::v.orient, {"vertical", "horizontal"}, 2},
 };
 Row soundRows[] = {

@@ -1,9 +1,9 @@
-// A Arduino_GFX define macros de cor (PURPLE, GREEN…) que colidem com theme.h; fica só neste arquivo.
 #if defined(BOARD_WAVESHARE_AMOLED_216)
-#include <Arduino_GFX_Library.h>
 #include <TouchDrvCSTXXX.hpp>
 #include <driver/i2s.h>
+#include <driver/spi_master.h>
 #include <esp_heap_caps.h>
+#include <soc/gpio_struct.h>
 
 extern "C" {
 #include "es8311.h"
@@ -15,22 +15,80 @@ extern "C" {
 namespace board {
 namespace {
 constexpr int N = PANEL, TP_INT = 11, TP_RST = 40;
-Arduino_ESP32QSPI qspi(12 /* CS */, 38 /* SCK */, 4, 5, 6, 7);
-Arduino_CO5300 panel(&qspi, 39 /* RST */, 0, false, N, N);
 TouchDrvCST92xx tp;
 bool tpOk = false;
 
-// O quadro mora na PSRAM; vai em faixas copiadas para a RAM interna, como na Guition.
+// CO5300 por QSPI, direto no spi_master do IDF (o mesmo formato da Arduino_GFX): comando numa linha
+// (0x02, registrador no endereço) e pixels em 4 linhas (0x32, 0x3C00: continua a escrita na RAM). A Arduino_GFX
+// segura o barramento e espera cada transação; aqui a faixa sai por DMA enquanto a próxima é montada.
+constexpr int PIN_CS = 12, PIN_SCK = 38, PIN_D[4] = {4, 5, 6, 7}, PIN_RST = 39;
+spi_device_handle_t dev = nullptr;
+inline void csLow() { GPIO.out_w1tc = 1u << PIN_CS; }
+inline void csHigh() { GPIO.out_w1ts = 1u << PIN_CS; }
+
+void command(uint8_t reg, const uint8_t* data = nullptr, int n = 0) {
+  spi_transaction_t t = {};
+  t.flags = SPI_TRANS_MULTILINE_CMD | SPI_TRANS_MULTILINE_ADDR | (n ? SPI_TRANS_USE_TXDATA : 0);
+  t.cmd = 0x02;
+  t.addr = (uint32_t)reg << 8;
+  for (int i = 0; i < n; i++) t.tx_data[i] = data[i];
+  t.length = n * 8;
+  csLow();
+  spi_device_polling_transmit(dev, &t);
+  csHigh();
+}
+void command1(uint8_t reg, uint8_t v) { command(reg, &v, 1); }
+
+// O quadro mora na PSRAM; vai em faixas de 32 linhas copiadas para a RAM interna, em duas faixas alternadas:
+// uma transmite enquanto a outra é montada.
 constexpr int BAND_ROWS = 32;
-uint16_t* band = nullptr;
+uint16_t* bands[2] = {nullptr, nullptr};
+spi_transaction_ext_t xfer[2];
 // O brilho é um comando no mesmo barramento do envio, que roda no outro núcleo: fica pendente até o próximo envio.
 volatile int pendingBright = -1;
 }  // namespace
 
 void displayBegin() {
-  panel.begin();
-  band = static_cast<uint16_t*>(heap_caps_aligned_alloc(16, N * BAND_ROWS * 2, MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL));
-  panel.fillScreen(0);
+  pinMode(PIN_CS, OUTPUT);
+  csHigh();
+  spi_bus_config_t bus = {};
+  bus.data0_io_num = PIN_D[0], bus.data1_io_num = PIN_D[1], bus.data2_io_num = PIN_D[2], bus.data3_io_num = PIN_D[3];
+  bus.sclk_io_num = PIN_SCK;
+  bus.data4_io_num = bus.data5_io_num = bus.data6_io_num = bus.data7_io_num = -1;
+  bus.max_transfer_sz = N * BAND_ROWS * 2 + 8;
+  bus.flags = SPICOMMON_BUSFLAG_MASTER | SPICOMMON_BUSFLAG_GPIO_PINS;
+  spi_device_interface_config_t cfg = {};
+  cfg.command_bits = 8, cfg.address_bits = 24, cfg.mode = 0;
+  cfg.clock_speed_hz = 80000000;  // pela matriz de GPIO o S3 entrega ~40 MHz nestes pinos
+  cfg.spics_io_num = -1, cfg.flags = SPI_DEVICE_HALFDUPLEX, cfg.queue_size = 1;
+  if (spi_bus_initialize(SPI2_HOST, &bus, SPI_DMA_CH_AUTO) != ESP_OK || spi_bus_add_device(SPI2_HOST, &cfg, &dev) != ESP_OK)
+    return void(Serial.println("ERRO tela: QSPI não iniciou"));
+  spi_device_acquire_bus(dev, portMAX_DELAY);
+
+  pinMode(PIN_RST, OUTPUT);  // a sequência da Arduino_CO5300
+  digitalWrite(PIN_RST, HIGH), delay(10), digitalWrite(PIN_RST, LOW), delay(200), digitalWrite(PIN_RST, HIGH), delay(200);
+  command(0x11), delay(120);  // sai do sono
+  command1(0xFE, 0x00);
+  command1(0xC4, 0x80);  // modo SPI
+  command1(0x3A, 0x55);  // 16 bits por pixel
+  command1(0x53, 0x20);
+  command1(0x63, 0xFF);  // brilho máximo do HBM
+  command(0x29);         // liga a tela
+  command1(0x51, 0xD0);
+  command1(0x58, 0x00);  // sem realce de contraste
+  command(0x20);         // sem inversão
+  command1(0x36, 0x00);  // MADCTL: RGB, sem espelhar
+
+  for (auto& b : bands) b = static_cast<uint16_t*>(heap_caps_aligned_alloc(16, N * BAND_ROWS * 2, MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL));
+  for (int i = 0; i < 2; i++) {
+    xfer[i] = {};
+    xfer[i].base.length = N * BAND_ROWS * 2 * 8;
+    xfer[i].base.tx_buffer = bands[i];
+  }
+  if (bands[0] && bands[1]) {  // tela preta antes do primeiro quadro
+    memset(bands[0], 0, N * BAND_ROWS * 2);
+    displayPush(nullptr, 0, 0, 0);
+  }
 
   pinMode(TP_RST, OUTPUT);
   digitalWrite(TP_RST, LOW);
@@ -142,42 +200,72 @@ bool touchNative(int16_t& x, int16_t& y) {
   return down;
 }
 
-uint16_t pixel(const uint16_t* px, int x, int y) {  // o ponto (x, y) do quadrado do meio vem deste pixel do quadro girado
-  constexpr int S = SIDE;
-  switch (rotation) {
-    case 1: return px[(S - 1 - x) * S + y];
-    case 2: return px[(S - 1 - y) * S + S - 1 - x];
-    case 3: return px[x * S + S - 1 - y];
-    default: return px[y * S + x];
-  }
-}
-
 void displayPush(const uint16_t* px, int, int, int) {
-  if (pendingBright >= 0) panel.setBrightness(pendingBright), pendingBright = -1;
+  if (!dev || !bands[0] || !bands[1]) return;
+  if (pendingBright >= 0) command1(0x51, pendingBright), pendingBright = -1;
   // AMOLED marca com imagem parada: a imagem inteira anda até 6 px, uma posição nova por minuto
   static const int8_t ORBIT[9][2] = {{0, 0}, {6, 0}, {6, 6}, {0, 6}, {-6, 6}, {-6, 0}, {-6, -6}, {0, -6}, {6, -6}};
   const auto& o = ORBIT[millis() / 60000 % 9];
-  const int sx = PAD + o[0], sy = PAD + o[1];
-  if (!band) return;
-  panel.startWrite();
-  panel.writeAddrWindow(0, 0, N, N);
-  for (int y = 0; y < N; y += BAND_ROWS) {
+  const int sx = PAD + o[0], sy = PAD + o[1], S = SIDE;
+  const int x0 = max(0, sx), x1 = min(N, sx + S);  // colunas da tela com conteúdo
+  const uint8_t win[4] = {0, 0, (N - 1) >> 8, (N - 1) & 0xFF};
+  command(0x2A, win, 4), command(0x2B, win, 4), command(0x2C);  // a tela inteira; a escrita começa no canto
+  const int32_t fill = pushFill;
+  const uint32_t fill32 = fill < 0 ? 0 : (uint32_t)__builtin_bswap16(fill) * 0x10001u;
+  csLow();
+  for (int y = 0, k = 0; y < N; y += BAND_ROWS, k ^= 1) {
+    uint16_t* band = bands[k];
     const int rows = min(BAND_ROWS, N - y);
-    for (int r = 0; r < rows; r++) {
-      uint16_t* out = band + r * N;
-      const int ny = y + r - sy;
-      if (ny < 0 || ny >= SIDE) {
-        memset(out, 0, N * 2);
-        continue;
+    memset(band, 0, rows * N * 2);
+    const int r0 = max(0, sy - y), r1 = min(rows, sy + S - y);  // linhas da faixa com conteúdo
+    // o quadro girado mora na PSRAM: cada rotação lê em sequência (o cache dela é por linha), nunca em coluna
+    if (px && r0 < r1) switch (rotation) {
+        case 0:
+          for (int r = r0; r < r1; r++) memcpy(band + r * N + x0, px + (y + r - sy) * S + (x0 - sx), (x1 - x0) * 2);
+          break;
+        case 2:
+          for (int r = r0; r < r1; r++) {
+            const uint16_t* src = px + (S - 1 - (y + r - sy)) * S + S - 1 - (x0 - sx);
+            for (uint16_t *d = band + r * N + x0, *e = band + r * N + x1; d < e;) *d++ = *src--;
+          }
+          break;
+        case 1:  // o ponto (cx, cy) vem de px[(S - 1 - cx) * S + cy]: uma coluna da tela é uma linha do quadro
+          for (int x = x0; x < x1; x++) {
+            const uint16_t* src = px + (S - 1 - (x - sx)) * S + (y + r0 - sy);
+            for (int r = r0; r < r1; r++) band[r * N + x] = *src++;
+          }
+          break;
+        default:  // 3: de px[cx * S + S - 1 - cy]
+          for (int x = x0; x < x1; x++) {
+            const uint16_t* src = px + (x - sx) * S + S - 1 - (y + r0 - sy);
+            for (int r = r0; r < r1; r++) band[r * N + x] = *src--;
+          }
       }
-      for (int x = 0; x < N; x++) {
-        const int nx = x - sx;
-        out[x] = nx < 0 || nx >= SIDE ? 0 : pixel(px, nx, ny);
+    if (y > 0) spi_device_polling_end(dev, portMAX_DELAY);  // a faixa anterior terminou de sair
+    auto& x = xfer[k];
+    x.base.length = rows * N * 2 * 8;
+    // a primeira faixa leva o comando de continuar a escrita; as outras são só dados, com o CS ainda baixo
+    x.base.flags = SPI_TRANS_MODE_QIO | (y ? SPI_TRANS_VARIABLE_CMD | SPI_TRANS_VARIABLE_ADDR | SPI_TRANS_VARIABLE_DUMMY : 0);
+    x.base.cmd = 0x32, x.base.addr = 0x003C00;
+    spi_device_polling_start(dev, &x.base, portMAX_DELAY);
+    // enquanto a faixa sai: limpa no quadro as linhas já copiadas, e o próximo desenho nele não precisa limpar
+    if (px && fill >= 0) {
+      const int cy0 = max(0, y - sy), cy1 = min(S, y + rows - sy);  // linhas do quadro que esta faixa leu
+      if (rotation == 0 || rotation == 2) {
+        const int f0 = rotation == 0 ? cy0 : S - cy1, f1 = rotation == 0 ? cy1 : S - cy0;
+        auto* q = reinterpret_cast<uint32_t*>(const_cast<uint16_t*>(px) + f0 * S);
+        for (int i = 0, n = (f1 - f0) * S / 2; i < n; i++) q[i] = fill32;
+      } else {  // giradas: a faixa leu as colunas cy0..cy1 do quadro (espelhadas na 3), em todas as linhas
+        const int c0 = rotation == 1 ? cy0 : S - cy1, c1 = rotation == 1 ? cy1 : S - cy0;
+        uint16_t* q = const_cast<uint16_t*>(px);
+        const uint16_t f16 = fill32;
+        for (int r = 0; r < S; r++)
+          for (uint16_t *d = q + r * S + c0, *e = q + r * S + c1; d < e;) *d++ = f16;
       }
     }
-    qspi.writeBytes(reinterpret_cast<uint8_t*>(band), rows * N * 2);
   }
-  panel.endWrite();
+  spi_device_polling_end(dev, portMAX_DELAY);
+  csHigh();
 }
 
 }  // namespace board
