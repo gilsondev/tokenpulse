@@ -835,8 +835,12 @@ def _refresh_accounts():
 
 def accounts_frame():
     """Contas com o último % conhecido: [número, org, ativa, precisa de login, % 5h, % semana, minutos desde]."""
-    out = []
-    for num, name, active, relogin in accounts():
+    out, current = [], _org["name"]
+    rows = accounts()
+    known = any(name == current for _, name, _, _ in rows)
+    for num, name, active, relogin in rows:
+        if known:  # "Em uso" pela org logada agora, sem esperar o cswap list ser relido
+            active = 1 if name == current else 0
         seen = _per_org.get(name) or {}
         p5, pw = seen.get("p5"), seen.get("pw")
         out.append([num, name, active, relogin, round(p5) if p5 is not None else -1, round(pw) if pw is not None else -1,
@@ -958,7 +962,11 @@ def run_action(cmd):
 
 def account_frame():
     act = _action if time.time() - _action["at"] < 600 else {"state": "", "target": "", "msg": ""}
-    return {"accts": accounts_frame(), "act": [act["state"], act["target"], act["msg"]]}
+    state = act["state"]
+    # a org do Claude Code mudou depois do pedido: a troca já valeu, mesmo com o cswap add ainda rodando
+    if state in ("login", "switching") and _org["changed_at"] > _action["at"]:
+        state = "done"
+    return {"accts": accounts_frame(), "act": [state, act["target"], act["msg"]]}
 
 
 _theme = {"at": 0.0, "dark": True}
@@ -989,6 +997,7 @@ def org():
             if _org["name"] and name != _org["name"]:
                 _org["changed_at"] = time.time()
                 _refetch.set()  # org nova: o % da anterior não vale mais, busca o desta já
+                _accounts["at"] = 0  # e a lista do cswap relê, para a org nova aparecer
             _org.update(mtime=mtime, name=name)
     except (OSError, ValueError):
         pass
@@ -1056,7 +1065,8 @@ def usage_loop():
             if err != _api["err"]:
                 log(f"uso via API falhou: {err}; próxima tentativa em {wait} s")
             _api["err"] = err
-        next_at = time.time() + wait
+        # trocou de org no meio da busca: tenta a nova em 5 s, sem esperar a volta inteira
+        next_at = time.time() + (5 if _api["err"].startswith("ValueError: org trocou") else wait)
         try:
             with open(USAGE_CACHE + ".tmp", "w") as f:
                 json.dump({"five": _api["five"], "week": _api["week"], "at": _api["at"], "org": _api["org"],
