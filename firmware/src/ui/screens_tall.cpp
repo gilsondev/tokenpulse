@@ -1009,6 +1009,8 @@ void drawWorkspacePage(bool live, int sp) {
     else if ((int)(w[6] | 0) == 2) mascot::draw(x + pad, y + (COMPACT() ? u(10) : u(14)), MASCOT_PX(), mood, bg, k, true);
     else folder(x + pad, y + (COMPACT() ? u(10) : u(14)), MASCOT_PX(), fc, bg);
     snprintf(buf, sizeof buf, total == 1 ? "1 sessão" : "%d sessões", total);
+    // cartão estreito (Guition em pé): "3 sessões" passaria por cima do ícone, então fica só o número
+    if (gfx::textWidth(buf, gfx::SMALL) > cw - u(10) - (pad + 12 * MASCOT_PX() + u(8))) snprintf(buf, sizeof buf, "%d", total);
     text(buf, x + cw - u(10), y + (COMPACT() ? u(10) : u(14)), gfx::SMALL, DIM, top_right, bg);
     const int maxW = cw - 2 * pad, t1 = y + TITLE_Y(), t2 = t1 + max(u(19), gfx::lineHeight(gfx::LABEL) - 1);
     String l2, name = wrap2(w[0] | "", gfx::LABEL, maxW, l2);
