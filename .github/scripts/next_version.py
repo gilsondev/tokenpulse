@@ -63,7 +63,7 @@ def notes(messages, tag, prev, repo):
     out += ["## How to update", "",
             "- Firmware on boards already flashed: `./update.sh` in a clone of the repository, over USB or WiFi.",
             "- Daemon installed with the site's command: run the same command again.",
-            "- First flash: the \"Flash from the browser\" button at "
+            "- First flash: the browser flash button at "
             "[gilsondev.github.io/tokenpulse/en](https://gilsondev.github.io/tokenpulse/en/#install), or this "
             "release's `tokenpulse-<board>-factory.bin` from 0x0.",
             "- SmallTV-Ultra: `tokenpulse-smalltv-ultra-ota.bin`, over WiFi.", ""]

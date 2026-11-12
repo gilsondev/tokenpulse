@@ -268,7 +268,7 @@ configuração volta os ajustes ao padrão e esquece o WiFi antes de você entre
 `curl -fsSL https://gilsondev.github.io/tokenpulse/install.sh | bash -s -- --uninstall`.
 
 **Gravar pelo navegador:** na seção [Instalar](https://gilsondev.github.io/tokenpulse/#instalar) do site, escolha a
-placa e clique em "Gravar pelo navegador" (Chrome ou Edge no computador, com a placa na USB). Ele grava a imagem completa
+placa e clique em "Gravar a <placa> pelo navegador" (Chrome ou Edge no computador, com a placa na USB). Ele grava a imagem completa
 do último release; depois, instale o daemon com o comando acima. O SmallTV-Ultra não grava assim: o USB dele só alimenta.
 
 **Gravar uma placa do zero:**

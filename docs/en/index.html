@@ -377,7 +377,7 @@ flowchart LR
       <h3>Easiest: flash from the browser</h3>
       <p>In Chrome or Edge on a computer, with the board plugged into USB, the button flashes the latest release's firmware. Then install the daemon on the Mac with one command: <a href="start/">see how to start</a>.</p>
       <esp-web-install-button manifest="../firmware/guition-jc3248w535.json">
-        <button slot="activate" class="btn primary" type="button">Flash from the browser</button>
+        <button slot="activate" class="btn primary" type="button">Flash the <span class="bname">Guition JC3248W535</span> from the browser</button>
         <span slot="unsupported">This browser can't flash over USB. Use Chrome or Edge on a computer, or the steps below.</span>
         <span slot="not-allowed">Flashing from the browser only works over HTTPS.</span>
       </esp-web-install-button>
@@ -437,11 +437,11 @@ cd tokenpulse</code></pre></li>
 <script>
   // um modelo escolhido vale para a página toda: as abas de Dispositivos, os comandos de Instalar e de OTA
   const BOARDS = {
-    "guition-jc3248w535": { chip: "esp32s3", ota: 15 },
-    "cyd-2432s028r": { chip: "esp32", ota: 40 },
-    "waveshare-s3-lcd-147b": { chip: "esp32s3", ota: 15 },
-    "waveshare-amoled-216": { chip: "esp32s3", ota: 25 },
-    "smalltv-ultra": { chip: "esp8266", ota: 10 },
+    "guition-jc3248w535": { chip: "esp32s3", ota: 15, name: "Guition JC3248W535" },
+    "cyd-2432s028r": { chip: "esp32", ota: 40, name: "ESP32-2432S028R" },
+    "waveshare-s3-lcd-147b": { chip: "esp32s3", ota: 15, name: "Waveshare 1.47B" },
+    "waveshare-amoled-216": { chip: "esp32s3", ota: 25, name: "Waveshare AMOLED 2.16" },
+    "smalltv-ultra": { chip: "esp8266", ota: 10, name: "SmallTV-Ultra" },
   };
   const buttons = document.querySelectorAll(".pick button");
   function choose(b, remember) {
@@ -449,6 +449,7 @@ cd tokenpulse</code></pre></li>
     document.querySelectorAll(".env").forEach(e => e.textContent = b);
     document.querySelectorAll(".chip").forEach(e => e.textContent = BOARDS[b].chip);
     document.querySelectorAll(".ota").forEach(e => e.textContent = BOARDS[b].ota);
+    document.querySelectorAll(".bname").forEach(e => e.textContent = BOARDS[b].name);  // o botão diz qual placa grava
     document.querySelectorAll("esp-web-install-button").forEach(e => e.setAttribute("manifest", `../firmware/${b}.json`));
     document.querySelectorAll("[data-only]").forEach(e => e.classList.toggle("on", e.dataset.only === b));
     document.querySelectorAll("[data-not]").forEach(e => e.classList.toggle("off", e.dataset.not === b));
