@@ -143,6 +143,19 @@
   span[data-only].on { display: inline; }
   .model img.cfg { max-width: 270px; margin: 20px 0 0; border: 1px solid var(--line); }
   .model img.wide { margin: 20px 0 0; border-radius: 0; }
+  .carousel { margin: 0 auto 28px; max-width: 560px; }
+  .carousel .track { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scroll-behavior: smooth; scrollbar-width: none; }
+  .carousel .track::-webkit-scrollbar { display: none; }
+  .carousel figure { flex: 0 0 100%; scroll-snap-align: center; margin: 0; text-align: center; }
+  .carousel figure img { height: 340px; width: auto; max-width: 100%; object-fit: contain; margin: 0 auto 16px; border-radius: 10px; }
+  .carousel[data-board="waveshare-amoled-216"] figure img { border-radius: 24%; }
+  .carousel figcaption h4 { margin: 0 0 6px; font-size: 17px; }
+  .carousel figcaption p { margin: 0 auto; max-width: 460px; min-height: 4.5em; color: var(--muted); font-size: 14px; }
+  .carousel .nav { display: flex; align-items: center; justify-content: center; gap: 14px; margin-top: 12px; }
+  .carousel .nav button { font: inherit; font-size: 20px; line-height: 1; width: 40px; height: 40px; border-radius: 999px; border: 1px solid var(--line); background: var(--bg); color: var(--text); cursor: pointer; }
+  .carousel .nav button:disabled { opacity: .35; cursor: default; }
+  .carousel .count { color: var(--dim); font-size: 13px; min-width: 64px; }
+  @media (max-width: 600px) { .carousel figure img { height: 280px; } }
   footer { padding: 40px 0 60px; border-top: 1px solid var(--line); color: var(--dim); font-size: 14px; }
   footer .wrap { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: center; }
 </style>
@@ -263,7 +276,7 @@ flowchart LR
     </div>
 
     <div class="model on" data-only="guition-jc3248w535">
-      <img src="screenshots/guition-jc3248w535.png" alt="Guition JC3248W535: principal, sessões e histórico" loading="lazy">
+      <div class="carousel" data-board="guition-jc3248w535"></div>
       <div>
         <h3>Guition JC3248W535 <span class="tag">padrão</span></h3>
         <dl>
@@ -280,7 +293,7 @@ flowchart LR
     </div>
 
     <div class="model" data-only="cyd-2432s028r">
-      <img src="screenshots/cyd-2432s028r.png" alt="ESP32-2432S028R deitada, com dados fictícios: principal, sessões de um workspace e a lista de ajustes" loading="lazy">
+      <div class="carousel" data-board="cyd-2432s028r"></div>
       <div>
         <h3>ESP32-2432S028R</h3>
         <dl>
@@ -311,7 +324,7 @@ flowchart LR
     </div>
 
     <div class="model" data-only="waveshare-amoled-216">
-      <img src="screenshots/waveshare-amoled-216.png" alt="Waveshare AMOLED 2,16 com dados fictícios: principal, workspaces, as sessões de um workspace e uma sessão pedindo aprovação" loading="lazy">
+      <div class="carousel" data-board="waveshare-amoled-216"></div>
       <div>
         <h3>Waveshare ESP32-S3-Touch-AMOLED-2.16</h3>
         <dl>
@@ -327,13 +340,11 @@ flowchart LR
           <dt>Atualização</dt><dd>OTA pela USB em ~25 s</dd>
         </dl>
         <p class="note">Parada, a tela troca o painel por versões resumidas em fundo preto, uma a cada 15 s e cada uma num lugar novo. Em Ajustes → Descanso você escolhe quais telas entram e o relógio com ou sem segundos.</p>
-        <img class="wide" src="screenshots/amoled-descanso.png" alt="O descanso da AMOLED: relógio flip, anel de uso, sessões, modelos e 14 dias" loading="lazy">
-        <img class="wide" src="screenshots/amoled-ajustes.png" alt="Ajustes da AMOLED: a lista de grupos, o grupo Som e o Sobre com a bateria" loading="lazy">
       </div>
     </div>
 
     <div class="model" data-only="smalltv-ultra">
-      <img src="screenshots/smalltv-ultra.png" alt="SmallTV-Ultra com dados fictícios: principal, sessões, detalhe do modelo, projetos, histórico e orgs" loading="lazy">
+      <div class="carousel" data-board="smalltv-ultra"></div>
       <div>
         <h3>GeekMagic SmallTV-Ultra</h3>
         <dl>
@@ -460,6 +471,39 @@ cd tokenpulse</code></pre></li>
   let saved = null;
   try { saved = localStorage.getItem("placa"); } catch (e) {}
   if (BOARDS[saved]) choose(saved, false);
+</script>
+<script>
+  // carrossel das telas de cada placa: uma captura por vez, com o nome e o que a tela faz embaixo
+  const CAP = {"principal": ["Principal", "A janela de 5 h no anel, na cor da faixa de uso: verde, amarelo a 70%, laranja a 80%, vermelho a 90%. A semana com o ritmo esperado, os tokens do dia, por minuto e a última hora."], "codex": ["Principal do Codex", "Com o Codex no Mac, a principal dele vem logo depois da do Claude, no mesmo layout: janela de 5 h, semana e tokens, lidos dos logs locais do Codex."], "workspaces": ["Sessões por workspace", "Os workspaces do herdr em páginas, com a pasta na cor do estado mais urgente. Claude Desktop, Codex e Multica ficam em workspaces fixos no fim. Sem herdr, as sessões se agrupam por projeto."], "sessoes": ["Sessões", "As sessões de um workspace por prioridade: aprovar, trabalhando, sua vez e paradas, cada uma com um mascote no estado dela. Toque num cartão para trazer a sessão à frente no Mac."], "aprovacao": ["Pede aprovação", "Quando uma sessão para esperando você aprovar algo, ela ocupa a tela com o que pede, com som e LED. O botão traz a sessão à frente no Mac."], "multica": ["Multica", "Os seus agentes no Multica: rodando, na fila, as suas issues em revisão e as runs suas que falharam em 24 h. Toque num número para filtrar os cartões."], "multica-agente": ["Detalhe do cartão", "A issue, o agente que roda nela, a tentativa, os tokens da run e os PRs ligados."], "multica-projetos": ["Projetos", "Os projetos em que você está, com o progresso e as issues em revisão. Toque num projeto para ver as issues dele."], "multica-issues": ["Issues do projeto", "As que pedem atenção primeiro: revisão, bloqueada, fazendo. Toque numa issue para abri-la no Mac, no app desktop do Multica quando ele está instalado."], "multica-revisao": ["Pede sua revisão", "Uma issue sua foi para revisão, ou uma run sua falhou: o aviso toca o som e o botão abre a issue no Mac."], "modelos": ["Modelos", "Os modelos usados hoje, do Claude e do Codex, com a fatia de cada um, entrada, saída e cache."], "modelo": ["Detalhe do modelo", "A composição dos tokens, o custo equivalente na API e os projetos que mais usaram o modelo."], "historico": ["Histórico", "Tokens e custo por dia nas últimas duas semanas, com a parte do Codex. Toque numa barra para ver o dia."], "ajustes": ["Ajustes", "Pela engrenagem ou arrastando do topo, numa lista de grupos como no celular: Tela, Som, Descanso e Cartão SD nas placas que têm, Provedores, Multica, Conta e Sobre."], "provedores": ["Provedores", "O que a placa mostra: automático, só Claude, só Codex ou Claude + Codex. A escolha vale para todas as placas do Mac."], "multica-ajustes": ["Ajustes do Multica", "A página do Multica vem desligada: ligue aqui ou na página web da placa e escolha o workspace."], "descanso": ["Descanso", "Parada, a AMOLED troca o painel por telas resumidas em fundo preto, como o relógio flip, para o vidro não marcar."], "tv-main": ["Principal", "A janela de 5 h no anel, a semana, os tokens do dia, o ritmo por minuto e a última hora."], "tv-codex": ["Principal do Codex", "Com o Codex no Mac, a principal dele entra na volta logo depois da do Claude."], "tv-sessions": ["Sessões", "Uma linha por sessão, na cor do estado. Sessão pedindo aprovação segura esta tela e pulsa a luz da tela."], "tv-multica": ["Multica", "Os seus agentes rodando, na fila, as suas issues em revisão e as runs que falharam, com o primeiro agente rodando embaixo."], "tv-models": ["Modelos", "Os modelos usados hoje com a fatia de cada um, entrada, saída e cache."], "tv-model0": ["Detalhe do modelo", "Os tokens por tipo, o custo equivalente na API e os projetos que mais usaram."], "tv-projects": ["Projetos da última hora", "Os projetos que gastaram tokens na última hora, com a origem e quando."], "tv-history": ["Histórico", "Tokens por dia nas últimas duas semanas, com a média e o custo."], "tv-orgs": ["Orgs", "As orgs salvas no claude-swap, com o uso de 5 h e da semana de cada uma."], "tv-mcalert": ["Pede sua revisão", "Uma issue sua no Multica foi para revisão: o aviso fica na tela por 1 min."]};
+  const TALL = ["principal", "codex", "workspaces", "sessoes", "aprovacao", "multica", "multica-agente", "multica-projetos", "multica-issues", "multica-revisao", "modelos", "modelo", "historico", "ajustes", "provedores", "multica-ajustes"];
+  const SHOTS = {"guition-jc3248w535": TALL, "cyd-2432s028r": TALL, "waveshare-amoled-216": [...TALL, "descanso"],
+                 "smalltv-ultra": ["main", "codex", "sessions", "multica", "models", "model0", "projects", "history", "orgs", "mcalert"]};
+  document.querySelectorAll(".carousel").forEach(el => {
+    const b = el.dataset.board, keys = SHOTS[b], cap = k => CAP[b === "smalltv-ultra" ? "tv-" + k : k];
+    el.innerHTML = `<div class="track">${keys.map(k => `<figure><img src="screenshots/${b}/${k}.png" alt="${cap(k)[0]}" loading="lazy"><figcaption><h4>${cap(k)[0]}</h4><p>${cap(k)[1]}</p></figcaption></figure>`).join("")}</div><div class="nav"><button type="button" class="prev" aria-label="Tela anterior">‹</button><span class="count"></span><button type="button" class="next" aria-label="Próxima tela">›</button></div>`;
+    const track = el.querySelector(".track"), count = el.querySelector(".count");
+    // a tela de agora: as setas contam cada clique, mesmo no meio da animação; o arraste acerta quando o scroll para
+    let cur = 0, settle = 0;
+    const show = () => {
+      count.textContent = `${cur + 1} / ${keys.length}`;
+      el.querySelector(".prev").disabled = cur === 0;
+      el.querySelector(".next").disabled = cur === keys.length - 1;
+    };
+    const go = d => {
+      cur = Math.max(0, Math.min(keys.length - 1, cur + d));
+      track.scrollTo({ left: cur * track.clientWidth });
+      show();
+    };
+    el.querySelector(".prev").onclick = () => go(-1);
+    el.querySelector(".next").onclick = () => go(1);
+    track.addEventListener("scroll", () => {
+      clearTimeout(settle);
+      settle = setTimeout(() => { cur = Math.round(track.scrollLeft / Math.max(1, track.clientWidth)); show(); }, 150);
+    }, { passive: true });
+    el.tabIndex = 0;
+    el.addEventListener("keydown", e => { if (e.key === "ArrowLeft") go(-1); if (e.key === "ArrowRight") go(1); });
+    show();
+  });
 </script>
 <script type="module" src="https://unpkg.com/esp-web-tools@10.4.0/dist/web/install-button.js?module"></script>
 <script type="module">
