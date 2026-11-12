@@ -637,7 +637,7 @@ void tap(int x, int y) {
     return dismissAttention();
   }
   if (!gfx::full()) return next();
-  if (page == 0 && !codexFace && !settingsOpen && (tall::orgTitleAt(x, y) || tall::suggestionAt(x, y))) {  // orgs
+  if (page == 0 && !codexFace && !tall::codexOnly() && !settingsOpen && (tall::orgTitleAt(x, y) || tall::suggestionAt(x, y))) {
     gfx::slide(-1);
     settingsOpen = true, about = 3, orgFromHeader = true;
     anim::reset();

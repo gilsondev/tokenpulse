@@ -219,10 +219,13 @@ void header(bool live, const char* title, bool dropdown = false, bool sub = true
   gear(W() - M() - u(10), u(19), u(10), gearActive ? ACCENT : MUTED);
   if (!sub && live) return;
   char buf[40];
-  const int st = live ? (f["st"] | 0) : 0;  // a página de status da Anthropic: 1 instável, 2 fora do ar
   JsonVariantConst cx = f["cx"];
-  if (st && !codexMain) strcpy(buf, st > 1 ? "Claude fora do ar" : "Claude instável");
+  // a página de status do serviço mostrado: 1 instável, 2 fora do ar (na principal do Codex, a da OpenAI)
+  const int st = live ? (codexMain ? (cx["st"] | 0) : (f["st"] | 0)) : 0;
+  const char* svc = codexMain || codexOnly() ? "Codex" : "Claude";
+  if (st) snprintf(buf, sizeof buf, st > 1 ? "%s fora do ar" : "%s instável", svc);
   else if (live && codexMain) snprintf(buf, sizeof buf, "Codex %d", (int)(cx["n"] | 0));
+  else if (live && codexOnly()) snprintf(buf, sizeof buf, "Codex %d", (int)(f["cxn"] | 0));
   else if (live && !cx.isNull())
     snprintf(buf, sizeof buf, "CLI %d · Desk %d · Codex %d", (int)(f["cli"] | 0), (int)(f["desk"] | 0), (int)(cx["n"] | 0));
   else if (live) snprintf(buf, sizeof buf, "CLI %d · Desk %d", (int)(f["cli"] | 0), (int)(f["desk"] | 0));
@@ -298,7 +301,7 @@ void drawMain(bool live, int page) {
     snprintf(buf, sizeof buf, *plan ? "Codex · %s" : "Codex", plan);
     header(live, buf, false);
   } else {
-    header(live, f["org"] | "Claude", true);
+    header(live, f["org"] | "Claude", !codexOnly());  // só o Claude troca de org
   }
 
   // Anel da janela de 5h: o herói da tela. Em pé fica no alto e centrado; deitada, na coluna da esquerda.
@@ -1146,7 +1149,7 @@ void drawHistory(bool live, int page, int sel) {
   tok.replace('.', ',');
   const int ny = u(66) + below(gfx::SMALL, 18);
   text(tok.c_str(), M(), ny, gfx::NUM, TEXT);
-  const bool cost = !settings::v.hideCost;
+  const bool cost = !settings::v.hideCost && !codexOnly();  // o Codex não tem preço na tabela
   snprintf(buf, sizeof buf, "US$ %d", (int)s[3]);
   if (cost) text(buf, W() - M(), ny, gfx::NUM, ACCENT, top_right);
   if (s.size() > 4) {  // com o Codex o número é a soma; esta linha separa os dois (o custo é só o do Claude)
@@ -1192,7 +1195,7 @@ void drawHistory(bool live, int page, int sel) {
 // o nome em cima e as opções num controle segmentado embaixo. Deitada, os controles de até 3 opções
 // ficam em duas colunas, para caber em 320 px. Toque no título do grupo volta para a lista.
 namespace {
-enum Kind : uint8_t { SEG, MASK, CYCLE };  // um valor; vários ligados (bits); um entre muitos, com ‹ ›
+enum Kind : uint8_t { SEG, MASK, CYCLE, RADIO };  // um valor; vários ligados (bits); um entre muitos, com ‹ ›; um por linha
 struct Row {
   const char* name;
   uint8_t* value;
@@ -1234,6 +1237,10 @@ Row soundRows[] = {
     {"Mac sem dados", &settings::web.soundMac, {}, sound::COUNT + 1, CYCLE},
     {"Bluetooth", &settings::web.soundBle, {}, sound::COUNT + 1, CYCLE},
 };
+// Provedores: o ajuste mora no daemon (vale para o Mac todo) e a placa só pede a troca; o frame diz o atual
+uint8_t provSel = 0;
+const char* const PROV_MODES[] = {"auto", "claude", "codex", "both"};
+Row provRows[] = {{"O que a placa mostra", &provSel, {"Automático", "Só Claude", "Só Codex", "Claude + Codex"}, 4, RADIO}};
 Row restRows[] = {
     {"Relógio", &settings::web.restSecs, {"HH:MM", "HH:MM:SS"}, 2},
     {"Telas do descanso", &settings::web.restPages, {"Relógio", "Uso", "Sessões", "Modelos", "14 dias"}, 5, MASK},
@@ -1248,24 +1255,27 @@ const Group GROUPS[] = {
     {"Som", soundRows, 8},
     {"Descanso", restRows, 2},
     {"Cartão SD", nullptr, 0},  // tela própria: o estado do cartão e o botão de formatar
+    {"Provedores", provRows, 1},
 };
 int group = -1;  // -1: a lista
 
 // Os itens da lista, na ordem: grupos que a placa tem, depois Conta e Sobre.
-enum Item : int8_t { G_SCREEN, G_SOUND, G_REST, G_SD, ACCOUNT, ABOUT };
+enum Item : int8_t { G_SCREEN, G_SOUND, G_REST, G_SD, G_PROV, ACCOUNT, ABOUT };
 int items(Item* out) {
   int n = 0;
   out[n++] = G_SCREEN;
   if (board::PROFILE.speaker) out[n++] = G_SOUND;
   if (board::PROFILE.oled) out[n++] = G_REST;
   if (board::PROFILE.sd) out[n++] = G_SD;
-  out[n++] = ACCOUNT, out[n++] = ABOUT;
+  if ((int)(app::frame["cxok"] | 0)) out[n++] = G_PROV;  // só quando o Mac tem o Codex
+  if (!codexOnly()) out[n++] = ACCOUNT;                   // a conta é a org do Claude
+  out[n++] = ABOUT;
   return n;
 }
 int MASK_LINE() { return u(46); }  // uma opção da lista de interruptores
 // a lista de interruptores é mais alta que uma linha comum; o seletor de som, sem título em cima, mais baixo
 int rowHeight(const Row& r) {
-  return r.kind == MASK ? SEG_TOP() + r.count * MASK_LINE() : r.kind == CYCLE ? CYCLE_H() + u(10) : ROW_H();
+  return r.kind == MASK || r.kind == RADIO ? SEG_TOP() + r.count * MASK_LINE() : r.kind == CYCLE ? CYCLE_H() + u(10) : ROW_H();
 }
 int listRowH(int n) { return min(u(72), (gfx::height() - SET_Y() - M()) / n); }
 
@@ -1292,7 +1302,7 @@ void fitRows(const Group& g) {
   const Cell last = cell(g, g.n - 1);
   const int bottom = last.y + rowHeight(g.rows[g.n - 1]), free = gfx::height() - u(10) - bottom;
   int lines = 0;
-  for (int k = 0; k < g.n; k++) lines += g.rows[k].kind != MASK && cell(g, k).x == M();  // a 2ª coluna não soma
+  for (int k = 0; k < g.n; k++) lines += g.rows[k].kind != MASK && g.rows[k].kind != RADIO && cell(g, k).x == M();  // a 2ª coluna não soma
   if (lines && free > 0) rowGrow = min(u(18), free / lines);
 }
 
@@ -1335,6 +1345,11 @@ void summary(Item it, char* buf, size_t n) {
       if (sd::state() == sd::READY) snprintf(buf, n, "%d dias · %lu MB livres", sd::days(), (unsigned long)sd::freeMB());
       else strlcpy(buf, sd::state() == sd::NONE ? "Sem cartão" : "Não montou", n);
       break;
+    case G_PROV: {
+      static const char* NAMES[] = {"Automático", "Só Claude", "Só Codex", "Claude + Codex"};
+      strlcpy(buf, NAMES[provSel], n);
+      break;
+    }
     case ACCOUNT: strlcpy(buf, app::frame["org"] | "", n); break;
     default: strlcpy(buf, hostlink::firmware(), n);
   }
@@ -1356,10 +1371,19 @@ void drawRow(const Row& r, Cell c, uint16_t track) {
   const int sy = c.y + SEG_TOP();
   text(r.name, c.x, c.y, gfx::SMALL, MUTED);
   fb().fillSmoothRoundRect(c.x, sy, c.w, sh, sh / 2, track);
-  if (r.kind == MASK) {  // uma opção por linha, com o interruptor à direita
+  if (r.kind == MASK || r.kind == RADIO) {  // uma opção por linha: o interruptor à direita, ou o círculo da escolha à esquerda
     fb().fillSmoothRoundRect(c.x, sy, c.w, r.count * MASK_LINE() - u(6), u(12), track);
     for (int k = 0; k < r.count; k++) {
       const int ly = sy + k * MASK_LINE(), mid = ly + (MASK_LINE() - u(6)) / 2;
+      if (r.kind == RADIO) {
+        const bool on = *r.value == k;
+        fb().fillSmoothCircle(c.x + u(26), mid, u(10), on ? ACCENT : MUTED);
+        fb().fillSmoothCircle(c.x + u(26), mid, u(10) - max(2, u(2)), track);
+        if (on) fb().fillSmoothCircle(c.x + u(26), mid, u(5), ACCENT);
+        text(r.opts[k], c.x + u(46), mid, gfx::LABEL, TEXT, middle_left, track);
+        if (k < r.count - 1) fb().drawFastHLine(c.x + u(14), ly + MASK_LINE() - u(3), c.w - u(28), BG);
+        continue;
+      }
       const bool on = *r.value >> k & 1;
       text(r.opts[k], c.x + u(14), mid, gfx::LABEL, TEXT, middle_left, track);
       const int sw = u(44), sh2 = u(24), sx = c.x + c.w - u(14) - sw;
@@ -1437,6 +1461,8 @@ void drawSettings(bool live) {
   gfx::clear();
   const uint16_t track = blend(BG, TRACK, 0.7f);
   soundLevel = settings::web.alerts & 2 ? settings::web.volume : 0;
+  for (int i = 0; i < 4; i++)
+    if (!strcmp(app::frame["prov"] | "auto", PROV_MODES[i])) provSel = i;
   if (group == G_SD) return drawSd(live, track);
   if (group >= 0) {
     const Group& g = GROUPS[group];
@@ -1462,9 +1488,9 @@ void drawSettings(bool live) {
     return;
   }
   header(live, "Ajustes", false, false);
-  Item list[6];
+  Item list[8];
   const int n = items(list), rh = listRowH(n), w = W() - 2 * M();
-  static const char* NAMES[] = {"Tela", "Som", "Descanso", "Cartão SD", "Conta", "Sobre"};
+  static const char* NAMES[] = {"Tela", "Som", "Descanso", "Cartão SD", "Provedores", "Conta", "Sobre"};
   char buf[48];
   for (int i = 0; i < n; i++) {
     const int y = SET_Y() + i * rh, h = rh - u(8);
@@ -1480,7 +1506,7 @@ void drawSettings(bool live) {
 // Toque nos ajustes: 0 trocou um ajuste (ou abriu/fechou um grupo), 1 abriu o Sobre, 2 abriu a Conta, -1 nada
 int settingsTap(int x, int y) {
   if (group < 0) {
-    Item list[6];
+    Item list[8];
     const int n = items(list), rh = listRowH(n);
     const int i = (y - SET_Y()) / rh;
     if (y < SET_Y() || i >= n || x < M() || x > W() - M()) return -1;
@@ -1498,16 +1524,21 @@ int settingsTap(int x, int y) {
     const Cell c = cell(g, i);
     Row& r = g.rows[i];
     const int top = r.kind == CYCLE ? c.y : c.y + SEG_TOP();
-    const int bottom = r.kind == MASK ? top + r.count * MASK_LINE() : top + SEG_H() + 4;
+    const int bottom = r.kind == MASK || r.kind == RADIO ? top + r.count * MASK_LINE() : top + SEG_H() + 4;
     if (x < c.x || x >= c.x + c.w || y < top - 6 || y > bottom) continue;
     auto& web = settings::web;
     if (r.kind == CYCLE) {  // à direita avança; na metade da esquerda (o nome e o ‹) volta
       *r.value = (*r.value + (x - c.x < c.w / 2 ? r.count - 1 : 1)) % r.count;
     } else {
-      const int k = r.kind == MASK ? constrain((y - top) / MASK_LINE(), 0, r.count - 1)
+      const int k = r.kind == MASK || r.kind == RADIO ? constrain((y - top) / MASK_LINE(), 0, r.count - 1)
                                    : min<int>((x - c.x) * r.count / c.w, r.count - 1);
       if (r.kind == MASK) {
         if ((*r.value ^ 1 << k) & 31) *r.value ^= 1 << k;  // ao menos uma tela fica ligada
+      } else if (r.value == &provSel) {
+        provSel = k;
+        char cmd[24];
+        snprintf(cmd, sizeof cmd, "ACTION prov %s", PROV_MODES[k]);
+        hostlink::action(cmd);
       } else if (r.value == &soundLevel) {
         web.alerts = k ? web.alerts | 2 : web.alerts & ~2;
         if (k) web.volume = k;
