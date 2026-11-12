@@ -99,12 +99,15 @@ void drawMain(bool codex = false) {
   text(org.c_str(), 8, 6, LABEL, TEXT);
   text(f["clk"] | "", W - 8, 6, LABEL, DIM, top_right);
   text(f["m"] | "Claude", 8, 22, LABEL, MUTED);
-  const int claude = live ? f["st"] | 0 : 0;  // a página de status da Anthropic: 1 instável, 2 fora do ar
-  const char* st = !live ? "Offline" : claude > 1 ? "Claude fora" : claude ? "Claude instável" : "Ao vivo";
-  const uint16_t stc = !live || claude > 1 ? RED : claude ? AMBER : GREEN;
+  // a página de status do provedor (a da Anthropic, ou a da OpenAI no "cx"): 1 instável, 2 fora do ar
+  const int status = live ? f["st"] | 0 : 0;
+  const char* st = !live ? "Offline" : status > 1 ? (codex ? "Codex fora" : "Claude fora")
+                 : status ? (codex ? "Codex instável" : "Claude instável") : "Ao vivo";
+  const uint16_t stc = !live || status > 1 ? RED : status ? AMBER : GREEN;
   text(st, W - 8, 22, LABEL, stc, top_right);
-  ui.dotX = W - 16 - textWidth(st, LABEL);
-  band.fillCircle(ui.dotX, 30 - oy, 3, stc);
+  const int dotX = W - 16 - textWidth(st, LABEL);
+  band.fillCircle(dotX, 30 - oy, 3, stc);
+  ui.dotX = stc == GREEN ? dotX : 0;  // só o "Ao vivo" pulsa
   band.drawFastHLine(8, 42 - oy, W - 16, TRACK);
 
   // anel da janela de 5 h
@@ -574,7 +577,7 @@ void render(int y0, int y1, Slot slot, bool data) {
 
 // O ponto de "ao vivo" pulsa direto no painel: redesenhar a faixa inteira por ele custaria demais.
 void pulseDot() {
-  if (millis() - app::lastFrameMs > 10000 || !ui.dotX || (app::frame["st"] | 0)) return;
+  if (millis() - app::lastFrameMs > 10000 || !ui.dotX) return;
   const float b = breath(1500);
   lcd.fillRect(ui.dotX - 5, 25, 11, 11, BG);
   lcd.fillCircle(ui.dotX, 30, 2 + lroundf(b * 2), blend(DARK_GREEN, GREEN, b));
