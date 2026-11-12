@@ -241,12 +241,12 @@ pelo prefixo dos commits desde o último release ([Conventional Commits](https:/
 
 | Prefixo do título do commit | Versão | Exemplo |
 |---|---|---|
-| `feat:` | minor: v0.4.0 → v0.5.0 | `feat(smalltv): tela de histórico` |
-| `fix:`, `perf:` | patch: v0.4.0 → v0.4.1 | `fix(daemon): nome de sessão sem pasta` |
-| `!` depois do tipo, ou `BREAKING CHANGE:` no corpo | major: v0.4.0 → v1.0.0 | `feat!: frame novo, firmware antigo não lê` |
-| `docs:`, `ci:`, `chore:`, `refactor:`, `test:`, `style:` | nenhum release | `docs: capturas do SmallTV` |
+| `feat:` | minor: v0.4.0 → v0.5.0 | `feat(smalltv): history screen` |
+| `fix:`, `perf:` | patch: v0.4.0 → v0.4.1 | `fix(daemon): session name without a folder` |
+| `!` depois do tipo, ou `BREAKING CHANGE:` no corpo | major: v0.4.0 → v1.0.0 | `feat!: new frame, old firmware can't read it` |
+| `docs:`, `ci:`, `chore:`, `refactor:`, `test:`, `style:` | nenhum release | `docs: SmallTV screenshots` |
 
-O texto depois do prefixo fica em português. O cálculo está em
+O título e o corpo do commit ficam em inglês: as notas do release saem deles, sem tradução no meio. O cálculo está em
 [`.github/scripts/next_version.py`](.github/scripts/next_version.py) (`--test` confere as regras). Cada release traz,
 por placa, `tokenpulse-<placa>-factory.bin` (primeira gravação, imagem completa a partir do 0x0) e
 `tokenpulse-<placa>-ota.bin` (atualização pelo daemon). Uma tag `v*` empurrada à mão também publica. Num build local, a versão é o `git describe` (`v0.4.0-2-gdb2a673-dirty`: dois commits depois da

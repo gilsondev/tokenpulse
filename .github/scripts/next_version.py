@@ -40,7 +40,8 @@ def bump(tag, lvl):
     return f"v{major}.{minor}.{patch + 1}"
 
 
-SECTIONS = (("Novidades", ("feat",)), ("Correções", ("fix", "perf")), ("Documentação", ("docs",)))
+# as notas são o texto dos commits: título e corpo em inglês, sem tradução no meio
+SECTIONS = (("New", ("feat",)), ("Fixes", ("fix", "perf")), ("Docs", ("docs",)))
 TRAILER = re.compile(r"^[\w-]+: .+$")  # Co-Authored-By:, Signed-off-by:
 
 
@@ -59,13 +60,13 @@ def notes(messages, tag, prev, repo):
             items.append(f"- **{title[:1].upper() + title[1:]}**" + "".join(f"\n  {l}" if l else "\n" for l in body.splitlines()))
         if items:
             out += [f"## {name}", "", *items, ""]
-    out += ["## Como atualizar", "",
-            "- Firmware das placas já gravadas: `./update.sh` no clone do repositório, pela USB ou pelo WiFi.",
-            "- Daemon instalado pelo comando do site: rode o mesmo comando de novo.",
-            "- Primeira gravação: o botão \"Gravar pelo navegador\" em "
-            "[gilsondev.github.io/tokenpulse](https://gilsondev.github.io/tokenpulse/#instalar), ou o "
-            "`tokenpulse-<placa>-factory.bin` deste release a partir do 0x0.",
-            "- SmallTV-Ultra: `tokenpulse-smalltv-ultra-ota.bin`, pelo WiFi.", ""]
+    out += ["## How to update", "",
+            "- Firmware on boards already flashed: `./update.sh` in a clone of the repository, over USB or WiFi.",
+            "- Daemon installed with the site's command: run the same command again.",
+            "- First flash: the \"Flash from the browser\" button at "
+            "[gilsondev.github.io/tokenpulse/en](https://gilsondev.github.io/tokenpulse/en/#install), or this "
+            "release's `tokenpulse-<board>-factory.bin` from 0x0.",
+            "- SmallTV-Ultra: `tokenpulse-smalltv-ultra-ota.bin`, over WiFi.", ""]
     if prev:
         out.append(f"Commits: https://github.com/{repo}/compare/{prev}...{tag}")
     return "\n".join(out)
@@ -112,8 +113,8 @@ def test():
     assert bump("v0.4.0", 1) == "v0.4.1" and bump("v0.4.1", 2) == "v0.5.0" and bump("v0.5.3", 3) == "v1.0.0"
     md = notes(["fix: cabo\n\nO DTR vai antes.\n\nCo-Authored-By: X <x@y>", "feat(ui): tela\n\nUma linha.",
                 "ci: cache", "docs: README"], "v1.1.0", "v1.0.0", "o/r")
-    assert md.index("## Novidades") < md.index("- **Tela**") < md.index("## Correções") < md.index("- **Cabo**")
-    assert "O DTR vai antes." in md and "Co-Authored-By" not in md and "cache" not in md and "## Documentação" in md
+    assert md.index("## New") < md.index("- **Tela**") < md.index("## Fixes") < md.index("- **Cabo**")
+    assert "O DTR vai antes." in md and "Co-Authored-By" not in md and "cache" not in md and "## Docs" in md
     assert md.endswith("compare/v1.0.0...v1.1.0")
     print("ok")
 

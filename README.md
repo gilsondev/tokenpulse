@@ -251,12 +251,12 @@ decided by the commit prefixes since the last release ([Conventional Commits](ht
 
 | Commit title prefix | Version | Example |
 |---|---|---|
-| `feat:` | minor: v0.4.0 → v0.5.0 | `feat(smalltv): tela de histórico` |
-| `fix:`, `perf:` | patch: v0.4.0 → v0.4.1 | `fix(daemon): nome de sessão sem pasta` |
-| `!` after the type, or `BREAKING CHANGE:` in the body | major: v0.4.0 → v1.0.0 | `feat!: frame novo, firmware antigo não lê` |
-| `docs:`, `ci:`, `chore:`, `refactor:`, `test:`, `style:` | no release | `docs: capturas do SmallTV` |
+| `feat:` | minor: v0.4.0 → v0.5.0 | `feat(smalltv): history screen` |
+| `fix:`, `perf:` | patch: v0.4.0 → v0.4.1 | `fix(daemon): session name without a folder` |
+| `!` after the type, or `BREAKING CHANGE:` in the body | major: v0.4.0 → v1.0.0 | `feat!: new frame, old firmware can't read it` |
+| `docs:`, `ci:`, `chore:`, `refactor:`, `test:`, `style:` | no release | `docs: SmallTV screenshots` |
 
-The text after the prefix is written in Portuguese. The logic is in
+The commit title and body are written in English: the release notes are built from them, with no translation step. The logic is in
 [`.github/scripts/next_version.py`](.github/scripts/next_version.py) (`--test` checks the rules). Each release
 ships, per board, `tokenpulse-<board>-factory.bin` (first flash, full image from 0x0) and
 `tokenpulse-<board>-ota.bin` (update through the daemon). A `v*` tag pushed by hand also publishes. In a local
