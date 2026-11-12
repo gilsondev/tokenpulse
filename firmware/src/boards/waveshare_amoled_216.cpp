@@ -360,6 +360,7 @@ bool powerState(PowerState& s) {
     last.battery = pmu.isBatteryConnect();
     last.usb = pmu.isVbusIn();
     last.charging = last.battery && pmu.isCharging();
+    last.finishing = last.charging && pmu.getChargerStatus() == XPOWERS_AXP2101_CHG_CV_STATE;
     last.pct = last.battery ? constrain(pmu.getBatteryPercent(), 0, 100) : -1;
   }
   s = last;

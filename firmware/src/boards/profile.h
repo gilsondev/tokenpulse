@@ -3,9 +3,10 @@
 // nome da placa. PSRAM e tamanho da tela não entram aqui: a UI lê os dois em tempo de execução.
 namespace board {
 
-// Energia de uma placa com PMU: bateria presente, USB ligado, carregando, % (-1: sem leitura).
+// Energia de uma placa com PMU: bateria presente, USB ligado, carregando, terminando (tensão constante), %
+// (-1: sem leitura).
 struct PowerState {
-  bool battery = false, usb = false, charging = false;
+  bool battery = false, usb = false, charging = false, finishing = false;
   int pct = -1;
 };
 

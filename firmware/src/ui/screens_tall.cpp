@@ -1560,6 +1560,8 @@ void drawAbout(bool live, bool armed) {
     const int eta = chargeEtaMin(ps);
     if (!ps.usb) snprintf(buf, sizeof buf, "%d%% · na bateria", ps.pct);
     else if (!ps.charging) snprintf(buf, sizeof buf, "%d%% · carregada", ps.pct);
+    // na tensão constante o % fica parado perto de 95% por até 1 h: o ritmo não serve mais para prever
+    else if (ps.finishing) snprintf(buf, sizeof buf, "%d%% · terminando", ps.pct);
     else if (eta < 0) snprintf(buf, sizeof buf, "%d%% · carregando", ps.pct);
     else if (eta >= 60) snprintf(buf, sizeof buf, "%d%% · cheia em ~%dh%02d", ps.pct, eta / 60, eta % 60);
     else snprintf(buf, sizeof buf, "%d%% · cheia em ~%d min", ps.pct, max(eta, 1));
