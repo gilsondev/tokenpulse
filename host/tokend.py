@@ -1322,7 +1322,7 @@ def serve(board, frame):
 
 # Placas pelo WiFi (o SmallTV-Ultra, que só tem USB de energia). Elas se anunciam por mDNS como
 # _tokenpulse._tcp e recebem um frame enxuto por HTTP, com só o que a tela principal delas mostra.
-NET_KEYS = ("p5", "r5", "pw", "rw", "tot", "rate", "sp", "m", "org", "clk", "dark", "age", "mods", "projs", "hist", "accts")
+NET_KEYS = ("p5", "r5", "pw", "rw", "tot", "rate", "sp", "m", "org", "clk", "dark", "age", "mods", "projs", "hist", "accts", "st")
 NET_EVERY = 2  # s entre frames: pelo WiFi, 1 por segundo só gastaria a placa
 net_boards = {}  # host -> NetBoard
 _latest = {}     # o último frame montado pelo laço principal

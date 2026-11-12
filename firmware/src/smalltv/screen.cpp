@@ -98,10 +98,12 @@ void drawMain() {
   text(org.c_str(), 8, 6, LABEL, TEXT);
   text(f["clk"] | "", W - 8, 6, LABEL, DIM, top_right);
   text(f["m"] | "Claude", 8, 22, LABEL, MUTED);
-  const char* st = live ? "Ao vivo" : "Offline";
-  text(st, W - 8, 22, LABEL, live ? GREEN : RED, top_right);
+  const int claude = live ? f["st"] | 0 : 0;  // a página de status da Anthropic: 1 instável, 2 fora do ar
+  const char* st = !live ? "Offline" : claude > 1 ? "Claude fora" : claude ? "Claude instável" : "Ao vivo";
+  const uint16_t stc = !live || claude > 1 ? RED : claude ? AMBER : GREEN;
+  text(st, W - 8, 22, LABEL, stc, top_right);
   ui.dotX = W - 16 - textWidth(st, LABEL);
-  band.fillCircle(ui.dotX, 30 - oy, 3, live ? GREEN : RED);
+  band.fillCircle(ui.dotX, 30 - oy, 3, stc);
   band.drawFastHLine(8, 42 - oy, W - 16, TRACK);
 
   // anel da janela de 5 h
@@ -240,7 +242,7 @@ void drawSessions() {
   for (JsonArrayConst s : app::frame["ses"].as<JsonArrayConst>()) blocks += !strcmp(s[1] | "", "block");
   const int act = n[0] | 0, idle = n[2] | 0, turns = max(0, (int)(n[1] | 0) - blocks);
   struct { int count; const char *one, *many; uint16_t c; } parts[] = {
-      {act, "ativa", "Ativas", GREEN}, {blocks, "Aprovar", "Aprovar", RED},
+      {act, "Ativa", "Ativas", GREEN}, {blocks, "Aprovar", "Aprovar", RED},
       {turns, "Sua vez", "Sua vez", YELLOW}, {idle, "Parada", "Paradas", DIM}};
   char seg[4][24];
   int shown = 0;
@@ -270,7 +272,7 @@ void drawSessions() {
     const uint16_t c = work ? GREEN : block ? RED : turn ? YELLOW : DIM;
     ago(when, sizeof when, s[2] | -1);
     // à direita só o essencial, para sobrar nome: a cor e o contador do topo dizem o resto
-    snprintf(buf, sizeof buf, "%s", work ? "ativa" : block ? "Aprovar" : when);
+    snprintf(buf, sizeof buf, "%s", work ? "Ativa" : block ? "Aprovar" : when);
     band.fillCircle(12, y + 7 - oy, 4, c);
     const int rw = textWidth(buf, LABEL);
     text(fit(s[0] | "?", W - 8 - 22 - rw - 8, LABEL).c_str(), 22, y, LABEL, work || block || turn ? TEXT : MUTED);
@@ -354,14 +356,14 @@ void drawHistory() {
 // Só leitura: trocar de org pede toque, que esta placa não tem.
 void drawOrgs() {
   char buf[48];
-  header("orgs");
+  header("Orgs");
   int y = 36;
   for (JsonArrayConst a : app::frame["accts"].as<JsonArrayConst>()) {
     if (y > 190) break;
     const bool active = a[2] | 0, relogin = a[3] | 0;
     const int p5 = a[4] | -1, pw = a[5] | -1;
     text(fit(a[1] | "?", 150, LABEL).c_str(), 8, y, LABEL, active ? TEXT : MUTED);
-    if (active) text("ativa", W - 8, y, LABEL, ACCENT, top_right);
+    if (active) text("Ativa", W - 8, y, LABEL, ACCENT, top_right);
     else if (relogin) text("Precisa de login", W - 8, y, LABEL, AMBER, top_right);
     band.fillRoundRect(8, y + 20 - oy, 96, 6, 3, TRACK);
     if (p5 > 0) band.fillRoundRect(8, y + 20 - oy, max(6, 96 * min(p5, 100) / 100), 6, 3, levelColor(p5));
@@ -569,7 +571,7 @@ void render(int y0, int y1, Slot slot, bool data) {
 
 // O ponto de "ao vivo" pulsa direto no painel: redesenhar a faixa inteira por ele custaria demais.
 void pulseDot() {
-  if (millis() - app::lastFrameMs > 10000 || !ui.dotX) return;
+  if (millis() - app::lastFrameMs > 10000 || !ui.dotX || (app::frame["st"] | 0)) return;
   const float b = breath(1500);
   lcd.fillRect(ui.dotX - 5, 25, 11, 11, BG);
   lcd.fillCircle(ui.dotX, 30, 2 + lroundf(b * 2), blend(DARK_GREEN, GREEN, b));
