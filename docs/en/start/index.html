@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Start · tokenpulse</title>
+<meta name="description" content="Got a tokenpulse board that is already flashed? One command on the Mac and it starts showing your Claude Code usage.">
+<link rel="icon" type="image/svg+xml" href="../../assets/logo.svg">
+<link rel="canonical" href="https://gilsondev.github.io/tokenpulse/en/start/">
+<link rel="alternate" hreflang="pt-BR" href="https://gilsondev.github.io/tokenpulse/comecar/">
+<link rel="alternate" hreflang="en" href="https://gilsondev.github.io/tokenpulse/en/start/">
+<meta name="theme-color" content="#1F1E1D">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #1F1E1D; --surface: #2A2927; --line: #3A3936; --text: #F5F4EE; --muted: #B8B5A9; --dim: #858278;
+    --accent: #D97757; --green: #74B37C; --code-bg: #171615;
+  }
+  @media (prefers-color-scheme: light) {
+    :root { --bg: #FAF9F5; --surface: #F0EEE6; --line: #E0DDD3; --text: #1F1E1D; --muted: #5C5A54; --dim: #8E8B82;
+            --accent: #C15F3C; --code-bg: #F0EEE6; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.55 Inter, system-ui, sans-serif; }
+  main { max-width: 680px; margin: 0 auto; padding: 40px 16px 64px; }
+  a { color: var(--accent); }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; color: var(--text); text-decoration: none; }
+  .brand img { width: 28px; height: 28px; }
+  h1 { font-size: clamp(26px, 6vw, 36px); line-height: 1.15; margin: 28px 0 10px; }
+  h2 { font-size: 20px; margin: 36px 0 10px; }
+  .lead { color: var(--muted); font-size: 18px; margin: 0; }
+  ol.steps { counter-reset: s; list-style: none; padding: 0; margin: 24px 0 0; }
+  ol.steps > li { counter-increment: s; position: relative; padding: 0 0 26px 46px; }
+  ol.steps > li::before { content: counter(s); position: absolute; left: 0; top: 0; width: 30px; height: 30px; border-radius: 50%;
+    display: grid; place-items: center; background: var(--accent); color: #fff; font-weight: 700; font-size: 14px; }
+  ol.steps h3 { margin: 2px 0 6px; font-size: 17px; }
+  ol.steps p, ul { color: var(--muted); margin: 6px 0; }
+  .cmd { display: flex; gap: 8px; align-items: stretch; margin: 10px 0; }
+  .cmd code { flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap; background: var(--code-bg); border: 1px solid var(--line);
+    border-radius: 10px; padding: 12px 14px; font: 14px/1.4 "JetBrains Mono", ui-monospace, monospace; color: var(--text); }
+  .cmd button { flex: none; font: 600 14px Inter, sans-serif; border: 0; border-radius: 10px; padding: 0 16px; cursor: pointer;
+    background: var(--accent); color: #fff; }
+  code { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 14px; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; margin: 12px 0; }
+  .card b { color: var(--text); }
+  .phone { border-left: 3px solid var(--accent); padding: 8px 14px; background: var(--surface); border-radius: 0 10px 10px 0; color: var(--muted); }
+  .phone b { color: var(--text); }
+  .lang { float: right; font-size: 14px; }
+  footer { margin-top: 48px; color: var(--dim); font-size: 14px; }
+</style>
+</head>
+<body>
+<main>
+  <a class="lang" href="../../comecar/" hreflang="pt-BR" lang="pt-BR">Português</a>
+  <a class="brand" href="../"><img src="../../assets/logo.svg" alt="">tokenpulse</a>
+
+  <h1>Got a tokenpulse board?</h1>
+  <p class="lead">It comes already flashed. What's left is to start, on your Mac, the program that reads your Claude Code usage and sends it to the board. It's one command, no password.</p>
+
+  <p class="phone" id="phone" hidden>On your phone? The steps below happen on the <b>Mac</b>. Open <b>gilsondev.github.io/tokenpulse/en/start</b> there.</p>
+
+  <ol class="steps">
+    <li>
+      <h3>Run this command in the Mac's Terminal</h3>
+      <div class="cmd"><code id="cmd">curl -fsSL https://gilsondev.github.io/tokenpulse/install.sh | bash</code><button type="button" id="copy">Copy</button></div>
+      <p>It installs <a href="https://docs.astral.sh/uv/">uv</a> if missing, downloads the <a href="https://github.com/gilsondev/tokenpulse/releases/latest">latest release</a> to <code>~/.local/share/tokenpulse</code> and starts the daemon at macOS login. It doesn't flash firmware or touch the board. <a href="../../install.sh">Read the script</a> first, if you like.</p>
+    </li>
+    <li>
+      <h3>Connect the board</h3>
+      <div class="card"><b>Guition, ESP32-2432S028R or Waveshare:</b> plug it into the Mac with a USB cable that carries data. On the Guition, if the board powers on but the screen stays at "cabo USB" (USB cable), flip the USB-C plug: only one side carries data.</div>
+      <div class="card"><b>GeekMagic SmallTV-Ultra:</b> plug it into any USB power source. The first time, the screen shows a QR code: scan it with your phone's camera to join the <code>tokenpulse-XXXXXX</code> WiFi. The configuration page opens by itself (otherwise, open <code>http://192.168.4.1</code>): pick your network from the list, the same as the Mac's, and type the password. The page tells you when it connects. Don't use the Mac's WiFi for this, or it loses internet while connected.</div>
+    </li>
+    <li>
+      <h3>Done</h3>
+      <p>Within a few seconds the board leaves "sem dados do Mac" (no data from the Mac) and shows the 5-hour window, the week and your sessions. The on-device UI is in Brazilian Portuguese.</p>
+    </li>
+  </ol>
+
+  <h2>Before you start</h2>
+  <ul>
+    <li>A Mac with macOS.</li>
+    <li>Claude Code installed and logged in: run <code>claude</code> once. Without login the board shows tokens, but not the usage %.</li>
+  </ul>
+
+  <h2>If it doesn't work</h2>
+  <ul>
+    <li>The board's waiting screen says which step is missing: cable or WiFi, daemon, data.</li>
+    <li>The log is at <code>~/Library/Logs/tokenpulse.log</code>. The last lines usually say what happened: <code>tail -20 ~/Library/Logs/tokenpulse.log</code>.</li>
+    <li>SmallTV not showing up: check that it and the Mac are on the same network. Guest networks and separate VLANs block mDNS.</li>
+    <li>To update later, run the same command again.</li>
+  </ul>
+
+  <h2>To remove</h2>
+  <div class="cmd"><code>curl -fsSL https://gilsondev.github.io/tokenpulse/install.sh | bash -s -- --uninstall</code></div>
+
+  <footer>Everything about the project, the boards and how to flash one from scratch: <a href="../">gilsondev.github.io/tokenpulse/en</a>.</footer>
+</main>
+<script>
+  document.getElementById("copy").addEventListener("click", async e => {
+    try { await navigator.clipboard.writeText(document.getElementById("cmd").textContent); e.target.textContent = "Copied"; }
+    catch { e.target.textContent = "Select and copy"; }
+    setTimeout(() => e.target.textContent = "Copy", 2000);
+  });
+  if (/iPhone|iPad|Android/i.test(navigator.userAgent)) document.getElementById("phone").hidden = false;
+</script>
+</body>
+</html>

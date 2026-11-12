@@ -1,0 +1,452 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>tokenpulse</title>
+<meta name="description" content="A desk monitor for Claude Code usage on an ESP32 touch screen: 5-hour window, week, sessions, models and cost, live over USB.">
+<link rel="icon" type="image/svg+xml" href="../assets/logo.svg">
+<link rel="canonical" href="https://gilsondev.github.io/tokenpulse/en/">
+<link rel="alternate" hreflang="pt-BR" href="https://gilsondev.github.io/tokenpulse/">
+<link rel="alternate" hreflang="en" href="https://gilsondev.github.io/tokenpulse/en/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="tokenpulse">
+<meta property="og:locale" content="en_US">
+<meta property="og:url" content="https://gilsondev.github.io/tokenpulse/en/">
+<meta property="og:title" content="tokenpulse: your Claude Code usage, live on your desk">
+<meta property="og:description" content="Claude Code's 5-hour window, week, sessions and cost on an ESP32 touch screen, over USB, no Wi-Fi.">
+<meta property="og:image" content="https://gilsondev.github.io/tokenpulse/assets/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="tokenpulse logo and three device screens: the 5-hour window ring, sessions and history">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="tokenpulse: your Claude Code usage, live on your desk">
+<meta name="twitter:description" content="Claude Code's 5-hour window, week, sessions and cost on an ESP32 touch screen, over USB.">
+<meta name="twitter:image" content="https://gilsondev.github.io/tokenpulse/assets/og.png">
+<meta name="theme-color" content="#1F1E1D">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #1F1E1D; --surface: #2A2927; --line: #3A3936; --text: #F5F4EE; --muted: #B8B5A9; --dim: #858278;
+    --accent: #D97757; --green: #74B37C; --yellow: #E2B04A; --red: #E05A4F;
+    --code-bg: #171615;
+  }
+  @media (prefers-color-scheme: light) {
+    :root { --bg: #FAF9F5; --surface: #F0EEE6; --line: #E0DDD3; --text: #1F1E1D; --muted: #5C5A54; --dim: #8E8B82;
+            --accent: #C15F3C; --code-bg: #F0EEE6; }
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.6 Inter, system-ui, sans-serif;
+         -webkit-font-smoothing: antialiased; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 20px; }
+  nav { position: sticky; top: 0; z-index: 10; background: color-mix(in srgb, var(--bg) 88%, transparent);
+        backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); }
+  nav .wrap { display: flex; align-items: center; gap: 24px; height: 60px; }
+  nav .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 18px; color: var(--text); }
+  nav .brand b { color: var(--accent); font-weight: 700; }
+  nav .links { margin-left: auto; display: flex; gap: 20px; font-size: 14px; }
+  nav .links a { color: var(--muted); }
+  @media (max-width: 640px) { nav .links a:not(.gh) { display: none; } }
+
+  header.hero { padding: 72px 0 40px; text-align: center; }
+  .hero h1 { font-size: clamp(40px, 7vw, 68px); line-height: 1.05; letter-spacing: -0.03em; margin: 20px 0 16px; }
+  .hero h1 b { color: var(--accent); }
+  .hero p.lead { font-size: clamp(17px, 2.2vw, 21px); color: var(--muted); max-width: 720px; margin: 0 auto 28px; }
+  .cta { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+  .btn { display: inline-flex; align-items: center; gap: 8px; padding: 12px 20px; border-radius: 999px; font-weight: 600;
+         font-size: 15px; border: 1px solid var(--line); color: var(--text); background: var(--surface); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn:hover { text-decoration: none; filter: brightness(1.08); }
+  .hero-img { margin: 48px auto 0; max-width: 960px; border-radius: 20px; overflow: hidden; border: 1px solid var(--line);
+              background: #191817; }
+  .hero-img img { width: 100%; display: block; }
+  .note { font-size: 13px; color: var(--dim); text-align: center; margin-top: 12px; }
+
+  section { padding: 64px 0; border-top: 1px solid var(--line); }
+  h2 { font-size: clamp(28px, 4vw, 38px); letter-spacing: -0.02em; margin: 0 0 8px; }
+  .sub { color: var(--muted); margin: 0 0 36px; max-width: 720px; }
+  h3 { font-size: 18px; margin: 0 0 6px; }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 20px; }
+  .strip { margin-top: 28px; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 20px; }
+  .strip p { color: var(--muted); margin: 4px 0 16px; }
+  .strip img { display: block; width: 100%; border-radius: 8px; image-rendering: auto; }
+  .shot { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; }
+  .shot img { width: 100%; display: block; aspect-ratio: 2 / 3; object-fit: cover; background: #191817; }
+  .shot div { padding: 14px 16px 18px; }
+  .shot p { margin: 0; color: var(--muted); font-size: 14px; }
+
+  .features { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
+  .feature { padding: 20px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+  .feature p { margin: 0; color: var(--muted); font-size: 14px; }
+  .feature .ico { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; margin-bottom: 12px;
+                  background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); font-weight: 700; }
+
+  .split { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; align-items: start; }
+  @media (max-width: 860px) { .split { grid-template-columns: 1fr; } }
+  .mermaid { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 20px; overflow-x: auto; }
+
+  ol.steps { counter-reset: s; list-style: none; padding: 0; margin: 0; }
+  ol.steps li { counter-increment: s; position: relative; padding: 0 0 22px 46px; }
+  ol.steps li::before { content: counter(s); position: absolute; left: 0; top: 0; width: 30px; height: 30px; border-radius: 50%;
+                        display: grid; place-items: center; background: var(--accent); color: #fff; font-weight: 700; font-size: 14px; }
+  ol.steps li p { margin: 2px 0 8px; color: var(--muted); }
+
+  pre { background: var(--code-bg); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; overflow-x: auto;
+        margin: 8px 0 0; }
+  code { font: 13.5px/1.55 "JetBrains Mono", ui-monospace, monospace; }
+  p code, li code, td code { background: var(--code-bg); border: 1px solid var(--line); border-radius: 6px; padding: 1px 6px; font-size: 13px; }
+  pre code { background: none; border: 0; padding: 0; font-size: 13.5px; }  /* o estilo de código na linha não vale dentro do bloco */
+
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 12px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; }
+  .tbl { overflow-x: auto; border: 1px solid var(--line); border-radius: 14px; }
+
+  .ota-flow { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; margin-top: 24px; }
+  .ota-flow div { border: 1px solid var(--line); border-radius: 12px; padding: 14px; background: var(--surface); font-size: 14px; }
+  .ota-flow b { display: block; color: var(--accent); font-size: 12px; text-transform: uppercase; letter-spacing: .06em; margin-bottom: 4px; }
+
+  .callout { border-left: 3px solid var(--accent); background: var(--surface); padding: 14px 18px; border-radius: 0 12px 12px 0;
+             color: var(--muted); font-size: 14px; margin-top: 20px; }
+  .pick { display: inline-flex; flex-wrap: nowrap; max-width: 100%; overflow-x: auto; scrollbar-width: none; gap: 6px; padding: 4px; border: 1px solid var(--line);
+          border-radius: 999px; background: var(--surface); margin-top: 20px; }
+  .pick button { font: inherit; font-size: 14px; color: var(--muted); background: none; border: 0; cursor: pointer;
+                 padding: 8px 14px; border-radius: 999px; white-space: nowrap; }
+  .pick button[aria-pressed="true"] { background: var(--accent); color: #fff; font-weight: 600; }
+  /* itens de grid encolhem abaixo do conteúdo: sem isto, um comando longo alarga a página no celular */
+  .split > *, .steps, .steps li { min-width: 0; }
+  #instalar .steps { margin-top: 28px; }
+  .model { margin-top: 24px; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 24px; }
+  .model img { display: block; max-width: 100%; margin: 0 auto 24px; border-radius: 10px; }
+  .model h3 { margin: 0 0 12px; }
+  .model dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 0; font-size: 15px; }
+  .model dt { color: var(--dim); }
+  .model dd { margin: 0; }
+  .model .note { color: var(--muted); font-size: 14px; border-left: 3px solid var(--accent); padding-left: 12px; margin-top: 16px; }
+  .model .tag { font-size: 12px; color: var(--accent); border: 1px solid var(--accent); border-radius: 999px; padding: 2px 8px; vertical-align: middle; }
+  @media (max-width: 600px) { .model dl { grid-template-columns: 1fr; gap: 2px; } .model dd { margin-bottom: 10px; } }
+  .noshot { border: 1px dashed var(--line); border-radius: 10px; color: var(--dim); display: grid; place-items: center; min-height: 120px; font-size: 14px; margin-bottom: 24px; }
+  [data-only] { display: none; }
+  [data-only].on { display: block; }
+  [data-not].off { display: none; }
+  span[data-only].on { display: inline; }
+  .model img.cfg { max-width: 270px; margin: 20px 0 0; border: 1px solid var(--line); }
+  .model img.wide { margin: 20px 0 0; border-radius: 0; }
+  footer { padding: 40px 0 60px; border-top: 1px solid var(--line); color: var(--dim); font-size: 14px; }
+  footer .wrap { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: center; }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="wrap">
+    <a class="brand" href="#"><img src="../assets/logo.svg" width="30" height="30" alt=""><span>token<b>pulse</b></span></a>
+    <div class="links">
+      <a href="#screens">Screens</a>
+      <a href="#sessions">Sessions</a>
+      <a href="#how-it-works">How it works</a>
+      <a href="#install">Install</a>
+      <a href="#ota">OTA</a>
+      <a class="gh" href="https://github.com/gilsondev/tokenpulse">GitHub</a>
+      <a class="gh" href="../" hreflang="pt-BR" lang="pt-BR">Português</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="wrap">
+    <img src="../assets/logo.svg" width="88" height="88" alt="tokenpulse logo: a progress ring with a pulse line">
+    <h1>Your Claude Code usage,<br><b>live</b> on your desk.</h1>
+    <p class="lead">An ESP32 touch screen that shows how much of the 5-hour window and of the week you have used, what each
+      session is doing and what that usage would cost through the API. Over USB, no Wi-Fi, no new account.</p>
+    <div class="cta">
+      <a class="btn primary" href="https://github.com/gilsondev/tokenpulse/releases/latest">Download the firmware</a>
+      <a class="btn" href="https://github.com/gilsondev/tokenpulse">View on GitHub</a>
+    </div>
+    <div class="hero-img"><img src="../screenshots/faixas.png" alt="The main screen in four usage bands: 42% green, 74% yellow, 86% orange and 95% red"></div>
+    <p class="note">Screenshots taken from the device itself, with the daemon in demo mode: org, sessions and numbers are fictitious. The on-device UI is in Brazilian Portuguese.</p>
+  </div>
+</header>
+
+<section id="screens">
+  <div class="wrap">
+    <h2>Everything that matters, in four screens</h2>
+    <p class="sub">Swipe sideways to change screens. Tap to open details. Swipe up from the bottom edge to go back to the main screen from anywhere.</p>
+    <div class="grid">
+      <div class="shot"><img src="../screenshots/01-principal.png" alt="Main screen" loading="lazy"><div><h3>Main</h3><p>The 5-hour window on the ring, which changes color with usage: green, yellow at 70%, orange at 80%, red at 90%. The week against the expected pace, today's tokens, per minute and the last hour.</p></div></div>
+      <div class="shot"><img src="../screenshots/02-workspaces.png" alt="Sessions grouped by workspace" loading="lazy"><div><h3>Sessions by workspace</h3><p><a href="https://herdr.dev">herdr</a> workspaces in pages, with as many cards as the screen fits. The folder takes the color of its most urgent state. Claude Desktop sits in a fixed workspace at the end and, with a single session, the card is the session itself. Without herdr, sessions are grouped by project.</p></div></div>
+      <div class="shot"><img src="../screenshots/03-sessoes.png" alt="Session cards with mascot" loading="lazy"><div><h3>Sessions</h3><p>The sessions of a workspace, in pages and by priority: approve, working, your turn, idle. Each with a mascot in its state. The "‹ workspace" title goes back to the list; tap a card to bring the session to the front on the Mac.</p></div></div>
+      <div class="shot"><img src="../screenshots/04-modelos.png" alt="Models used today" loading="lazy"><div><h3>Models</h3><p>The models used today and each one's share, with input, output and cache.</p></div></div>
+      <div class="shot"><img src="../screenshots/05-modelo.png" alt="Detail of a model" loading="lazy"><div><h3>Model detail</h3><p>Token breakdown, equivalent API cost and the projects that used it most.</p></div></div>
+      <div class="shot"><img src="../screenshots/06-historico.png" alt="14-day history" loading="lazy"><div><h3>History</h3><p>Tokens and cost per day over the last two weeks. Tap a bar to see the day.</p></div></div>
+      <div class="shot"><img src="../screenshots/10-esgotado.png" alt="Used-up window suggesting an org switch" loading="lazy"><div><h3>Limit reached</h3><p>With another org saved in <a href="https://github.com/realiti4/claude-swap">claude-swap</a>, the screen suggests switching to the one with the lowest usage.</p></div></div>
+      <div class="shot"><img src="../screenshots/07-ajustes.png" alt="Settings" loading="lazy"><div><h3>Settings</h3><p>From the gear next to the clock or by dragging down from the top of the screen, as a list of groups like on a phone: Display, Sound, Screensaver and SD Card on boards that have them, Account and About.</p></div></div>
+      <div class="shot"><img src="../screenshots/00-boot.png" alt="Boot screen with the logo" loading="lazy"><div><h3>Boot</h3><p>And a diagnostic screen that says what is missing when the Mac goes away: cable, daemon or data.</p></div></div>
+    </div>
+    <div class="strip"><h3>Landscape</h3><p>In Settings → Display → horizontal, every screen gets a landscape version: the ring on the left, sessions in 3 columns and the model detail with the projects beside it.</p><img src="../screenshots/deitada.png" alt="Landscape screens: main, sessions in 3 columns and model detail" loading="lazy"></div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>Made to stay on all day</h2>
+    <p class="sub">Designed as a desk object: good-looking from afar, quick to read, and it doesn't ask for attention for nothing.</p>
+    <div class="features">
+      <div class="feature"><div class="ico">~</div><h3>Smooth</h3><p>Smooth Inter fonts, anti-aliasing and the screen pushed on the ESP32's second core: about 30 frames per second.</p></div>
+      <div class="feature"><div class="ico">◐</div><h3>Animations with a purpose</h3><p>Springs on the bars and the ring, a glow at the tip of the progress, a pulse when the band changes. Idle, it stays calm.</p></div>
+      <div class="feature"><div class="ico">☾</div><h3>Discreet at night</h3><p>Dims when nobody touches it and nearly turns off from 10 pm to 7 am. A tap wakes it without changing screens.</p></div>
+      <div class="feature"><div class="ico">⇄</div><h3>Multiple orgs</h3><p>Switch org from the screen. It asks for two taps, because it switches the login of every session on the Mac.</p></div>
+      <div class="feature"><div class="ico">↑</div><h3>Updates over USB</h3><p>New firmware in about 15 seconds, with md5 verification and the previous version kept if anything fails.</p></div>
+      <div class="feature"><div class="ico">⌂</div><h3>Your data stays on the Mac</h3><p>Nothing goes to the cloud: logs, token and sessions stay on your computer. The board only draws.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="sessions">
+  <div class="wrap">
+    <h2>Sessions: with or without herdr</h2>
+    <p class="sub">tokenpulse tracks any Claude Code session: the CLI in a plain terminal, Claude Desktop and sessions open in <a href="https://herdr.dev">herdr</a>. herdr is optional and only adds detail.</p>
+    <div class="tbl"><table>
+      <tr><th></th><th>Plain sessions (terminal, Desktop)</th><th>Sessions in herdr</th></tr>
+      <tr><td>Show on screen</td><td>yes, those active in the last hour</td><td>yes, every open pane</td></tr>
+      <tr><td>Tokens, models, cost, history</td><td>yes, from Claude Code logs</td><td>yes</td></tr>
+      <tr><td>State (working, your turn, idle)</td><td>estimated from logs</td><td>herdr's, live</td></tr>
+      <tr><td>"Needs you" (waiting for approval)</td><td>—</td><td>yes</td></tr>
+      <tr><td>Grouping</td><td>by project (folder)</td><td>by herdr workspace</td></tr>
+      <tr><td>Name on the card</td><td>session title or folder</td><td>the name you gave the tab</td></tr>
+      <tr><td>Tap to bring forward</td><td>Desktop: opens the app</td><td>yes, in the herdr pane</td></tr>
+    </table></div>
+    <p class="note" style="text-align:left">Both coexist: with herdr running, sessions outside it show up in an "Fora do herdr" (outside herdr) group.</p>
+  </div>
+</section>
+
+<section id="how-it-works">
+  <div class="wrap split">
+    <div>
+      <h2>How it works</h2>
+      <p class="sub">The Mac does the heavy lifting and the board only draws. A Python daemon reads the Claude Code logs, fetches the % from the same API Claude Code itself uses and sends one JSON frame per second over USB.</p>
+      <p class="sub">When you tap the screen to switch org or bring a session forward, the board asks for an action from a closed list (<code>focus</code>, <code>switch</code>, <code>login</code>). The daemon never runs text coming from the serial port.</p>
+    </div>
+    <pre class="mermaid">
+flowchart LR
+  logs["Claude Code logs"] --> d["tokend.py<br/>(on the Mac)"]
+  api["Anthropic<br/>usage API"] --> d
+  herdr["herdr"] --> d
+  cswap["claude-swap"] --> d
+  d -- "USB: 1 JSON frame/s" --> esp["ESP32<br/>screen + touch"]
+  esp -- "taps: focus / switch / login" --> d
+    </pre>
+  </div>
+</section>
+
+<section id="devices">
+  <div class="wrap">
+    <h2>Supported devices</h2>
+    <p class="sub">Everything that changes from one board to another lives in a single header, with a profile of what it has (touch, IMU, LED, button). The UI picks the layout by screen size and profile, never by board name. Pick the model: install and OTA, further down, follow your choice.</p>
+    <div class="pick" role="group" aria-label="Model">
+      <button type="button" data-board="guition-jc3248w535" aria-pressed="true">Guition JC3248W535</button>
+      <button type="button" data-board="cyd-2432s028r" aria-pressed="false">ESP32-2432S028R</button>
+      <button type="button" data-board="waveshare-s3-lcd-147b" aria-pressed="false">Waveshare ESP32-S3-LCD-1.47B</button>
+      <button type="button" data-board="waveshare-amoled-216" aria-pressed="false">Waveshare AMOLED 2.16</button>
+      <button type="button" data-board="smalltv-ultra" aria-pressed="false">GeekMagic SmallTV-Ultra</button>
+    </div>
+
+    <div class="model on" data-only="guition-jc3248w535">
+      <img src="../screenshots/guition-jc3248w535.png" alt="Guition JC3248W535: main, sessions and history" loading="lazy">
+      <div>
+        <h3>Guition JC3248W535 <span class="tag">default</span></h3>
+        <dl>
+          <dt>Chip</dt><dd>ESP32-S3 N16R8: 16 MB flash, 8 MB PSRAM</dd>
+          <dt>Screen</dt><dd>3.5" IPS 320×480, AXS15231B over QSPI</dd>
+          <dt>Touch</dt><dd>capacitive, with your finger</dd>
+          <dt>UI</dt><dd>every screen in the large layout, portrait or landscape</dd>
+          <dt>Web page</dt><dd>settings, automatic screen change, rotation screens and alerts at <code>http://&lt;name&gt;.local</code>; WiFi only turns on when asked in Settings → About</dd>
+          <dt>Update</dt><dd>OTA over USB in ~15 s</dd>
+        </dl>
+        <p class="note">Its USB-C only carries data on one side of the plug. If the board powers on but the Mac doesn't see it, flip the plug.</p>
+        <img class="cfg" src="../screenshots/usb-config.png" alt="Settings page of the Guition and ESP32-2432S028R, with fictitious data" loading="lazy">
+      </div>
+    </div>
+
+    <div class="model" data-only="cyd-2432s028r">
+      <img src="../screenshots/cyd-2432s028r.png" alt="ESP32-2432S028R in landscape, with fictitious data: main, sessions of a workspace and the settings list" loading="lazy">
+      <div>
+        <h3>ESP32-2432S028R</h3>
+        <dl>
+          <dt>Also called</dt><dd><a href="https://github.com/witnessmenow/ESP32-Cheap-Yellow-Display">Cheap Yellow Display</a> (CYD)</dd>
+          <dt>Chip</dt><dd>ESP32-D0WD-V3: 4 MB flash, no PSRAM (the screen is drawn in two bands)</dd>
+          <dt>Screen</dt><dd>2.8" 240×320, ST7789</dd>
+          <dt>Touch</dt><dd>resistive XPT2046, with the stylus; calibration the first time</dd>
+          <dt>UI</dt><dd>every screen in the medium layout, in 4 orientations, picked by the USB cable side; sessions in compact cards, 6 per page in portrait and 4 in landscape; RGB LED in the band color, blinking red when a session asks for approval</dd>
+          <dt>Web page</dt><dd>the same as the Guition's, with WiFi on only when asked in Settings → About</dd>
+          <dt>Update</dt><dd>OTA over USB (CH340 bridge) in ~40 s</dd>
+        </dl>
+        <p class="note">The first time, the screen asks for four stylus taps, one in each corner. To redo it: Settings → About → calibrar o toque (calibrate touch).</p>
+      </div>
+    </div>
+
+    <div class="model" data-only="waveshare-s3-lcd-147b">
+      <div class="noshot">no images for now</div>
+      <div>
+        <h3>Waveshare ESP32-S3-LCD-1.47B</h3>
+        <dl>
+          <dt>Chip</dt><dd>ESP32-S3R8: 16 MB flash, 8 MB PSRAM</dd>
+          <dt>Screen</dt><dd>1.47" 172×320, ST7789</dd>
+          <dt>Touch</dt><dd>no touch: the BOOT button changes screens and, held, goes back to the main one</dd>
+          <dt>UI</dt><dd>compact layout (main, models, projects); auto-rotates with the accelerometer; RGB LED in the band color</dd>
+          <dt>Update</dt><dd>OTA over USB in ~15 s</dd>
+        </dl>
+      </div>
+    </div>
+
+    <div class="model" data-only="waveshare-amoled-216">
+      <img src="../screenshots/waveshare-amoled-216.png" alt="Waveshare AMOLED 2.16 with fictitious data: main, workspaces, the sessions of a workspace and a session asking for approval" loading="lazy">
+      <div>
+        <h3>Waveshare ESP32-S3-Touch-AMOLED-2.16</h3>
+        <dl>
+          <dt>Chip</dt><dd>ESP32-S3R8: 16 MB flash, 8 MB PSRAM</dd>
+          <dt>Screen</dt><dd>2.16" AMOLED 480×480 with round corners, CO5300 over QSPI, at ~29 frames per second</dd>
+          <dt>Touch</dt><dd>capacitive, with your finger</dd>
+          <dt>UI</dt><dd>every screen in the large layout; auto-rotates with the accelerometer; screensaver against burn-in</dd>
+          <dt>Sound</dt><dd>speaker: session asking for approval, 5 h used up or renewed, week used up, low battery, Mac without data and Bluetooth, with 11 options and volume in Settings → Sound</dd>
+          <dt>Battery</dt><dd>charge icon in the header, percentage and time to a full charge in About; charges up to 4.1 V to last longer</dd>
+          <dt>Wireless</dt><dd>off USB, data arrives over Bluetooth; the Mac learns the board on the first cable connection</dd>
+          <dt>Extras</dt><dd>clock in the RTC; daily history on the microSD card, beyond the 14 days</dd>
+          <dt>Buttons</dt><dd>KEY3 changes screens; PWR enters and leaves the screensaver and, held for 2 s, powers the board off; BOOT mutes for 1 h</dd>
+          <dt>Update</dt><dd>OTA over USB in ~25 s</dd>
+        </dl>
+        <p class="note">When idle, the screen swaps the dashboard for condensed versions on a black background, one every 15 s and each in a new spot. In Settings → Screensaver you pick which screens join and the clock with or without seconds.</p>
+        <img class="wide" src="../screenshots/amoled-descanso.png" alt="The AMOLED screensaver: flip clock, usage ring, sessions, models and 14 days" loading="lazy">
+        <img class="wide" src="../screenshots/amoled-ajustes.png" alt="AMOLED settings: the group list, the Sound group and About with the battery" loading="lazy">
+      </div>
+    </div>
+
+    <div class="model" data-only="smalltv-ultra">
+      <img src="../screenshots/smalltv-ultra.png" alt="SmallTV-Ultra with fictitious data: main, sessions, model detail, projects, history and orgs" loading="lazy">
+      <div>
+        <h3>GeekMagic SmallTV-Ultra</h3>
+        <dl>
+          <dt>Chip</dt><dd>ESP8266 (ESP-12F): 4 MB flash, ~80 KB RAM and no PSRAM (the screen goes out in 30-line bands)</dd>
+          <dt>Screen</dt><dd>1.54" 240×240, ST7789</dd>
+          <dt>Touch</dt><dd>none: screens cycle by themselves (main, sessions, models, each model's detail, projects, history and orgs)</dd>
+          <dt>Alerts</dt><dd>a session asking for approval holds the sessions screen and pulses the backlight; crossing 70/80/90% blinks the ring</dd>
+          <dt>Connection</dt><dd>WiFi only, because its USB-C only powers the board. The board announces itself over mDNS and the daemon sends the data over HTTP</dd>
+          <dt>Configuration</dt><dd>a page on the board itself at <code>http://&lt;name&gt;.local</code>: brightness, night, theme, rotation, time and rotation screens, network name</dd>
+          <dt>Update</dt><dd>OTA over WiFi in ~10 s</dd>
+        </dl>
+        <p class="note">It runs a minimal build of the firmware, without the touch settings. The first flash goes through the factory firmware's updater, without opening the case, and replaces the GeekMagic firmware.</p>
+        <img class="cfg" src="../screenshots/smalltv-config.png" alt="SmallTV-Ultra configuration page, with fictitious data" loading="lazy">
+      </div>
+    </div>
+
+    <p class="sub">Another board? Copy the closest header and fulfill the <a href="https://github.com/gilsondev/tokenpulse/blob/main/firmware/src/boards/board.h">board contract</a>.</p>
+  </div>
+</section>
+
+<section id="install">
+  <div class="wrap">
+    <div>
+      <h2>Install</h2>
+      <div class="callout on"><b>Got a board that is already flashed?</b> One command on the Mac is enough: <a href="start/">see how to start</a>. The steps below are for flashing a board from scratch.</div>
+      <p class="sub">You need a Mac with <a href="https://docs.astral.sh/uv/">uv</a> and Claude Code logged in. <a href="https://herdr.dev">herdr</a> and <a href="https://github.com/realiti4/claude-swap">claude-swap</a> are optional and unlock sessions by workspace and org switching.</p>
+      <p class="sub">Commands and warnings follow the chosen model.</p>
+      <div class="pick" role="group" aria-label="Your board">
+        <button type="button" data-board="guition-jc3248w535" aria-pressed="true">Guition JC3248W535</button>
+        <button type="button" data-board="cyd-2432s028r" aria-pressed="false">ESP32-2432S028R</button>
+        <button type="button" data-board="waveshare-s3-lcd-147b" aria-pressed="false">Waveshare 1.47B</button>
+        <button type="button" data-board="waveshare-amoled-216" aria-pressed="false">Waveshare AMOLED 2.16</button>
+        <button type="button" data-board="smalltv-ultra" aria-pressed="false">SmallTV-Ultra</button>
+      </div>
+      <div class="callout on" data-only="guition-jc3248w535">The JC3248W535 only carries data over USB-C on one side of the plug. If the board powers on but the Mac doesn't see it, flip the plug.</div>
+      <div class="callout" data-only="cyd-2432s028r">The ESP32-2432S028R has resistive touch: use the stylus that comes with it. The first time it asks for four taps, one in each corner, to calibrate. Use a USB cable that carries data.</div>
+      <div class="callout" data-only="waveshare-s3-lcd-147b">The 1.47" Waveshare has no touch: the BOOT button changes screens and holding it goes back to the main one. It auto-rotates with the accelerometer.</div>
+      <div class="callout" data-only="waveshare-amoled-216">Connect the AMOLED 2.16" over USB-C the first time: the Mac learns its name and, when it leaves the cable, keeps sending data over Bluetooth. Holding the PWR button for 2 s powers the board off.</div>
+      <div class="callout" data-only="smalltv-ultra">The SmallTV-Ultra has no data USB: everything goes over WiFi, and <code>setup.sh</code> doesn't work for it. The GeekMagic factory firmware is replaced and only comes back with its own <code>.bin</code>.</div>
+    </div>
+    <ol class="steps">
+      <li><h3>Download the project</h3><pre><code>git clone https://github.com/gilsondev/tokenpulse
+cd tokenpulse</code></pre></li>
+      <li data-not="smalltv-ultra"><h3>Run the installer, with the board plugged in</h3><p>It finds the board, flashes the firmware from the <a href="https://github.com/gilsondev/tokenpulse/releases/latest">latest release</a> over USB and starts the daemon at macOS login. Within a few seconds the board leaves "sem dados do Mac" (no data from the Mac) and shows your usage. The log is at <code>~/Library/Logs/tokenpulse.log</code>.</p><pre><code>./setup.sh <span class="env">guition-jc3248w535</span></code></pre><p data-only="cyd-2432s028r">The first time, the ESP32-2432S028R opens the calibration: tap the center of each target with the stylus. To redo it later: Settings → About → calibrar o toque.</p><p>The daemon runs straight from this folder: don't delete or move <code>tokenpulse</code>. To move it, run <code>host/install.sh</code> again in the new folder.</p><p>Prefer to build it? <code>firmware/flash.sh <span class="env">guition-jc3248w535</span> --usb</code> and then <code>host/install.sh</code>.</p></li>
+      <li data-only="smalltv-ultra"><h3>Start the daemon and send the firmware over WiFi</h3><p>Download <a href="https://github.com/gilsondev/tokenpulse/releases/latest/download/tokenpulse-smalltv-ultra-ota.bin"><code>tokenpulse-smalltv-ultra-ota.bin</code></a> from the latest release and start the daemon at macOS login:</p><pre><code>host/install.sh</code></pre><p>In the factory panel, open <code>http://&lt;smalltv-ip&gt;/update</code> and upload the <code>.bin</code> (~460 KB, it fits in the factory OTA space). With no saved network, the board opens the <code>tokenpulse-XXXXXX</code> WiFi: join it from your phone, open <code>http://192.168.4.1</code> and enter your network. In ~20 s the daemon finds the board and the screen leaves "sem dados do Mac".</p><p>Prefer to build it? <code>cd firmware &amp;&amp; pio run -e smalltv-ultra</code> produces <code>firmware/.pio/build/smalltv-ultra/firmware.bin</code>.</p></li>
+    </ol>
+  </div>
+</section>
+
+<section id="ota">
+  <div class="wrap">
+    <h2>Update over the air, <span data-not="smalltv-ultra">through the USB itself</span><span data-only="smalltv-ultra">over WiFi</span></h2>
+    <p class="sub" data-only="smalltv-ultra">After the first flash, the SmallTV-Ultra updates over the network. The daemon finds the board over mDNS and sends the firmware through its <code>/update</code>, with the same commands as the other boards. The configuration page settings stay.</p>
+    <p class="sub" data-not="smalltv-ultra">After the first flash, you never need the bootloader or buttons again. The daemon that is already running sends the new firmware through the same USB cable, while the board shows the progress on screen. No Wi-Fi and no opening the case.</p>
+    <div class="split">
+      <ol class="steps">
+        <li><h3>Update to the latest release</h3><p>One command for every plugged board: it checks each one's version, downloads the <code>*-ota.bin</code> for the ones behind and sends it over OTA. Settings and touch calibration stay.</p><pre><code>./update.sh</code></pre></li>
+        <li><h3>Or build from source</h3><p>Builds with PlatformIO and sends it right after:</p><pre><code>firmware/flash.sh <span class="env">guition-jc3248w535</span></code></pre></li>
+        <li><h3>Done in ~<span class="ota">15</span> seconds</h3><p>The board restarts on the new version, which shows up <span data-not="smalltv-ultra">in Settings → About</span><span data-only="smalltv-ultra">on the configuration page</span>.</p></li>
+      </ol>
+      <div>
+        <div class="ota-flow" data-not="smalltv-ultra">
+          <div><b>1 · request</b><code>flash.sh</code> tells the daemon which <code>.bin</code> to send.</div>
+          <div><b>2 · header</b>The daemon sends the size and md5; the board opens the free partition.</div>
+          <div><b>3 · blocks</b>The firmware goes in 1 KB blocks, each acknowledged by the board.</div>
+          <div><b>4 · check</b>The board verifies the md5 of what it wrote before switching.</div>
+          <div><b>5 · switch</b>Only then does it mark the new partition and restart.</div>
+        </div>
+        <div class="callout" data-only="smalltv-ultra">If the upload fails halfway, the board stays on the current version: the ESP8266 only switches firmware after writing and checking the whole image. If the new firmware crashes three times in a row at boot, the board starts with only WiFi and <code>/update</code>, so you can send another one.</div>
+        <div class="callout" data-not="smalltv-ultra">If something fails halfway (cable, mismatched md5, no answer), the board stays on the current version and shows the error. <code>flash.sh</code> retries once by itself when the failure is a missing answer.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>Privacy</h2>
+    <p class="sub">The Claude Code token is read from the Keychain on each fetch, is never stored or logged, and only goes to the Anthropic API. Emails are stripped from everything that goes to the board and to the log. Demo mode (<code>tokend.py --demo</code>) reads nothing of yours, and screenshots with real data require an explicit <code>REAL=1</code>.</p>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <a class="brand" href="https://github.com/gilsondev/tokenpulse" style="display:flex;align-items:center;gap:8px;color:var(--text);font-weight:700"><img src="../assets/logo.svg" width="22" height="22" alt="">tokenpulse</a>
+    <span>Firmware with <a href="https://github.com/lovyan03/LovyanGFX">LovyanGFX</a>, <a href="https://github.com/moononournation/Arduino_GFX">Arduino_GFX</a> and <a href="https://arduinojson.org/">ArduinoJson</a>. <a href="https://rsms.me/inter/">Inter</a> font.</span>
+    <span><a href="https://github.com/gilsondev/tokenpulse/blob/main/LICENSE">MIT</a> license. Made with Claude Code. Not an Anthropic product.</span>
+  </div>
+</footer>
+
+<script>
+  // um modelo escolhido vale para a página toda: as abas de Dispositivos, os comandos de Instalar e de OTA
+  const BOARDS = {
+    "guition-jc3248w535": { chip: "esp32s3", ota: 15 },
+    "cyd-2432s028r": { chip: "esp32", ota: 40 },
+    "waveshare-s3-lcd-147b": { chip: "esp32s3", ota: 15 },
+    "waveshare-amoled-216": { chip: "esp32s3", ota: 25 },
+    "smalltv-ultra": { chip: "esp8266", ota: 10 },
+  };
+  const buttons = document.querySelectorAll(".pick button");
+  function choose(b, remember) {
+    buttons.forEach(x => x.setAttribute("aria-pressed", x.dataset.board === b));
+    document.querySelectorAll(".env").forEach(e => e.textContent = b);
+    document.querySelectorAll(".chip").forEach(e => e.textContent = BOARDS[b].chip);
+    document.querySelectorAll(".ota").forEach(e => e.textContent = BOARDS[b].ota);
+    document.querySelectorAll("[data-only]").forEach(e => e.classList.toggle("on", e.dataset.only === b));
+    document.querySelectorAll("[data-not]").forEach(e => e.classList.toggle("off", e.dataset.not === b));
+    if (remember) try { localStorage.setItem("placa", b); } catch (e) {}
+  }
+  buttons.forEach(btn => btn.addEventListener("click", () => choose(btn.dataset.board, true)));
+  let saved = null;
+  try { saved = localStorage.getItem("placa"); } catch (e) {}
+  if (BOARDS[saved]) choose(saved, false);
+</script>
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs";
+  const dark = matchMedia("(prefers-color-scheme: dark)").matches;
+  mermaid.initialize({ startOnLoad: true, theme: dark ? "dark" : "neutral", fontFamily: "Inter, system-ui, sans-serif" });
+</script>
+</body>
+</html>

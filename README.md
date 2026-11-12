@@ -5,114 +5,120 @@
   </picture>
 </p>
 
-<p align="center"><a href="https://gilsondev.github.io/tokenpulse/">Site do projeto</a> ·
-<a href="https://github.com/gilsondev/tokenpulse/releases/latest">Baixar o firmware</a></p>
+<p align="center"><a href="https://gilsondev.github.io/tokenpulse/en/">Project site</a> ·
+<a href="https://github.com/gilsondev/tokenpulse/releases/latest">Download the firmware</a> ·
+<a href="README.pt-BR.md">Português</a></p>
 
-Um monitor de mesa para o uso do **Claude Code** (CLI e Desktop) numa tela ESP32 com touch. Ele mostra quanto
-da janela de 5 h e da semana você já usou, quantos tokens estão passando por minuto, o que cada sessão está
-fazendo e quanto esse uso custaria pela API. Tudo ao vivo, pela USB, sem Wi-Fi.
+A desk monitor for **Claude Code** usage (CLI and Desktop) on an ESP32 touch screen. It shows how much of the
+5-hour window and of the week you have used, how many tokens flow per minute, what each session is doing and
+what that usage would cost through the API. All live, over USB, no Wi-Fi.
+
+> The on-device UI is in Brazilian Portuguese.
 
 <p align="center">
-  <img src="docs/screenshots/faixas.png" alt="A tela principal em quatro faixas de uso: 42% verde, 74% amarelo, 86% laranja, 95% vermelho" width="100%">
+  <img src="docs/screenshots/faixas.png" alt="The main screen in four usage bands: 42% green, 74% yellow, 86% orange, 95% red" width="100%">
 </p>
 
-> As capturas vêm do próprio aparelho (`host/shot.sh`) com o daemon em modo demonstração: org, sessões e
-> números são fictícios.
+> The screenshots come from the device itself (`host/shot.sh`) with the daemon in demo mode: org, sessions and
+> numbers are fictitious.
 
-## O que ele mostra
+## What it shows
 
 | | | |
 |:-:|:-:|:-:|
-| ![Principal](docs/screenshots/01-principal.png) | ![Workspaces](docs/screenshots/02-workspaces.png) | ![Sessões de um workspace](docs/screenshots/03-sessoes.png) |
-| **Principal**: a janela de 5 h no anel (verde, amarelo a 70%, laranja a 80%, vermelho a 90%), a semana com o ritmo esperado, tokens do dia, tokens por minuto e a última hora. | **Sessões por workspace** do [herdr](https://herdr.dev), em páginas com quantos cartões a tela comporta: a pasta tem a cor do estado mais urgente e a contagem de quem trabalha, espera você ou está na sua vez. O Claude Desktop fica num workspace fixo no fim; com uma sessão só, o cartão já é ela. Sem herdr, as sessões se agrupam por projeto. | **Sessões** de um workspace, em páginas, por prioridade (aprovar, trabalhando, sua vez, paradas), cada uma com um mascote no estado dela. O título "‹ workspace" volta para a lista; tocar num cartão traz a sessão para a frente no Mac (o painel do herdr no seu terminal, ou o Claude Desktop). |
-| ![Modelos](docs/screenshots/04-modelos.png) | ![Detalhe do modelo](docs/screenshots/05-modelo.png) | ![Histórico](docs/screenshots/06-historico.png) |
-| **Modelos** usados hoje e a fatia de cada um. | **Detalhe do modelo**: entrada, saída e cache, custo equivalente na API e os projetos que mais usaram. | **Histórico** de 14 dias; toque numa barra para ver o dia. |
-| ![Ajustes](docs/screenshots/07-ajustes.png) | ![Trocar de org](docs/screenshots/08-org.png) | ![Sobre](docs/screenshots/09-sobre.png) |
-| **Ajustes** pela engrenagem, numa lista de grupos como no celular: Tela (brilho, escurecer, tema, posição, custo), Som e Descanso nas placas que têm, Conta e Sobre. | **Trocar de org** pelo nome no topo, com o último % de cada uma. Usa o [claude-swap](https://github.com/realiti4/claude-swap) e pede dois toques, porque troca o login de todas as sessões do Mac. | **Sobre**: placa, firmware, memória, conexão, reiniciar e o endereço da página web (toque para abrir o QR). |
+| ![Main](docs/screenshots/01-principal.png) | ![Workspaces](docs/screenshots/02-workspaces.png) | ![Sessions of a workspace](docs/screenshots/03-sessoes.png) |
+| **Main**: the 5-hour window on the ring (green, yellow at 70%, orange at 80%, red at 90%), the week against the expected pace, today's tokens, tokens per minute and the last hour. | **Sessions by workspace** from [herdr](https://herdr.dev), in pages with as many cards as the screen fits: the folder takes the color of its most urgent state and counts who is working, waiting for you or on your turn. Claude Desktop sits in a fixed workspace at the end; with a single session, the card is the session itself. Without herdr, sessions are grouped by project. | **Sessions** of a workspace, in pages, by priority (approve, working, your turn, idle), each with a mascot in its state. The "‹ workspace" title goes back to the list; tapping a card brings the session to the front on the Mac (the herdr pane in your terminal, or Claude Desktop). |
+| ![Models](docs/screenshots/04-modelos.png) | ![Model detail](docs/screenshots/05-modelo.png) | ![History](docs/screenshots/06-historico.png) |
+| **Models** used today and each one's share. | **Model detail**: input, output and cache, equivalent API cost and the projects that used it most. | **History** of 14 days; tap a bar to see the day. |
+| ![Settings](docs/screenshots/07-ajustes.png) | ![Switch org](docs/screenshots/08-org.png) | ![About](docs/screenshots/09-sobre.png) |
+| **Settings** from the gear, as a list of groups like on a phone: Display (brightness, dimming, theme, orientation, cost), Sound and Screensaver on boards that have them, Account and About. | **Switch org** from the name at the top, with each org's last %. It uses [claude-swap](https://github.com/realiti4/claude-swap) and asks for two taps, because it switches the login of every session on the Mac. | **About**: board, firmware, memory, connection, restart and the web page address (tap to open the QR). |
 
-<p align="center"><img src="docs/screenshots/10-esgotado.png" alt="Janela de 5 h esgotada, com o botão para trocar de org" width="32%"></p>
+<p align="center"><img src="docs/screenshots/10-esgotado.png" alt="5-hour window used up, with the button to switch org" width="32%"></p>
 
-Quando a janela de 5 h esgota e há outra org salva no claude-swap, a tela principal sugere a troca para a de
-menor uso.
+When the 5-hour window runs out and there is another org saved in claude-swap, the main screen suggests
+switching to the one with the lowest usage.
 
-**Deitada.** Em Ajustes → Tela → horizontal, cada tela ganha uma versão deitada: o anel à esquerda, as sessões
-em 3 colunas e o detalhe do modelo com os projetos ao lado.
+**Landscape.** In Settings → Display → horizontal, every screen gets a landscape version: the ring on the
+left, sessions in 3 columns and the model detail with the projects beside it.
 
-<p align="center"><img src="docs/screenshots/deitada.png" alt="As telas deitadas: principal com o anel à esquerda, sessões em 3 colunas e o detalhe do modelo" width="100%"></p>
+<p align="center"><img src="docs/screenshots/deitada.png" alt="Landscape screens: main with the ring on the left, sessions in 3 columns and the model detail" width="100%"></p>
 
-**Na ESP32-2432S028R.** A placa de 2,8" (240×320, touch resistivo) roda as mesmas telas num layout
-menor, em 4 posições (Ajustes → Tela → lado do cabo USB: embaixo, direita, em cima, esquerda). As sessões vêm em
-cartões compactos, 6 por página em pé e 4 deitada. No Sobre fica o botão para recalibrar o toque.
+**On the ESP32-2432S028R.** The 2.8" board (240×320, resistive touch) runs the same screens in a smaller
+layout, in 4 orientations (Settings → Display → USB cable side: bottom, right, top, left). Sessions come in
+compact cards, 6 per page in portrait and 4 in landscape. About has the button to recalibrate the touch.
 
-<p align="center"><img src="docs/screenshots/cyd-2432s028r.png" alt="ESP32-2432S028R deitada, com dados fictícios: principal, sessões de um workspace e a lista de ajustes" width="100%"></p>
+<p align="center"><img src="docs/screenshots/cyd-2432s028r.png" alt="ESP32-2432S028R in landscape, with fictitious data: main, sessions of a workspace and the settings list" width="100%"></p>
 
-**Na Waveshare AMOLED 2,16".** A tela de 480×480 tem cantos redondos: a interface ocupa o quadrado do meio,
-gira sozinha pelo acelerômetro e roda a ~29 quadros por segundo. Parada, ela entra no descanso, que alterna
-versões resumidas das telas (relógio flip, anel de uso, sessões, modelos e 14 dias) num fundo preto, cada uma num
-lugar novo, para o vidro não marcar. Ela usa o resto do hardware da placa:
+**On the Waveshare AMOLED 2.16".** The 480×480 screen has round corners: the UI fills the square in the
+middle, rotates by itself with the accelerometer and runs at ~29 frames per second. When idle it enters the
+screensaver, which cycles through condensed versions of the screens (flip clock, usage ring, sessions, models
+and 14 days) on a black background, each in a new spot, so the glass doesn't burn in. It uses the rest of the
+board's hardware:
 
-- **Bateria:** o ícone no cabeçalho mostra a carga e se a placa está na USB. O Sobre mostra a porcentagem e
-  a previsão de carga completa. A carga para em 4,1 V em vez de 4,2 V, para a bateria durar mais ciclos.
-- **Bluetooth:** fora do cabo, a placa continua recebendo os dados sem fio, por um link criptografado. O Mac
-  aprende o nome dela ("TokenPulse AMOLED" e o final do WiFi dela) na primeira conexão pela USB. Se a placa
-  for apagada por completo, remova-a nos ajustes de Bluetooth do Mac para parear de novo.
-- **Relógio** guardado no RTC, e o histórico diário num **cartão microSD**, além dos 14 dias que o Mac manda.
-- **Som:** um alerta quando uma sessão pede aprovação e sons para a janela de 5 h esgotada ou renovada, a
-  semana esgotada, bateria fraca, Mac sem dados e Bluetooth. O botão BOOT silencia por 1 h.
+- **Battery:** the icon in the header shows the charge and whether the board is on USB. About shows the
+  percentage and the estimated time to a full charge. Charging stops at 4.1 V instead of 4.2 V, so the battery
+  lasts more cycles.
+- **Bluetooth:** off the cable, the board keeps receiving data wirelessly, over an encrypted link. The Mac
+  learns its name ("TokenPulse AMOLED" plus the end of its WiFi name) on the first USB connection. If the board
+  is fully erased, remove it in the Mac's Bluetooth settings to pair again.
+- **Clock** kept in the RTC, and the daily history on a **microSD card**, beyond the 14 days the Mac sends.
+- **Sound:** an alert when a session asks for approval and sounds for the 5-hour window used up or renewed,
+  the week used up, low battery, Mac without data and Bluetooth. The BOOT button mutes for 1 h.
 
-<p align="center"><img src="docs/screenshots/waveshare-amoled-216.png" alt="Waveshare AMOLED 2,16 com dados fictícios: principal, workspaces, as sessões de um workspace e uma sessão pedindo aprovação" width="100%"></p>
-<p align="center"><img src="docs/screenshots/amoled-descanso.png" alt="O descanso da AMOLED: relógio flip, anel de uso, sessões, modelos e 14 dias" width="100%"></p>
-<p align="center"><img src="docs/screenshots/amoled-ajustes.png" alt="Ajustes da AMOLED: a lista de grupos, o grupo Som e o Sobre com a bateria" width="100%"></p>
+<p align="center"><img src="docs/screenshots/waveshare-amoled-216.png" alt="Waveshare AMOLED 2.16 with fictitious data: main, workspaces, the sessions of a workspace and a session asking for approval" width="100%"></p>
+<p align="center"><img src="docs/screenshots/amoled-descanso.png" alt="The AMOLED screensaver: flip clock, usage ring, sessions, models and 14 days" width="100%"></p>
+<p align="center"><img src="docs/screenshots/amoled-ajustes.png" alt="AMOLED settings: the group list, the Sound group and About with the battery" width="100%"></p>
 
-**Alertas.** Quando uma sessão passa a pedir aprovação, as placas com touch mostram uma página com a sessão, o
-que ela pergunta e o botão Abrir Sessão, que traz a janela para a frente no Mac. O brilho pulsa por 20 s;
-nas placas com LED ele pisca vermelho enquanto houver sessão para aprovar. Cada estado de sessão tem a sua cor:
-verde trabalhando, vermelho aprovar, amarelo sua vez.
+**Alerts.** When a session starts asking for approval, touch boards show a page with the session, what it is
+asking and the Open Session button, which brings the window to the front on the Mac. The brightness pulses for
+20 s; on boards with an LED it blinks red while a session waits for approval. Each session state has its color:
+green working, red approve, yellow your turn.
 
-**Página web.** Guition e ESP32-2432S028R têm uma página de ajustes com mais opções que a tela: troca automática
-de tela depois de N segundos sem toque, quais telas entram na volta, o alerta de aprovar, o nome na rede, as
-versões do firmware e do agente, atualização guiada e "Preparar para entrega". Os dados continuam pelo cabo: o
-WiFi só liga quando você pede em Ajustes → Sobre → página web, que mostra o QR para o celular entrar no WiFi da
-placa e escolher a rede da casa. Depois disso a placa entra nessa rede ao ligar, e a página fica em
-`http://<nome>.local`.
+**Web page.** Guition and ESP32-2432S028R have a settings page with more options than the screen: automatic
+screen change after N seconds without touch, which screens join the rotation, the approval alert, the network
+name, the firmware and agent versions, guided update and "Prepare for handover". Data still goes over the
+cable: WiFi only turns on when you ask for it in Settings → About → web page, which shows the QR for the phone
+to join the board's WiFi and pick the home network. After that the board joins that network on boot, and the
+page lives at `http://<name>.local`.
 
 <table><tr>
-<td width="33%"><img src="docs/screenshots/12-pagina-web.png" alt="Tela da página web: QR code do endereço .local"></td>
-<td width="33%"><img src="docs/screenshots/11-instalar.png" alt="Tela de espera de uma placa recém-recebida: QR code da instalação no Mac"></td>
-<td width="33%"><img src="docs/screenshots/usb-config.png" alt="Página de ajustes das placas USB, com dados fictícios"></td>
+<td width="33%"><img src="docs/screenshots/12-pagina-web.png" alt="Web page screen: QR code of the .local address"></td>
+<td width="33%"><img src="docs/screenshots/11-instalar.png" alt="Waiting screen of a freshly received board: QR code for the Mac install"></td>
+<td width="33%"><img src="docs/screenshots/usb-config.png" alt="Settings page of the USB boards, with fictitious data"></td>
 </tr><tr>
-<td><b>Página web</b> no Sobre: o QR do endereço <code>.local</code>, ou do WiFi da placa quando ainda não há rede.</td>
-<td><b>Placa recém-recebida</b>: sem nenhum daemon no Mac, a tela de espera mostra o QR da instalação.</td>
-<td><b>Ajustes pela web</b>, com dados fictícios.</td>
+<td><b>Web page</b> in About: the QR of the <code>.local</code> address, or of the board's WiFi when there is no network yet.</td>
+<td><b>Freshly received board</b>: with no daemon on the Mac, the waiting screen shows the install QR.</td>
+<td><b>Settings on the web</b>, with fictitious data.</td>
 </tr></table>
 
-Também tem animações com mola nas barras e no anel, halo na ponta do progresso, transições deslizando entre
-as telas, modo noite (22h–7h) e uma tela de diagnóstico quando o Mac some ("cabo USB / daemon / dados").
+There are also spring animations on the bars and the ring, a glow at the tip of the progress, sliding
+transitions between screens, night mode (10 pm–7 am) and a diagnostic screen when the Mac goes away ("USB
+cable / daemon / data").
 
-## Sessões: com ou sem herdr
+## Sessions: with or without herdr
 
-O tokenpulse acompanha qualquer sessão do Claude Code: a CLI num terminal comum, o Claude Desktop e as sessões
-abertas no [herdr](https://herdr.dev). O herdr é opcional e só acrescenta detalhes:
+tokenpulse tracks any Claude Code session: the CLI in a plain terminal, Claude Desktop and sessions open in
+[herdr](https://herdr.dev). herdr is optional and only adds detail:
 
-| | Sessões comuns (terminal, Desktop) | Sessões no herdr |
+| | Plain sessions (terminal, Desktop) | Sessions in herdr |
 |---|---|---|
-| Aparecem na tela | sim, as com atividade na última hora | sim, todos os painéis abertos |
-| Tokens, modelos, custo, histórico | sim (dos logs do Claude Code) | sim |
-| Estado (trabalhando, sua vez, parada) | estimado pelos logs | o do herdr, na hora |
-| "Precisa de você" (esperando aprovação) | — | sim |
-| Agrupamento | por projeto (pasta) | pelos workspaces do herdr |
-| Nome no cartão | título da sessão ou pasta | o nome que você deu à aba |
-| Sessão em foco e tocar para trazer à frente | Desktop: abre o app | sim, no painel do herdr |
+| Show on screen | yes, those active in the last hour | yes, every open pane |
+| Tokens, models, cost, history | yes (from Claude Code logs) | yes |
+| State (working, your turn, idle) | estimated from logs | herdr's, live |
+| "Needs you" (waiting for approval) | — | yes |
+| Grouping | by project (folder) | by herdr workspace |
+| Name on the card | session title or folder | the name you gave the tab |
+| Focused session and tap to bring forward | Desktop: opens the app | yes, in the herdr pane |
 
-As duas convivem: com o herdr rodando, as sessões de fora dele aparecem num grupo "Fora do herdr".
+Both coexist: with herdr running, sessions outside it show up in an "Fora do herdr" (outside herdr) group.
 
-## Como funciona
+## How it works
 
 ```mermaid
 flowchart LR
     subgraph mac["Mac"]
-        logs["Logs do Claude Code<br/>~/.claude/projects/**/*.jsonl"]
-        api["API de uso da Anthropic<br/>(token OAuth do Keychain)"]
+        logs["Claude Code logs<br/>~/.claude/projects/**/*.jsonl"]
+        api["Anthropic usage API<br/>(OAuth token from Keychain)"]
         herdr["herdr<br/>agent list · workspace list"]
         cswap["claude-swap<br/>cswap list"]
         daemon["host/tokend.py<br/>LaunchAgent"]
@@ -122,270 +128,283 @@ flowchart LR
         cswap --> daemon
     end
     subgraph esp["ESP32 (firmware/)"]
-        link["hostlink<br/>JSON por linha"]
-        ui["telas · anel · sessões<br/>modelos · histórico"]
-        panel["tela 320×480<br/>+ touch"]
+        link["hostlink<br/>JSON per line"]
+        ui["screens · ring · sessions<br/>models · history"]
+        panel["320×480 screen<br/>+ touch"]
         link --> ui --> panel
     end
-    daemon -- "USB serial: 1 frame JSON/s" --> link
-    panel -- "toques" --> ui
+    daemon -- "USB serial: 1 JSON frame/s" --> link
+    panel -- "touches" --> ui
     ui -- "ACTION focus / switch / login" --> daemon
 ```
 
-O Mac faz o trabalho pesado: o daemon `host/tokend.py` lê os logs do Claude Code, busca o % na mesma API que
-o Claude Code usa e manda um frame por segundo. A placa só desenha, com fontes Inter suaves, anti-aliasing e
-envio da tela em paralelo no segundo núcleo (~30 fps). As ações que a placa pede são uma lista fechada
-(`focus`, `switch`, `login`): o daemon nunca executa texto vindo da serial.
+The Mac does the heavy lifting: the `host/tokend.py` daemon reads the Claude Code logs, fetches the % from the
+same API Claude Code uses and sends one frame per second. The board only draws, with smooth Inter fonts,
+anti-aliasing and the screen pushed in parallel on the second core (~30 fps). The actions the board asks for
+are a closed list (`focus`, `switch`, `login`): the daemon never runs text coming from the serial port.
 
-## Dispositivos suportados
+## Supported devices
 
-| Placa | Tela | Toque | Extras | Env do PlatformIO |
+| Board | Screen | Touch | Extras | PlatformIO env |
 |---|---|---|---|---|
-| [Guition JC3248W535](https://www.atomic14.com/esp32/boards/guition-jc3248w535/) (ESP32-S3 N16R8) | 3,5" IPS 320×480, AXS15231B QSPI | capacitivo | — | `guition-jc3248w535` (padrão) |
-| [ESP32-2432S028R](https://github.com/witnessmenow/ESP32-Cheap-Yellow-Display), a "Cheap Yellow Display" (ESP32 sem PSRAM) | 2,8" 240×320, ST7789 | resistivo | LED RGB na cor da faixa | `cyd-2432s028r` |
-| [Waveshare ESP32-S3-LCD-1.47B](https://www.waveshare.com/wiki/ESP32-S3-LCD-1.47B) | 1,47" 172×320, ST7789 | — (botão BOOT) | IMU (gira sozinha), LED RGB na cor da faixa | `waveshare-s3-lcd-147b` |
-| [Waveshare ESP32-S3-Touch-AMOLED-2.16](https://docs.waveshare.com/ESP32-S3-Touch-AMOLED-2.16) | 2,16" AMOLED 480×480, CO5300 QSPI | capacitivo | IMU (gira sozinha), alto-falante, botões KEY3 e PWR (desliga), descanso contra burn-in | `waveshare-amoled-216` |
-| GeekMagic SmallTV-Ultra (ESP8266, 4 MB, sem PSRAM) | 1,54" 240×240, ST7789 | — | telas que passam sozinhas, dados e OTA pelo WiFi, página de configuração | `smalltv-ultra` |
+| [Guition JC3248W535](https://www.atomic14.com/esp32/boards/guition-jc3248w535/) (ESP32-S3 N16R8) | 3.5" IPS 320×480, AXS15231B QSPI | capacitive | — | `guition-jc3248w535` (default) |
+| [ESP32-2432S028R](https://github.com/witnessmenow/ESP32-Cheap-Yellow-Display), the "Cheap Yellow Display" (ESP32 without PSRAM) | 2.8" 240×320, ST7789 | resistive | RGB LED in the band color | `cyd-2432s028r` |
+| [Waveshare ESP32-S3-LCD-1.47B](https://www.waveshare.com/wiki/ESP32-S3-LCD-1.47B) | 1.47" 172×320, ST7789 | — (BOOT button) | IMU (auto-rotates), RGB LED in the band color | `waveshare-s3-lcd-147b` |
+| [Waveshare ESP32-S3-Touch-AMOLED-2.16](https://docs.waveshare.com/ESP32-S3-Touch-AMOLED-2.16) | 2.16" AMOLED 480×480, CO5300 QSPI | capacitive | IMU (auto-rotates), speaker, KEY3 and PWR buttons (power off), burn-in screensaver | `waveshare-amoled-216` |
+| GeekMagic SmallTV-Ultra (ESP8266, 4 MB, no PSRAM) | 1.54" 240×240, ST7789 | — | screens that cycle by themselves, data and OTA over WiFi, configuration page | `smalltv-ultra` |
 
-**SmallTV-Ultra.** O USB-C dele só alimenta, e o ESP8266 tem ~40 KB de heap: roda uma versão mínima à parte
-([`firmware/src/smalltv/`](firmware/src/smalltv/)), sem toque. Ela alterna sozinha entre a tela principal (anel
-de 5 h, semana, tokens, ritmo e a última hora), as sessões trabalhando ou esperando você (aprovar ou sua vez,
-há até 1 h; depois delas, as paradas), os modelos do dia, o detalhe de cada modelo, os projetos da última hora,
-o histórico de 14 dias e o % das outras orgs, e mostra o
-diagnóstico "WiFi / daemon / dados" quando o Mac some. Sem som nem toque, ele chama atenção pela tela: uma sessão pedindo
-aprovação segura a tela de sessões e faz o backlight pulsar, e cruzar 70/80/90% da janela de 5 h pisca o anel e
-segura a principal por 2 min. O anel e as barras andam com mola, o número de tokens acende quando sobe e a troca
-de tela apaga e acende o backlight.
+**SmallTV-Ultra.** Its USB-C only powers the board, and the ESP8266 has ~40 KB of heap: it runs a separate
+minimal build ([`firmware/src/smalltv/`](firmware/src/smalltv/)), without touch. It cycles by itself through
+the main screen (5-hour ring, week, tokens, pace and the last hour), the sessions working or waiting for you
+(approve or your turn, up to 1 h old; after them, the idle ones), today's models, each model's detail, the
+projects of the last hour, the 14-day history and the % of the other orgs, and shows the "WiFi / daemon /
+data" diagnostic when the Mac goes away. With no sound or touch, it gets your attention through the screen: a
+session asking for approval holds the sessions screen and makes the backlight pulse, and crossing 70/80/90% of
+the 5-hour window blinks the ring and holds the main screen for 2 min. The ring and bars move with springs, the
+token count lights up when it rises, and a screen change fades the backlight out and in.
 
-A configuração fica numa página da própria placa, em `http://tokenpulse-XXXXXX.local` (o nome aparece na tela
-de espera e pode ser trocado lá, por exemplo para `smalltv.local`): brilho, escurecer à noite, tema, rotação,
-tempo em cada tela, quais telas entram na volta, os alertas e esconder o custo, além de reiniciar e esquecer o WiFi.
-Em `/update` fica a atualização guiada: ela compara a versão da placa com o último release, valida o `.bin`, mostra o
-progresso do envio e espera a placa voltar para confirmar a versão nova. A tela da placa mostra o progresso enquanto
-grava. `GET /shot?page=main` (ou `sessions`, `models`, `model0`…`model2`, `projects`, `history`, `orgs`, `waiting`, `ota`) devolve a tela em
-RGB565 cru, 240×240, para conferir o layout sem foto.
+Configuration lives on a page on the board itself, at `http://tokenpulse-XXXXXX.local` (the name shows on the
+waiting screen and can be changed there, for example to `smalltv.local`): brightness, night dimming, theme,
+rotation, time on each screen, which screens join the rotation, the alerts and hiding the cost, plus restart
+and forget WiFi. `/update` has the guided update: it compares the board's version with the latest release,
+validates the `.bin`, shows the upload progress and waits for the board to come back to confirm the new
+version. The board's screen shows the progress while it writes. `GET /shot?page=main` (or `sessions`,
+`models`, `model0`…`model2`, `projects`, `history`, `orgs`, `waiting`, `ota`) returns the screen as raw RGB565,
+240×240, to check the layout without a photo.
 
-<p align="center"><img src="docs/screenshots/smalltv-ultra.png" alt="SmallTV-Ultra com dados fictícios: principal, sessões, detalhe do modelo, projetos, histórico e orgs" width="100%"></p>
-<p align="center"><img src="docs/screenshots/smalltv-config.png" alt="Página de configuração do SmallTV-Ultra, com dados fictícios" width="45%"></p>
-Quem está na mesma rede consegue abrir a página e o `/update`, como no firmware de fábrica. A placa se anuncia por
-mDNS (`_tokenpulse._tcp`) e o daemon manda a cada 2 s um frame enxuto por HTTP (`POST /frame`); o OTA também vai
-pela rede (`/update`). Três travamentos seguidos no boot fazem ela subir só com WiFi e `/update`, sem a tela:
-sem serial, esse é o caminho de volta.
+<p align="center"><img src="docs/screenshots/smalltv-ultra.png" alt="SmallTV-Ultra with fictitious data: main, sessions, model detail, projects, history and orgs" width="100%"></p>
+<p align="center"><img src="docs/screenshots/smalltv-config.png" alt="SmallTV-Ultra configuration page, with fictitious data" width="45%"></p>
+Anyone on the same network can open the page and `/update`, as with the factory firmware. The board announces
+itself over mDNS (`_tokenpulse._tcp`) and the daemon sends a slim frame over HTTP every 2 s (`POST /frame`);
+OTA also goes over the network (`/update`). Three crashes in a row at boot make it start with only WiFi and
+`/update`, without the screen: with no serial port, that is the way back.
 
-O que falta levar do SmallTV-Ultra para as outras placas está no projeto
-[tokenpulse roadmap](https://github.com/users/gilsondev/projects/3).
+What is still missing to bring from the SmallTV-Ultra to the other boards is in the
+[tokenpulse roadmap](https://github.com/users/gilsondev/projects/3) project.
 
-### Perfis: o que cada placa libera
+### Profiles: what each board unlocks
 
-A UI não pergunta o nome da placa. Ela decide por duas coisas:
+The UI doesn't ask for the board's name. It decides by two things:
 
-- **A classe da tela**, pelo lado menor já girado. Abaixo de 220 px, ou sem touch, a UI é compacta: fontes
-  bitmap e navegação por swipe ou botão. De 220 a 299 px é média e acima disso é grande. As duas têm todas
-  as telas, os toques e a engrenagem; a média escala o layout pela altura e usa fontes de 12 a 40 px.
-- **O perfil** (`board::PROFILE`, em [`boards/profile.h`](firmware/src/boards/profile.h)): `touch`, `calibrate`
-  (touch resistivo), `imu` (gira sozinha), `led` (alerta de faixa), `button`, `speaker` (som no alerta de
-  aprovação), `oled` (descanso e deslocamento contra burn-in) e `dense` (cabeçalho um tamanho acima). A PSRAM é lida em tempo de execução: sem ela, a tela é
-  desenhada em duas faixas de meia altura, a troca de tela não desliza e o texto não fica em cache.
+- **The screen class**, by the shorter side after rotation. Below 220 px, or without touch, the UI is
+  compact: bitmap fonts and navigation by swipe or button. From 220 to 299 px it is medium and above that it
+  is large. Both have every screen, the touches and the gear; medium scales the layout by height and uses fonts
+  from 12 to 40 px.
+- **The profile** (`board::PROFILE`, in [`boards/profile.h`](firmware/src/boards/profile.h)): `touch`,
+  `calibrate` (resistive touch), `imu` (auto-rotates), `led` (band alert), `button`, `speaker` (sound on the
+  approval alert), `oled` (screensaver and burn-in shift) and `dense` (header one size up). PSRAM is read at
+  runtime: without it, the screen is drawn in two half-height bands, screen changes don't slide and text isn't
+  cached.
 
-| Placa | Classe | touch | calibrate | imu | led | button | PSRAM |
+| Board | Class | touch | calibrate | imu | led | button | PSRAM |
 |---|---|---|---|---|---|---|---|
-| Guition JC3248W535 | grande | sim | — | — | — | sim | 8 MB |
-| ESP32-2432S028R | média | sim | sim | — | sim | sim | — |
-| Waveshare 1,47" | compacta | — | — | sim | sim | sim | 8 MB |
-| Waveshare AMOLED 2,16" | grande | sim | — | sim | — | sim | 8 MB |
+| Guition JC3248W535 | large | yes | — | — | — | yes | 8 MB |
+| ESP32-2432S028R | medium | yes | yes | — | yes | yes | — |
+| Waveshare 1.47" | compact | — | — | yes | yes | yes | 8 MB |
+| Waveshare AMOLED 2.16" | large | yes | — | yes | — | yes | 8 MB |
 
-Touch resistivo (`calibrate`): na primeira vez a placa pede quatro toques com a caneta, um em cada canto, e
-guarda a calibração na memória dela, que sobrevive a reinício e OTA. Para refazer: Ajustes → Sobre →
-**calibrar o toque**. A leitura só vale com pressão firme e é a mediana de 5 amostras, para tirar os pulos.
+Resistive touch (`calibrate`): the first time, the board asks for four taps with the stylus, one in each
+corner, and stores the calibration in its memory, which survives restarts and OTA. To redo it: Settings →
+About → **calibrar o toque** (calibrate touch). A reading only counts with firm pressure and is the median of 5
+samples, to remove jumps.
 
-A tela Sobre mostra a placa, o perfil e a memória de quem está rodando.
+The About screen shows the running board, profile and memory.
 
-**AMOLED 2,16".** A interface ocupa o quadrado de 424 px do meio: os cantos do vidro são redondos. Tela OLED
-marca com imagem parada, então a imagem inteira anda até 6 px por minuto e, parada, a placa entra no
-descanso: fundo preto e versões resumidas das telas (relógio flip, anel de uso, sessões, modelos e 14 dias),
-uma a cada 15 s, cada uma num lugar novo. Em Ajustes → Descanso dá para escolher as telas e o relógio com ou sem
-segundos. Os sons (11 opções, com volume, em Ajustes → Som ou na página web) avisam a sessão pedindo aprovação e
-os limites de 5 h e da semana. O KEY3 avança a tela; o PWR entra e sai do descanso e, segurado por 2 s, desliga
-a placa; o BOOT silencia por 1 h. Arrastar do topo da tela abre os ajustes.
+**AMOLED 2.16".** The UI fills the 424 px square in the middle: the glass corners are round. An OLED screen
+burns in with a still image, so the whole image moves up to 6 px per minute and, when idle, the board enters
+the screensaver: black background and condensed versions of the screens (flip clock, usage ring, sessions,
+models and 14 days), one every 15 s, each in a new spot. In Settings → Screensaver you can pick the screens
+and the clock with or without seconds. The sounds (11 options, with volume, in Settings → Sound or on the web
+page) announce a session asking for approval and the 5-hour and weekly limits. KEY3 advances the screen; PWR
+enters and leaves the screensaver and, held for 2 s, powers the board off; BOOT mutes for 1 h. Dragging down
+from the top of the screen opens the settings.
 
-**Em pé ou deitada** (Ajustes → Tela): as placas com touch têm uma versão horizontal de cada tela. O anel
-vai para a esquerda, as sessões ficam em 3 colunas e os ajustes, o Sobre e a troca de org em 2. O toque gira
-junto. A Guition não gira no painel: o quadro deitado é girado no envio, ainda na PSRAM.
+**Portrait or landscape** (Settings → Display): touch boards have a horizontal version of each screen. The ring
+moves to the left, sessions go into 3 columns and the settings, About and org switch into 2. Touch rotates
+along. The Guition doesn't rotate in the panel: the landscape frame is rotated on push, still in PSRAM.
 
-### Como adicionar uma placa
+### How to add a board
 
-Tudo que muda de um ESP para outro mora num header em `firmware/src/boards/`. O resto do firmware não sabe
-qual placa está rodando.
+Everything that changes from one ESP to another lives in a header in `firmware/src/boards/`. The rest of the
+firmware doesn't know which board is running.
 
-1. Copie o header mais parecido para `boards/<sua_placa>.h`: `cyd_2432s028r.h` para LovyanGFX com touch,
-   `waveshare_s3_lcd_147b.h` para LovyanGFX sem touch, `guition_jc3248w535.h` para outro driver.
-2. Cumpra o contrato descrito em [`boards/board.h`](firmware/src/boards/board.h), dentro de `namespace board`:
-   - `NAME` (igual ao env do PlatformIO; o daemon usa para achar o firmware no OTA), `DEFAULT_ROTATION`,
-     `ROT_FOR`, `PROFILE` e `SERIAL_BAUD` (só conta com ponte USB-serial, como o CH340; use 460800).
-   - Tela: `displayBegin`, `displaySetRotation`, `displayWidth/Height`, `setBrightness` e `displayPush`, que
-     recebe linhas em RGB565 com o byte alto primeiro (o quadro inteiro com PSRAM, faixas sem). Use o driver
-     que quiser (LovyanGFX, Arduino_GFX, esp_lcd).
-   - Periféricos: `begin`, `gravity` (IMU), `setLed`, `buttonPressed`, `touch`. Recurso que a placa não tem vira
-     função vazia (`return false`) e `false` no perfil.
-3. Inclua o header no `#if` do `board.h`, com uma flag `-DBOARD_<SUA_PLACA>`.
-4. Crie o env no `firmware/platformio.ini` com a flag e uma tabela de partições com duas partições de app,
-   que o OTA precisa (`min_spiffs.csv` em 4 MB, `default_16MB.csv` em 16 MB).
-5. Grave a primeira vez pela USB: `firmware/flash.sh <sua-placa> --usb`. Depois disso, o OTA pelo daemon.
+1. Copy the closest header to `boards/<your_board>.h`: `cyd_2432s028r.h` for LovyanGFX with touch,
+   `waveshare_s3_lcd_147b.h` for LovyanGFX without touch, `guition_jc3248w535.h` for another driver.
+2. Fulfill the contract described in [`boards/board.h`](firmware/src/boards/board.h), inside `namespace board`:
+   - `NAME` (same as the PlatformIO env; the daemon uses it to find the firmware for OTA), `DEFAULT_ROTATION`,
+     `ROT_FOR`, `PROFILE` and `SERIAL_BAUD` (only matters with a USB-serial bridge, like the CH340; use 460800).
+   - Screen: `displayBegin`, `displaySetRotation`, `displayWidth/Height`, `setBrightness` and `displayPush`,
+     which receives RGB565 rows with the high byte first (the whole frame with PSRAM, bands without). Use any
+     driver you like (LovyanGFX, Arduino_GFX, esp_lcd).
+   - Peripherals: `begin`, `gravity` (IMU), `setLed`, `buttonPressed`, `touch`. A feature the board doesn't have
+     becomes an empty function (`return false`) and `false` in the profile.
+3. Include the header in the `#if` of `board.h`, with a `-DBOARD_<YOUR_BOARD>` flag.
+4. Create the env in `firmware/platformio.ini` with the flag and a partition table with two app partitions,
+   which OTA needs (`min_spiffs.csv` on 4 MB, `default_16MB.csv` on 16 MB).
+5. Flash it the first time over USB: `firmware/flash.sh <your-board> --usb`. After that, OTA through the daemon.
 
-## Releases do firmware
+## Firmware releases
 
-Os [releases](https://github.com/gilsondev/tokenpulse/releases) saem sozinhos do GitHub Actions a cada push no
-`main` que traz mudança de firmware ou de daemon. A versão segue o [semver](https://semver.org/lang/pt-BR/), decidida
-pelo prefixo dos commits desde o último release ([Conventional Commits](https://www.conventionalcommits.org/pt-br/)):
+[Releases](https://github.com/gilsondev/tokenpulse/releases) come out on their own from GitHub Actions on every
+push to `main` that brings a firmware or daemon change. The version follows [semver](https://semver.org/),
+decided by the commit prefixes since the last release ([Conventional Commits](https://www.conventionalcommits.org/)):
 
-| Prefixo do título do commit | Versão | Exemplo |
+| Commit title prefix | Version | Example |
 |---|---|---|
 | `feat:` | minor: v0.4.0 → v0.5.0 | `feat(smalltv): tela de histórico` |
 | `fix:`, `perf:` | patch: v0.4.0 → v0.4.1 | `fix(daemon): nome de sessão sem pasta` |
-| `!` depois do tipo, ou `BREAKING CHANGE:` no corpo | major: v0.4.0 → v1.0.0 | `feat!: frame novo, firmware antigo não lê` |
-| `docs:`, `ci:`, `chore:`, `refactor:`, `test:`, `style:` | nenhum release | `docs: capturas do SmallTV` |
+| `!` after the type, or `BREAKING CHANGE:` in the body | major: v0.4.0 → v1.0.0 | `feat!: frame novo, firmware antigo não lê` |
+| `docs:`, `ci:`, `chore:`, `refactor:`, `test:`, `style:` | no release | `docs: capturas do SmallTV` |
 
-O texto depois do prefixo fica em português. O cálculo está em
-[`.github/scripts/next_version.py`](.github/scripts/next_version.py) (`--test` confere as regras). Cada release traz,
-por placa, `tokenpulse-<placa>-factory.bin` (primeira gravação, imagem completa a partir do 0x0) e
-`tokenpulse-<placa>-ota.bin` (atualização pelo daemon). Uma tag `v*` empurrada à mão também publica. Num build local, a versão é o `git describe` (`v0.4.0-2-gdb2a673-dirty`: dois commits depois da
-v0.4.0, com mudanças não commitadas), e o `update.sh` não troca esse firmware pelo release sem `--force`.
+The text after the prefix is written in Portuguese. The logic is in
+[`.github/scripts/next_version.py`](.github/scripts/next_version.py) (`--test` checks the rules). Each release
+ships, per board, `tokenpulse-<board>-factory.bin` (first flash, full image from 0x0) and
+`tokenpulse-<board>-ota.bin` (update through the daemon). A `v*` tag pushed by hand also publishes. In a local
+build, the version is `git describe` (`v0.4.0-2-gdb2a673-dirty`: two commits after v0.4.0, with uncommitted
+changes), and `update.sh` doesn't replace that firmware with the release without `--force`.
 
-## Instalação
+## Installation
 
-**Recebeu uma placa já gravada?** No Mac, um comando instala o daemon (o `uv`, se faltar, e o último release em
-`~/.local/share/tokenpulse`) e o liga no login, sem clonar o repositório nem pedir senha:
+**Got a board that is already flashed?** On the Mac, one command installs the daemon (`uv`, if missing, and the
+latest release in `~/.local/share/tokenpulse`) and starts it at login, without cloning the repository or asking
+for a password:
 
 ```bash
 curl -fsSL https://gilsondev.github.io/tokenpulse/install.sh | bash
 ```
 
-O passo a passo para quem recebe, com o WiFi do SmallTV, fica em
-[gilsondev.github.io/tokenpulse/comecar](https://gilsondev.github.io/tokenpulse/comecar/). O SmallTV mostra um QR
-code para essa página enquanto nenhum daemon falou com ele, e o botão "Preparar para entrega" da página de
-configuração volta os ajustes ao padrão e esquece o WiFi antes de você entregar a placa. Para remover:
+The step by step for whoever receives a board, with the SmallTV WiFi, is at
+[gilsondev.github.io/tokenpulse/en/start](https://gilsondev.github.io/tokenpulse/en/start/). The SmallTV shows a
+QR code for the Portuguese version of that page while no daemon has talked to it, and the "Prepare for
+handover" button on the configuration page resets the settings and forgets the WiFi before you hand the board
+over. To remove:
 `curl -fsSL https://gilsondev.github.io/tokenpulse/install.sh | bash -s -- --uninstall`.
 
-**Gravar uma placa do zero:**
+**Flash a board from scratch:**
 
-Requisitos no Mac: [uv](https://docs.astral.sh/uv/) e o Claude Code logado (`claude auth status`). Para
-compilar o firmware em vez de usar o release, também o [PlatformIO](https://platformio.org/)
+Requirements on the Mac: [uv](https://docs.astral.sh/uv/) and Claude Code logged in (`claude auth status`). To
+build the firmware instead of using the release, also [PlatformIO](https://platformio.org/)
 (`uv tool install platformio`).
 
-Recomendados:
-- [herdr](https://herdr.dev), para o estado real de cada sessão e o agrupamento por workspace. Instale a
-  integração com `herdr integration install claude`. Sem herdr, o estado vem de uma estimativa pelos logs e as
-  sessões ficam num grupo só.
-- [claude-swap](https://github.com/realiti4/claude-swap) (`uv tool install claude-swap`), para trocar de org pela
-  tela. Logado em cada org, rode `cswap add`.
+Recommended:
+- [herdr](https://herdr.dev), for the real state of each session and grouping by workspace. Install the
+  integration with `herdr integration install claude`. Without herdr, the state is estimated from the logs and
+  sessions stay in a single group.
+- [claude-swap](https://github.com/realiti4/claude-swap) (`uv tool install claude-swap`), to switch org from the
+  screen. Logged in to each org, run `cswap add`.
 
-Com a placa plugada:
+With the board plugged in:
 
 ```bash
 git clone https://github.com/gilsondev/tokenpulse && cd tokenpulse
-./setup.sh cyd-2432s028r      # ou guition-jc3248w535, waveshare-s3-lcd-147b, waveshare-amoled-216
+./setup.sh cyd-2432s028r      # or guition-jc3248w535, waveshare-s3-lcd-147b, waveshare-amoled-216
 ```
 
-O `setup.sh` pausa o daemon se ele já roda, acha a porta da placa, grava o firmware do último release pela
-USB (com o `--chip` certo, via `uvx esptool`) e liga o daemon no login do macOS (log em
-`~/Library/Logs/tokenpulse.log`). Em alguns segundos a placa sai de "sem dados do Mac". A ESP32-2432S028R, de
-touch resistivo, pede na primeira vez quatro toques com a caneta para calibrar. Gravar de novo apaga os ajustes
-e a calibração.
+`setup.sh` pauses the daemon if it is already running, finds the board's port, flashes the latest release's
+firmware over USB (with the right `--chip`, via `uvx esptool`) and starts the daemon at macOS login (log in
+`~/Library/Logs/tokenpulse.log`). Within a few seconds the board leaves "sem dados do Mac" (no data from the
+Mac). The ESP32-2432S028R, with resistive touch, asks the first time for four stylus taps to calibrate.
+Flashing again erases the settings and the calibration.
 
-O daemon roda direto da pasta clonada: mantenha a pasta onde está. Se mover ou apagar, a placa fica em "sem
-dados do Mac"; para mudar de lugar, rode `host/install.sh` de novo a partir da pasta nova.
+The daemon runs straight from the cloned folder: keep the folder where it is. If you move or delete it, the
+board stays at "sem dados do Mac"; to move it, run `host/install.sh` again from the new folder.
 
-Atualizações depois disso vão por OTA, pelo mesmo cabo, e mantêm os ajustes e a calibração:
+Updates after that go over OTA, through the same cable, and keep the settings and the calibration:
 
 ```bash
-./update.sh                                    # todas as placas plugadas que estão atrás do último release
-firmware/flash.sh cyd-2432s028r                # ou compila com o PlatformIO e manda (~40 s; Guition ~15 s)
-firmware/flash.sh cyd-2432s028r --usb          # primeira gravação compilando da fonte, sem o release
+./update.sh                                    # every plugged board behind the latest release
+firmware/flash.sh cyd-2432s028r                # or build with PlatformIO and send (~40 s; Guition ~15 s)
+firmware/flash.sh cyd-2432s028r --usb          # first flash building from source, without the release
 ```
 
-O `update.sh` lê a versão de cada placa no que o daemon registrou (`~/.claude/esp-tokens-boards.json`),
-baixa o `tokenpulse-<placa>-ota.bin` das que estão atrás e espera cada uma voltar na versão nova.
+`update.sh` reads each board's version from what the daemon recorded (`~/.claude/esp-tokens-boards.json`),
+downloads `tokenpulse-<board>-ota.bin` for the ones behind and waits for each to come back on the new version.
 
-**SmallTV-Ultra, a primeira vez (sem abrir a caixa).** Com o daemon já instalado (`host/install.sh`):
+**SmallTV-Ultra, the first time (without opening the case).** With the daemon already installed
+(`host/install.sh`):
 
-1. Baixe o [`tokenpulse-smalltv-ultra-ota.bin`](https://github.com/gilsondev/tokenpulse/releases/latest/download/tokenpulse-smalltv-ultra-ota.bin)
-   do último release. Para compilar: `cd firmware && pio run -e smalltv-ultra`.
-2. No painel de fábrica, abra `http://<ip-do-smalltv>/update` e envie o `.bin` (compilado, é o
-   `firmware/.pio/build/smalltv-ultra/firmware.bin`). Ele cabe no espaço de OTA do
-   firmware de fábrica (~460 KB). Isso substitui o firmware da GeekMagic, que não volta sem o `.bin` dele.
-3. Sem rede salva, a placa abre o WiFi aberto `tokenpulse-XXXXXX` e mostra um QR code que faz o celular entrar
-   nele. A página de configuração abre sozinha (portal cativo; senão, `http://192.168.4.1`): ela lista as redes que a
-   placa enxerga com o sinal de cada uma, pede a senha e diz se conectou, com o endereço `.local`, ou o que deu
-   errado (senha, rede fora de alcance ou de 5 GHz). Em ~20 s o daemon acha a placa e a tela sai de "sem dados do Mac".
+1. Download [`tokenpulse-smalltv-ultra-ota.bin`](https://github.com/gilsondev/tokenpulse/releases/latest/download/tokenpulse-smalltv-ultra-ota.bin)
+   from the latest release. To build it: `cd firmware && pio run -e smalltv-ultra`.
+2. In the factory panel, open `http://<smalltv-ip>/update` and upload the `.bin` (when built, it is
+   `firmware/.pio/build/smalltv-ultra/firmware.bin`). It fits in the factory firmware's OTA space (~460 KB).
+   This replaces the GeekMagic firmware, which doesn't come back without its own `.bin`.
+3. With no saved network, the board opens the open WiFi `tokenpulse-XXXXXX` and shows a QR code that makes the
+   phone join it. The configuration page opens by itself (captive portal; otherwise, `http://192.168.4.1`): it
+   lists the networks the board sees with each one's signal, asks for the password and says whether it
+   connected, with the `.local` address, or what went wrong (password, network out of range or 5 GHz). In
+   ~20 s the daemon finds the board and the screen leaves "sem dados do Mac".
 
-Depois disso o `update.sh` e o `firmware/flash.sh smalltv-ultra` atualizam pelo WiFi. Não use o WiFi do Mac
-para entrar no `tokenpulse-XXXXXX`: sem cabo de rede, o Mac fica sem internet enquanto estiver nele.
+After that, `update.sh` and `firmware/flash.sh smalltv-ultra` update over WiFi. Don't use the Mac's WiFi to
+join `tokenpulse-XXXXXX`: without a network cable, the Mac has no internet while it is on it.
 
-Opcional: aponte o `statusLine` do `~/.claude/settings.json` para `host/statusline.sh` (passe a sua statusline
-atual como argumento para encadear). Ela serve de reserva do % quando a API de uso responde 429.
+Optional: point the `statusLine` in `~/.claude/settings.json` to `host/statusline.sh` (pass your current
+statusline as an argument to chain it). It serves as a fallback for the % when the usage API answers 429.
 
-## Uso
+## Usage
 
-- Arraste para os lados para trocar de tela; para cima e para baixo para ver mais sessões.
-- Toque num workspace para ver as sessões e no título para voltar. Toque num modelo para o detalhe.
-- Arraste da borda de baixo para cima (ou segure) para voltar à principal de qualquer tela.
-- Toque no nome da org para trocar de org; na engrenagem para os ajustes.
-- `uv run host/tokend.py --demo` manda dados fictícios, como nas capturas acima
-  (`TOKENPULSE_DEMO_P5=86` muda o % da janela de 5 h).
-- `host/shot.sh saida.png "page 1" "tap 80 90"` tira um screenshot da placa
-  (comandos: `page N`, `tap X Y`, `swipe L|R|U|D`). Por padrão só funciona com o daemon em `--demo`; com os seus
-  dados reais, rode `REAL=1 host/shot.sh …` e confira a imagem antes de publicar: ela mostra org, títulos de
-  sessão e custos.
-- `uv run host/tokend.py --once` imprime um frame com os seus dados reais: não cole em issues.
+- Swipe sideways to change screens; up and down to see more sessions.
+- Tap a workspace to see its sessions and the title to go back. Tap a model for its detail.
+- Swipe up from the bottom edge (or hold) to go back to the main screen from anywhere.
+- Tap the org name to switch org; the gear for settings.
+- `uv run host/tokend.py --demo` sends fictitious data, as in the screenshots above
+  (`TOKENPULSE_DEMO_P5=86` changes the 5-hour window %).
+- `host/shot.sh out.png "page 1" "tap 80 90"` takes a screenshot of the board
+  (commands: `page N`, `tap X Y`, `swipe L|R|U|D`). By default it only works with the daemon in `--demo`; with
+  your real data, run `REAL=1 host/shot.sh …` and check the image before publishing: it shows org, session
+  titles and costs.
+- `uv run host/tokend.py --once` prints a frame with your real data: don't paste it into issues.
 
-## Suporte de mesa
+## Desk stand
 
-Em [`hardware/stand/alternativa`](hardware/stand/alternativa) há um suporte inclinado sem parafuso para a
-Waveshare de 1,47", em OpenSCAD, inspirado no
+[`hardware/stand/alternativa`](hardware/stand/alternativa) has a screwless tilted stand for the 1.47"
+Waveshare, in OpenSCAD, inspired by the
 [Waveshare ESP32-C6 1.47 Landscape stand](https://makerworld.com/en/models/3408098).
 
-## Problemas conhecidos
+## Known issues
 
-- **A placa liga mas o Mac não a vê:** o USB-C da JC3248W535 só passa dados num dos lados. Gire o plugue.
-- **Mais de uma placa plugada:** o `flash.sh --usb` grava na porta que já roda aquela placa ou na única sem o
-  tokenpulse. Com duas placas novas, passe `--port /dev/cu.…`.
-- **Outros aparelhos seriais plugados (Arduino, outro ESP32):** o daemon abre uma vez cada porta CH340 ou
-  CP210x para perguntar se é uma placa do tokenpulse, e abrir a porta reinicia muitas dessas placas. Isso
-  acontece quando a porta aparece e quando o daemon reinicia (`install.sh`, fim do `flash.sh --usb`). Uma
-  ESP32 com USB nativa (S3) de outro projeto não reinicia, mas a porta dela é aberta de 5 em 5 s no primeiro
-  minuto depois do plug e de 60 em 60 s depois disso, o que pode atrapalhar uma gravação. Para
-  mexer em outro projeto serial sem interferência, pare o daemon:
-  `launchctl bootout gui/$UID/com.gilsondev.tokenpulse` (e `host/install.sh` para religar).
-- **Placa com ponte USB-serial plugada antes de ter o firmware:** pelo motivo acima, o daemon não pergunta de
-  novo até ela ser replugada. O `flash.sh --usb` reinicia o daemon no fim, então o fluxo normal não esbarra nisso.
-- **Placa não volta depois do OTA:** o `flash.sh` avisa quando ela não se apresenta em 75 s. Um firmware que
-  trava no boot do S3 pode travar também o reset pela USB, e aí nem o `--usb` grava. O JTAG embutido na USB
-  do S3 ainda funciona, sem botão e sem abrir o case:
-  `pio pkg install -g -t platformio/tool-openocd-esp32` e depois
+- **The board powers on but the Mac doesn't see it:** the JC3248W535's USB-C only carries data on one side.
+  Flip the plug.
+- **More than one board plugged in:** `flash.sh --usb` flashes the port already running that board or the only
+  one without tokenpulse. With two new boards, pass `--port /dev/cu.…`.
+- **Other serial devices plugged in (Arduino, another ESP32):** the daemon opens each CH340 or CP210x port once
+  to ask whether it is a tokenpulse board, and opening the port resets many of those boards. This happens when
+  the port appears and when the daemon restarts (`install.sh`, end of `flash.sh --usb`). A native-USB ESP32
+  (S3) from another project doesn't reset, but its port is opened every 5 s during the first minute after
+  plugging and every 60 s after that, which can get in the way of flashing. To work on another serial project
+  without interference, stop the daemon: `launchctl bootout gui/$UID/com.gilsondev.tokenpulse` (and
+  `host/install.sh` to start it again).
+- **Board with a USB-serial bridge plugged in before it has the firmware:** for the reason above, the daemon
+  doesn't ask again until it is replugged. `flash.sh --usb` restarts the daemon at the end, so the normal flow
+  doesn't hit this.
+- **Board doesn't come back after OTA:** `flash.sh` warns when it doesn't show up within 75 s. A firmware that
+  hangs at S3 boot can also block the reset over USB, and then not even `--usb` flashes. The JTAG built into
+  the S3's USB still works, with no button and without opening the case:
+  `pio pkg install -g -t platformio/tool-openocd-esp32` and then
   `openocd -f board/esp32s3-builtin.cfg -c "program_esp firmware.bin 0x10000 verify reset exit"`
-  (grave também `bootloader.bin` em 0x0, `partitions.bin` em 0x8000 e o `boot_app0.bin` em 0xe000 para voltar à
-  partição de app 0).
-- **Screenshot da CYD falha às vezes:** pelo CH340 o macOS perde alguns bytes da placa para o Mac. O daemon
-  tenta de novo; o OTA e os frames vão no outro sentido e não sofrem com isso.
-- **"atualizado há N min" no anel:** a API de uso respondeu 429. O daemon respeita o `Retry-After` (ou dobra a
-  espera, até 30 min) e guarda o último % em `~/.claude/esp-tokens-usage.json`.
-- **"janela nova · 17h" com 0%:** a janela de 5 h acabou de virar; o primeiro % aparece em alguns minutos.
-- **Gravar por cima do firmware [Tessera](https://github.com/gilsondev/Tessera):** ele trava o CS da tela com
-  `gpio_hold`, e o firmware daqui solta a trava no boot. Para entrar no bootloader sem botões, mande `FLASH` pela
-  serial e abra a porta a 1200 baud.
-- **Custo:** é o equivalente pela tabela de preços da API, não o que a assinatura cobra.
+  (also flash `bootloader.bin` at 0x0, `partitions.bin` at 0x8000 and `boot_app0.bin` at 0xe000 to go back to
+  app partition 0).
+- **CYD screenshot sometimes fails:** through the CH340, macOS loses some bytes from the board to the Mac. The
+  daemon retries; OTA and frames go the other way and don't suffer from it.
+- **"atualizado há N min" (updated N min ago) on the ring:** the usage API answered 429. The daemon honors
+  `Retry-After` (or doubles the wait, up to 30 min) and keeps the last % in `~/.claude/esp-tokens-usage.json`.
+- **"janela nova · 17h" (new window · 5 pm) at 0%:** the 5-hour window just rolled over; the first % shows up
+  within a few minutes.
+- **Flashing over the [Tessera](https://github.com/gilsondev/Tessera) firmware:** it locks the screen's CS with
+  `gpio_hold`, and this firmware releases the lock at boot. To enter the bootloader without buttons, send
+  `FLASH` over serial and open the port at 1200 baud.
+- **Cost:** it is the equivalent from the API price list, not what the subscription charges.
 
-## Licença
+## License
 
-[MIT](LICENSE). A fonte Inter em `firmware/tools/fonts` e os headers gerados dela seguem a SIL OFL 1.1.
+[MIT](LICENSE). The Inter font in `firmware/tools/fonts` and the headers generated from it follow the SIL OFL 1.1.
 
-## Créditos
+## Credits
 
 [LovyanGFX](https://github.com/lovyan03/LovyanGFX), [Arduino_GFX](https://github.com/moononournation/Arduino_GFX),
-[ArduinoJson](https://arduinojson.org/), [SensorLib](https://github.com/lewisxhe/SensorLib), a fonte
-[Inter](https://rsms.me/inter/) (SIL OFL 1.1, `firmware/tools/fonts/OFL.txt`) e os sons do
-[Interface Sounds](https://kenney.nl/assets/interface-sounds) e do
-[Digital Audio](https://kenney.nl/assets/digital-audio), da [Kenney](https://www.kenney.nl) (CC0,
-`firmware/data/sounds/LICENSE-kenney*.txt`). O driver do ES8311 em `firmware/lib/ES8311` é da Espressif
-(Apache-2.0), e a configuração do áudio e da PMU da AMOLED veio do
-[claude-desktop-buddy-esp32](https://github.com/vthinkxie/claude-desktop-buddy-esp32) (MIT). Feito com o Claude Code.
+[ArduinoJson](https://arduinojson.org/), [SensorLib](https://github.com/lewisxhe/SensorLib), the
+[Inter](https://rsms.me/inter/) font (SIL OFL 1.1, `firmware/tools/fonts/OFL.txt`) and the sounds from
+[Interface Sounds](https://kenney.nl/assets/interface-sounds) and
+[Digital Audio](https://kenney.nl/assets/digital-audio), by [Kenney](https://www.kenney.nl) (CC0,
+`firmware/data/sounds/LICENSE-kenney*.txt`). The ES8311 driver in `firmware/lib/ES8311` is from Espressif
+(Apache-2.0), and the AMOLED audio and PMU setup came from
+[claude-desktop-buddy-esp32](https://github.com/vthinkxie/claude-desktop-buddy-esp32) (MIT). Made with Claude Code.
