@@ -53,6 +53,18 @@ void resolveOpen() {
 
 int count() { return gfx::full() ? tall::PAGES : COUNT; }
 
+// A principal do Codex é uma segunda face da página 0, logo depois da do Claude, quando o daemon manda o bloco
+// "cx": as outras páginas mantêm os números de sempre (volta automática, comando "page N", alertas).
+int codexFace = 0;
+bool hasCodex() { return gfx::full() && !app::frame["cx"].isNull(); }
+bool mainStep(int dir) {
+  if (page != 0 || !hasCodex() || codexFace + dir < 0 || codexFace + dir > 1) return false;
+  codexFace += dir;
+  gfx::slide(-dir);
+  anim::reset();
+  return true;
+}
+
 // LED de status na cor da faixa da janela de 5h, sempre respirando; acima de 90% respira mais rápido.
 // Com sessão pedindo aprovação, pisca vermelho no lugar da faixa.
 void updateLed() {
@@ -250,6 +262,7 @@ void drawProjects(bool live) {
 }
 
 void go(int to, int dir) {
+  codexFace = 0;
   detail = histSel = -1;
   detailName = sessWsName = "";
   about = 0;
@@ -513,6 +526,7 @@ void autoTurn() {
     if (gfx::full()) return (bool)(w.pages & (p == 1 ? 1 : p == 2 ? 2 : 4));
     return (bool)(w.pages & (p == 1 ? 2 : 1));
   };
+  if (mainStep(1)) return;  // a principal do Codex entra na volta logo depois da do Claude
   for (int i = 1; i < count(); i++)
     if (on((page + i) % count())) return go((page + i) % count(), -1);
 }
@@ -557,7 +571,9 @@ void render() {
     board::setLed(0, 0, 0);
     return gfx::frame([] { gfx::full() ? tall::drawWaiting() : drawWaiting(); });
   }
-  anim::step();
+  if (!hasCodex()) codexFace = 0;  // o Codex saiu do frame com a face dele na tela
+  tall::codexMain = page == 0 && codexFace;
+  anim::step(tall::codexMain ? app::frame["cx"].as<JsonVariantConst>() : app::frame.as<JsonVariantConst>());
   updateLed();
   const bool live = app::live();
   resolveOpen();
@@ -599,12 +615,13 @@ bool sessionStep(int dir) {
 }
 void next() {
   if (attentionRow() >= 0) return dismissAttention();  // o botão fecha o destaque
-  if (!sessionStep(1)) go((page + 1) % count(), -1);
+  if (!sessionStep(1) && !mainStep(1)) go((page + 1) % count(), -1);
 }
 void prev() {
-  if (sessionStep(-1)) return;
+  if (sessionStep(-1) || mainStep(-1)) return;
   const int to = (page + count() - 1) % count();
   go(to, 1);
+  if (to == 0 && hasCodex()) codexFace = 1;  // voltando das sessões: a principal do Codex, a mais próxima
   if (to == 1 && gfx::full()) sessScroll = tall::pagesOf(-1) - 1;  // voltando dos modelos: a última página
 }
 
@@ -620,7 +637,7 @@ void tap(int x, int y) {
     return dismissAttention();
   }
   if (!gfx::full()) return next();
-  if (page == 0 && !settingsOpen && (tall::orgTitleAt(x, y) || tall::suggestionAt(x, y))) {  // lista de orgs
+  if (page == 0 && !codexFace && !settingsOpen && (tall::orgTitleAt(x, y) || tall::suggestionAt(x, y))) {  // orgs
     gfx::slide(-1);
     settingsOpen = true, about = 3, orgFromHeader = true;
     anim::reset();

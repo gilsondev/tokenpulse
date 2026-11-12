@@ -8,6 +8,7 @@
 namespace screens::tall {
 
 constexpr int PAGES = 4;  // principal, sessões, modelos, histórico; os ajustes abrem pela engrenagem
+inline bool codexMain = false;  // a principal mostrada é a do Codex (bloco "cx" do frame)
 
 void drawWaiting();
 void drawShutdown(float p);  // PWR segurado: p de 0 a 1 até a PMU desligar

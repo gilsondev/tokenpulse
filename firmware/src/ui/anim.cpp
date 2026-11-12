@@ -45,12 +45,12 @@ void onFrame() {
   lastPw = w;
 }
 
-void step() {
+void step(JsonVariantConst src) {
   const uint32_t now = millis();
   const float dt = constrain((now - lastStepMs) / 1000.f, 0.f, 0.05f);
   lastStepMs = now;
-  spring(p5, v5, max((int)(app::frame["p5"] | -1), 0), dt);
-  spring(pw, vw, max((int)(app::frame["pw"] | -1), 0), dt);
+  spring(p5, v5, max((int)(src["p5"] | -1), 0), dt);
+  spring(pw, vw, max((int)(src["pw"] | -1), 0), dt);
   grow += (1 - grow) * 0.12f;
 }
 

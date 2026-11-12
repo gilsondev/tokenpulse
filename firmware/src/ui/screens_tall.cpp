@@ -39,8 +39,9 @@ int shownWs = -1, shownSessPage = 0;
 void dots(int page) {
   const bool inWs = page == 1 && shownWs >= 0;
   const int lp = pagesOf(-1);
-  const int n = inWs ? pagesOf(shownWs) : PAGES - 1 + lp;
-  const int at = inWs ? shownSessPage : page == 0 ? 0 : page == 1 ? 1 + shownSessPage : page + lp - 1;
+  const int cx = app::frame["cx"].isNull() ? 0 : 1;  // a principal do Codex conta um ponto, depois da do Claude
+  const int n = inWs ? pagesOf(shownWs) : PAGES - 1 + lp + cx;
+  const int at = inWs ? shownSessPage : page == 0 ? codexMain : page == 1 ? 1 + cx + shownSessPage : page + lp - 1 + cx;
   const int H = u(6), DOT = u(6), PILL = u(18), GAP = u(8);
   if (n > 12) {  // muitas páginas de sessões: os pontos não cabem na largura, vai o número
     char buf[12];
@@ -217,15 +218,19 @@ void header(bool live, const char* title, bool dropdown = false, bool sub = true
   text(clk, W() - M() - u(30), u(8), gfx::TITLE, TEXT, top_right);
   gear(W() - M() - u(10), u(19), u(10), gearActive ? ACCENT : MUTED);
   if (!sub && live) return;
-  char buf[32];
+  char buf[40];
   const int st = live ? (f["st"] | 0) : 0;  // a página de status da Anthropic: 1 instável, 2 fora do ar
-  if (st) strcpy(buf, st > 1 ? "Claude fora do ar" : "Claude instável");
+  JsonVariantConst cx = f["cx"];
+  if (st && !codexMain) strcpy(buf, st > 1 ? "Claude fora do ar" : "Claude instável");
+  else if (live && codexMain) snprintf(buf, sizeof buf, "Codex %d", (int)(cx["n"] | 0));
+  else if (live && !cx.isNull())
+    snprintf(buf, sizeof buf, "CLI %d · Desk %d · Codex %d", (int)(f["cli"] | 0), (int)(f["desk"] | 0), (int)(cx["n"] | 0));
   else if (live) snprintf(buf, sizeof buf, "CLI %d · Desk %d", (int)(f["cli"] | 0), (int)(f["desk"] | 0));
   else snprintf(buf, sizeof buf, "Offline há %lu min", (millis() - app::lastFrameMs) / 60000);
   const uint16_t sc = !live || st > 1 ? RED : st ? AMBER : GREEN;
   const int sy = u(10) + below(HT, 22), w = gfx::textWidth(buf, HS);
   // o modelo divide a linha com o status: corta o modelo, nunca o status
-  text(fit(f["m"] | "Claude", HS, W() - 2 * M() - w - u(24)).c_str(), M(), sy, HS, DIM);
+  text(fit(codexMain ? (cx["m"] | "Codex") : (f["m"] | "Claude"), HS, W() - 2 * M() - w - u(24)).c_str(), M(), sy, HS, DIM);
   text(buf, W() - M(), sy, HS, sc == GREEN ? DIM : sc, top_right);
   fb().fillSmoothCircle(W() - M() - w - u(8), sy + gfx::lineHeight(HS) / 2 - u(2), max(2, u(3)), sc);
 }
@@ -282,12 +287,19 @@ String fmtTokens(uint32_t v) {
 int sugX = 0, sugY = 0, sugW = 0, sugH = 0;
 
 void drawMain(bool live, int page) {
-  const auto& f = app::frame;
-  const bool stale = app::stale() || !live, land = L();
+  // a do Codex é esta mesma tela lendo o bloco "cx": sem troca de org e sem o "atualizado há" da API do Claude
+  JsonVariantConst f = codexMain ? app::frame["cx"].as<JsonVariantConst>() : app::frame.as<JsonVariantConst>();
+  const bool apiStale = !codexMain && app::stale(), stale = apiStale || !live, land = L();
   const int p5 = f["p5"] | -1, pw = f["pw"] | -1;
   char buf[48];
   gfx::clear();
-  header(live, f["org"] | "Claude", true);
+  if (codexMain) {
+    const char* plan = f["plan"] | "";
+    snprintf(buf, sizeof buf, *plan ? "Codex · %s" : "Codex", plan);
+    header(live, buf, false);
+  } else {
+    header(live, f["org"] | "Claude", true);
+  }
 
   // Anel da janela de 5h: o herói da tela. Em pé fica no alto e centrado; deitada, na coluna da esquerda.
   const int r = u(land ? 108 : 100), thick = u(15);
@@ -321,9 +333,9 @@ void drawMain(bool live, int page) {
   if (p5 < 0) strcpy(buf, "--");
   else snprintf(buf, sizeof buf, "%d%%", (int)lroundf(anim::p5));
   heroNumber(buf, cx, cy, stale ? DIM : p5 < 0 ? TEXT : lc);  // o número na cor da faixa, como o anel
-  if (app::stale()) snprintf(buf, sizeof buf, "Atualizado há %d min", app::dataAge() / 60);
-  ringText(app::stale() ? buf : (const char*)(f["r5"] | ""), u(44), gfx::LABEL, app::stale() ? AMBER : MUTED);
-  const char* other = !stale && p5 >= 100 ? suggestedOrg() : nullptr;
+  if (apiStale) snprintf(buf, sizeof buf, "Atualizado há %d min", app::dataAge() / 60);
+  ringText(apiStale ? buf : (const char*)(f["r5"] | ""), u(44), gfx::LABEL, apiStale ? AMBER : MUTED);
+  const char* other = !stale && !codexMain && p5 >= 100 ? suggestedOrg() : nullptr;
   sugW = 0;
   if (!land && other) {  // janela esgotada e há outra org salva: oferece a troca
     sugY = cy + r + u(2), sugH = max(u(26), gfx::lineHeight(gfx::SMALL) + 6);
