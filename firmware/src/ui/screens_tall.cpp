@@ -1273,9 +1273,13 @@ int items(Item* out) {
   return n;
 }
 int MASK_LINE() { return u(46); }  // uma opção da lista de interruptores
+// a lista de escolha única ocupa a altura que sobra na tela: opção alta erra menos o toque
+int lineOf(const Row& r) {
+  return r.kind == RADIO ? max(MASK_LINE(), min(u(100), (gfx::height() - SET_Y() - SEG_TOP() - u(12)) / r.count)) : MASK_LINE();
+}
 // a lista de interruptores é mais alta que uma linha comum; o seletor de som, sem título em cima, mais baixo
 int rowHeight(const Row& r) {
-  return r.kind == MASK || r.kind == RADIO ? SEG_TOP() + r.count * MASK_LINE() : r.kind == CYCLE ? CYCLE_H() + u(10) : ROW_H();
+  return r.kind == MASK || r.kind == RADIO ? SEG_TOP() + r.count * lineOf(r) : r.kind == CYCLE ? CYCLE_H() + u(10) : ROW_H();
 }
 int listRowH(int n) { return min(u(72), (gfx::height() - SET_Y() - M()) / n); }
 
@@ -1372,16 +1376,17 @@ void drawRow(const Row& r, Cell c, uint16_t track) {
   text(r.name, c.x, c.y, gfx::SMALL, MUTED);
   fb().fillSmoothRoundRect(c.x, sy, c.w, sh, sh / 2, track);
   if (r.kind == MASK || r.kind == RADIO) {  // uma opção por linha: o interruptor à direita, ou o círculo da escolha à esquerda
-    fb().fillSmoothRoundRect(c.x, sy, c.w, r.count * MASK_LINE() - u(6), u(12), track);
+    const int ln = lineOf(r);
+    fb().fillSmoothRoundRect(c.x, sy, c.w, r.count * ln - u(6), u(12), track);
     for (int k = 0; k < r.count; k++) {
-      const int ly = sy + k * MASK_LINE(), mid = ly + (MASK_LINE() - u(6)) / 2;
+      const int ly = sy + k * ln, mid = ly + (ln - u(6)) / 2;
       if (r.kind == RADIO) {
         const bool on = *r.value == k;
         fb().fillSmoothCircle(c.x + u(26), mid, u(10), on ? ACCENT : MUTED);
         fb().fillSmoothCircle(c.x + u(26), mid, u(10) - max(2, u(2)), track);
         if (on) fb().fillSmoothCircle(c.x + u(26), mid, u(5), ACCENT);
         text(r.opts[k], c.x + u(46), mid, gfx::LABEL, TEXT, middle_left, track);
-        if (k < r.count - 1) fb().drawFastHLine(c.x + u(14), ly + MASK_LINE() - u(3), c.w - u(28), BG);
+        if (k < r.count - 1) fb().drawFastHLine(c.x + u(14), ly + ln - u(3), c.w - u(28), BG);
         continue;
       }
       const bool on = *r.value >> k & 1;
@@ -1524,13 +1529,13 @@ int settingsTap(int x, int y) {
     const Cell c = cell(g, i);
     Row& r = g.rows[i];
     const int top = r.kind == CYCLE ? c.y : c.y + SEG_TOP();
-    const int bottom = r.kind == MASK || r.kind == RADIO ? top + r.count * MASK_LINE() : top + SEG_H() + 4;
+    const int bottom = r.kind == MASK || r.kind == RADIO ? top + r.count * lineOf(r) : top + SEG_H() + 4;
     if (x < c.x || x >= c.x + c.w || y < top - 6 || y > bottom) continue;
     auto& web = settings::web;
     if (r.kind == CYCLE) {  // à direita avança; na metade da esquerda (o nome e o ‹) volta
       *r.value = (*r.value + (x - c.x < c.w / 2 ? r.count - 1 : 1)) % r.count;
     } else {
-      const int k = r.kind == MASK || r.kind == RADIO ? constrain((y - top) / MASK_LINE(), 0, r.count - 1)
+      const int k = r.kind == MASK || r.kind == RADIO ? constrain((y - top) / lineOf(r), 0, r.count - 1)
                                    : min<int>((x - c.x) * r.count / c.w, r.count - 1);
       if (r.kind == MASK) {
         if ((*r.value ^ 1 << k) & 31) *r.value ^= 1 << k;  // ao menos uma tela fica ligada

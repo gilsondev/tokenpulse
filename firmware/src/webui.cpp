@@ -61,6 +61,8 @@ void handleState() {
   d["oled"] = board::PROFILE.oled;
   if (board::PROFILE.speaker)
     for (const char* s : sound::NAMES) d["sounds"].add(s);
+  d["cxok"] = app::frame["cxok"] | 0;  // o Mac tem o Codex: a página mostra o ajuste Provedores
+  d["prov"] = app::frame["prov"] | "auto";
   JsonObject c = d["cfg"].to<JsonObject>();
   const auto& v = settings::v;
   const auto& w = settings::web;
@@ -78,6 +80,12 @@ void handleConfig() {
   auto num = [](const char* k, int lo, int hi, uint8_t& field) {
     if (server.hasArg(k)) field = constrain(server.arg(k).toInt(), lo, hi);
   };
+  // Provedores mora no daemon: a placa só repassa o pedido, da lista fechada
+  if (server.hasArg("prov")) {
+    const String m = server.arg("prov");
+    if (m != "auto" && m != "claude" && m != "codex" && m != "both") return server.send(400, "text/plain", "Provedor inválido.");
+    hostlink::action(("ACTION prov " + m).c_str());
+  }
   if (server.hasArg("host")) {
     String h = server.arg("host");
     h.trim();

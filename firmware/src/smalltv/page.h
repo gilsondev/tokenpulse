@@ -24,6 +24,10 @@ static const char PAGE[] PROGMEM = R"HTML(<!doctype html>
 <label>Tema <select name=theme><option value=0>segue o macOS<option value=1>claro<option value=2>escuro</select></label>
 <label>Rotação <select name=rotation><option value=0>0°<option value=1>90°<option value=2>180°<option value=3>270°</select></label>
 </section>
+<section id=prov hidden><h2>Provedores</h2>
+<label>O que a placa mostra <select name=prov><option value=auto>automático: quem teve uso nos últimos 7 dias<option value=claude>só Claude<option value=codex>só Codex<option value=both>Claude + Codex</select></label>
+<p class=hint>Vale para todas as placas deste Mac. Com só Claude, a placa fica como sempre foi.</p>
+</section>
 <section><h2>Telas</h2>
 <label>Trocar de tela a cada <select name=interval><option value=0>não troca<option value=5>5 s<option value=10>10 s<option value=15>15 s<option value=30>30 s<option value=60>1 min</select></label>
 <label>Sessões trabalhando e esperando você <input type=checkbox name=sessions></label>
@@ -61,6 +65,7 @@ async function state(){
   const rows=[['Firmware',s.fw],['Agente (tokend)',s.agent||'ainda não falou com a placa'],['Endereço','http://'+s.host+'.local'],['IP',s.ip],['Rede',s.ssid?s.ssid+' ('+s.rssi+' dBm)':'desconectada'],
     ['Último dado',ago(s.frame)],['Daemon',ago(s.daemon)],['Memória livre',s.heap+' B'],['Ligada há',Math.floor(s.up/60)+' min']];
   if(s.safe)rows.unshift(['Modo','recuperação: travou 3 vezes no boot']);
+  $('prov').hidden=!s.cxok;if(document.activeElement!==f.prov)f.prov.value=s.prov||'auto';
   const dl=$('st');dl.textContent='';
   for(const[k,v]of rows){const t=document.createElement('dt'),d=document.createElement('dd');t.textContent=k;
     if(/^http:\/\//.test(v)){const a=document.createElement('a');a.href=v+'/';a.textContent=v;d.append(a)}else d.textContent=v;dl.append(t,d)}
@@ -73,6 +78,7 @@ state().then(s=>{
 });
 setInterval(state,5000);
 f.addEventListener('change',async e=>{
+  if(e.target.name==='prov'){const r=await fetch('/api/config',{method:'POST',body:new URLSearchParams({prov:f.prov.value})});return say(r.ok?'Salvo: o Mac aplica em até 2 s, em todas as placas.':await r.text())}
   if(e.target.name==='host'&&!f.host.checkValidity())return say('Nome: letras minúsculas, números e hífen.');
   const b=new URLSearchParams({bright:f.bright.value,night:+f.night.checked,theme:f.theme.value,rotation:f.rotation.value,
     interval:f.interval.value,pages:(f.models.checked?1:0)|(f.projects.checked?2:0)|(f.sessions.checked?4:0)|(f.detail.checked?8:0)|(f.history.checked?16:0)|(f.orgs.checked?32:0),hideCost:+f.hideCost.checked,alerts:(f.approve.checked?1:0)|(f.band.checked?2:0),host:f.host.value});

@@ -56,7 +56,7 @@ int count() { return gfx::full() ? tall::PAGES : COUNT; }
 // A principal do Codex é uma segunda face da página 0, logo depois da do Claude, quando o daemon manda o bloco
 // "cx": as outras páginas mantêm os números de sempre (volta automática, comando "page N", alertas).
 int codexFace = 0;
-bool hasCodex() { return gfx::full() && !app::frame["cx"].isNull(); }
+bool hasCodex() { return !app::frame["cx"].isNull(); }
 bool mainStep(int dir) {
   if (page != 0 || !hasCodex() || codexFace + dir < 0 || codexFace + dir > 1) return false;
   codexFace += dir;
@@ -113,12 +113,13 @@ void drawWaiting() {
 
 void drawMain(bool live) {
   const Layout L = layoutFor(gfx::width(), gfx::height());
-  const auto& f = app::frame;
+  // a principal do Codex é esta mesma tela lendo o bloco "cx"
+  JsonVariantConst f = tall::codexMain ? app::frame["cx"].as<JsonVariantConst>() : app::frame.as<JsonVariantConst>();
   const int m = s(8), right = gfx::width() - m;
   char buf[48];
   fb().fillScreen(BG);
 
-  String org = f["org"] | "";
+  String org = tall::codexMain ? String("Codex · ") + (const char*)(f["plan"] | "") : String((const char*)(f["org"] | ""));
   if (org.length() > 14) {
     while (org.length() > 13) gfx::dropLastChar(org);
     org += "…";
@@ -135,13 +136,16 @@ void drawMain(bool live) {
   if (live) fb().fillCircle(L.statusX + s(3), L.statusY + s(6), s(2) + pulse * s(2), blend(DARK_GREEN, GREEN, pulse));
   else fb().fillCircle(L.statusX + s(3), L.statusY + s(6), s(3), RED);
   label(live ? "Ao vivo" : "Offline", L.statusX + s(10), L.statusY, live ? GREEN : RED);
-  const int st = f["st"] | 0;  // a página de status da Anthropic: 1 instável, 2 fora do ar
-  if (st) strcpy(buf, st > 1 ? "Claude fora" : "Claude instável");
+  const int st = f["st"] | 0;  // a página de status do serviço mostrado: 1 instável, 2 fora do ar
+  const bool cxShown = tall::codexMain || tall::codexOnly();
+  if (st) snprintf(buf, sizeof buf, st > 1 ? "%s fora" : "%s instável", cxShown ? "Codex" : "Claude");
+  else if (tall::codexMain) snprintf(buf, sizeof buf, "Codex %d", (int)(f["n"] | 0));
+  else if (tall::codexOnly()) snprintf(buf, sizeof buf, "Codex %d", (int)(f["cxn"] | 0));
   else snprintf(buf, sizeof buf, "CLI %d · Desk %d", (int)(f["cli"] | 0), (int)(f["desk"] | 0));
   label(buf, L.sessX, L.sessY, st > 1 ? RED : st ? AMBER : DIM, L.sessDatum);
   fb().drawFastHLine(m, L.statusY + s(18), gfx::width() - 2 * m, TRACK);
 
-  const bool stale = app::stale();
+  const bool stale = !tall::codexMain && app::stale();  // o "atualizado há" é da API do Claude
   const int p5 = f["p5"] | -1;
   bool blinkOff = anim::since(anim::alertMs, 1500) < 1 && (millis() - anim::alertMs) / 250 % 2;
   uint16_t ringColor = stale ? DIM : blinkOff ? TEXT : levelColor(p5);
@@ -217,13 +221,16 @@ void drawModels(bool live) {
     snprintf(buf, sizeof buf, "%s · %d%%", (const char*)m[1], share);
     label(buf, right, y, MUTED, top_right);
     bar(x0, y + s(15), w, s(6), anim::grow * share / 100, modelColor(name));
+    const bool written = *(m[6] | "");  // os modelos do Codex não escrevem cache: vem vazio
     if (wide) {
-      snprintf(buf, sizeof buf, "In %s · out %s · lido %s · escrito %s", (const char*)m[3], (const char*)m[4], (const char*)m[5], (const char*)m[6]);
+      if (written) snprintf(buf, sizeof buf, "In %s · out %s · lido %s · escrito %s", (const char*)m[3], (const char*)m[4], (const char*)m[5], (const char*)m[6]);
+      else snprintf(buf, sizeof buf, "In %s · out %s · lido %s", (const char*)m[3], (const char*)m[4], (const char*)m[5]);
       label(buf, x0, y + s(24), DIM);
     } else {
       snprintf(buf, sizeof buf, "In %s · out %s", (const char*)m[3], (const char*)m[4]);
       label(buf, x0, y + s(24), DIM);
-      snprintf(buf, sizeof buf, "Lido %s · escrito %s", (const char*)m[5], (const char*)m[6]);
+      if (written) snprintf(buf, sizeof buf, "Lido %s · escrito %s", (const char*)m[5], (const char*)m[6]);
+      else snprintf(buf, sizeof buf, "Lido %s", (const char*)m[5]);
       label(buf, x0, y + s(38), DIM);
     }
     y += rowH;
@@ -249,7 +256,7 @@ void drawProjects(bool live) {
     const char* origin = p[1] | "CLI";
     int mins = p[3];
     label(name.c_str(), x0, y, TEXT);
-    label(origin, right, y, strcmp(origin, "Desk") ? GREEN : ACCENT, top_right);
+    label(origin, right, y, !strcmp(origin, "Desk") ? ACCENT : !strcmp(origin, "Codex") ? 0x150F : GREEN, top_right);
     if (mins == 0) snprintf(buf, sizeof buf, "%s · agora", (const char*)p[2]);
     else snprintf(buf, sizeof buf, "%s · há %d min", (const char*)p[2], mins);
     label(buf, x0, y + s(14), DIM);
