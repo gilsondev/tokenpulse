@@ -2,12 +2,15 @@
 #include <stdint.h>
 
 #include "../boards/profile.h"
+#include "../app.h"
 // Telas para retrato grande (320x480): grade de 16 px, Inter com anti-aliasing, um número herói por tela.
 // Telas pequenas usam os desenhos de screens.cpp.
 
 namespace screens::tall {
 
 constexpr int PAGES = 4;  // principal, sessões, modelos, histórico; os ajustes abrem pela engrenagem
+inline bool codexMain = false;  // a principal mostrada é a do Codex (bloco "cx" do frame)
+inline bool codexOnly() { return (int)(app::frame["cxo"] | 0); }  // ajuste Provedores em "Só Codex"
 
 void drawWaiting();
 void drawShutdown(float p);  // PWR segurado: p de 0 a 1 até a PMU desligar

@@ -18,6 +18,10 @@ static const char USB_PAGE[] PROGMEM = R"HTML(<!doctype html>
 <label id=orow>Tela <select name=orient><option value=0>em pé<option value=1>deitada<option value=2 hidden>em pé, de cabeça para baixo<option value=3 hidden>deitada, virada</select></label>
 <label>Esconder o custo em US$ <input type=checkbox name=hideCost></label>
 </section>
+<section id=prov hidden><h2>Provedores</h2>
+<label>O que a placa mostra <select name=prov><option value=auto>automático: quem teve uso nos últimos 7 dias<option value=claude>só Claude<option value=codex>só Codex<option value=both>Claude + Codex</select></label>
+<p class=hint>Vale para todas as placas deste Mac. Com só Claude, a placa fica como sempre foi.</p>
+</section>
 <section><h2>Telas</h2>
 <label>Trocar de tela sozinha <select name=interval><option value=0>não, só pelo toque<option value=10>a cada 10 s<option value=15>a cada 15 s<option value=30>a cada 30 s<option value=60>a cada 1 min</select></label>
 <p class=hint>A troca automática só acontece quando ninguém mexe na placa: um toque recomeça a contagem.</p>
@@ -72,6 +76,7 @@ async function state(){
   const rows=[['Firmware',s.fw],['Agente (tokend)',s.agent||'ainda não falou com a placa'],['Endereço','http://'+s.host+'.local'],
     ['IP',s.ip||'—'],['Rede',s.ssid?s.ssid+' ('+s.rssi+' dBm)':'sem WiFi'],['Último dado',ago(s.frame)],
     ['Memória livre',Math.round(s.heap/1024)+' KB'],['Ligada há',Math.floor(s.up/60)+' min']];
+  $('prov').hidden=!s.cxok;if(document.activeElement!==f.prov)f.prov.value=s.prov||'auto';
   const dl=$('st');dl.textContent='';
   for(const[k,v]of rows){const t=document.createElement('dt'),d=document.createElement('dd');t.textContent=k;
     if(/^http:\/\//.test(v)){const a=document.createElement('a');a.href=v+'/';a.textContent=v;d.append(a)}else d.textContent=v;dl.append(t,d)}
@@ -85,6 +90,7 @@ state().then(s=>{
 });
 setInterval(state,5000);
 f.addEventListener('change',async e=>{
+  if(e.target.name==='prov'){const r=await fetch('/api/config',{method:'POST',body:new URLSearchParams({prov:f.prov.value})});return say(r.ok?'Salvo: vale para todas as placas deste Mac.':await r.text())}
   if(e.target.name==='host'&&!f.host.checkValidity())return say('Nome: letras minúsculas, números e hífen.');
   const b=new URLSearchParams({bright:f.bright.value,idle:f.idle.value,theme:f.theme.value,orient:f.orient.value,
     hideCost:+f.hideCost.checked,interval:f.interval.value,alerts:(f.alerts.checked?1:0)|(f.beep.checked?2:0),sound:f.sound.value||0,volume:f.volume.value||2,soundOut:f.soundOut.value||0,soundNew:f.soundNew.value||0,soundWeek:f.soundWeek.value||0,soundBat:f.soundBat.value||0,soundMac:f.soundMac.value||0,soundBle:f.soundBle.value||0,restSecs:f.restSecs.value||0,restPages:[0,1,2,3,4].reduce((m,i)=>m|(f['rp'+i].checked?1<<i:0),0)||1,host:f.host.value,

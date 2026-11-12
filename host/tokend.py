@@ -216,11 +216,7 @@ class Usage:
         now = time.time()
         midnight = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
         today = [e for e in self.events if e.ts >= midnight]
-        spark = [0] * 60
-        for e in self.events:
-            age = int((now - e.ts) // 60)
-            if 0 <= age < 60:
-                spark[59 - age] += e.total
+        spark = minute_spark(self.events, now)
         active = {(e.entry, e.session) for e in self.events if now - e.ts < 600}
         return {
             "m": self.last_model or "Claude",
@@ -235,6 +231,205 @@ class Usage:
             "sess": sessions(self.sessions, self.titles, herdr_agents(), self.events, now),
             "hist": history_rows(today),
         }
+
+
+def minute_spark(events, now):
+    """Tokens por minuto na última hora, do mais antigo ao atual."""
+    spark = [0] * 60
+    for e in events:
+        age = int((now - e.ts) // 60)
+        if 0 <= age < 60:
+            spark[59 - age] += e.total
+    return spark
+
+
+CODEX_SESSIONS = os.path.join(HOME, ".codex/sessions/**/rollout-*.jsonl")
+CODEX_INDEX = os.path.join(HOME, ".codex/session_index.jsonl")  # id -> thread_name, o nome que o app mostra
+
+
+class CodexUsage:
+    """Os logs do Codex (app e CLI). Os tokens saem da diferença do acumulado de cada sessão, porque o mesmo
+    token_count às vezes se repete. O % das janelas é o do último token_count: só muda quando o Codex é usado."""
+
+    def __init__(self):
+        self.offsets, self.files = {}, {}  # caminho -> modelo, esforço, pasta, sessão e o último acumulado
+        self.events, self.limits, self.limits_ts = [], None, 0.0
+        self.last_model, self.last_ts = "", 0.0
+        self.paths, self.globbed_at, self.recent = [], 0.0, False
+        self.sessions = {}  # id -> última atividade, se há tarefa rodando, se terminou alguma, pasta
+        self.names, self.names_at = {}, 0.0
+
+    def poll(self):
+        now = time.time()
+        if now - self.globbed_at > 15:
+            self.paths, self.globbed_at = glob.glob(CODEX_SESSIONS, recursive=True), now
+        # 7 dias: o % da semana pode estar num arquivo de dias atrás; e sem uso nesse prazo o Codex some da placa
+        week_ago, self.recent = now - 7 * 86400, False
+        for path in self.paths:
+            try:
+                st = os.stat(path)
+            except OSError:
+                continue
+            if st.st_mtime < week_ago:
+                continue
+            self.recent = True
+            if st.st_size < self.offsets.get(path, 0):
+                self.offsets[path], self.files[path] = 0, {}
+            with open(path, "rb") as f:
+                f.seek(self.offsets.get(path, 0))
+                for raw in f:
+                    if not raw.endswith(b"\n"):
+                        break
+                    self.offsets[path] = f.tell()
+                    try:
+                        self._ingest(self.files.setdefault(path, {}), json.loads(raw))
+                    except (ValueError, TypeError, KeyError, AttributeError) as e:
+                        log(f"codex: linha ignorada: {e!r}")
+        self.events = [e for e in self.events if e.ts >= now - 86400]
+        self.sessions = {k: v for k, v in self.sessions.items() if v["ts"] >= now - 86400}
+
+    def session_items(self, now):
+        """Sessões com atividade na última hora: (estado, -última atividade, linha de sess.rows, id curto).
+        Sem pedido de aprovação: os logs do Codex não registram esse pedido."""
+        try:
+            if os.path.getmtime(CODEX_INDEX) != self.names_at:
+                self.names_at = os.path.getmtime(CODEX_INDEX)
+                with open(CODEX_INDEX) as f:
+                    self.names = {d["id"]: d.get("thread_name") or "" for d in map(json.loads, f) if d.get("id")}
+        except (OSError, ValueError, KeyError, TypeError):
+            pass
+        tokens = {}
+        for e in self.events:
+            tokens[e.session] = tokens.get(e.session, 0) + e.total
+        items = []
+        for sid, s in self.sessions.items():
+            age = now - s["ts"]
+            if age > 3600:
+                continue
+            # tarefa rodando há mais de 30 min sem nenhuma linha nova: o app fechou no meio
+            st = "work" if s["busy"] and age < 1800 else "turn" if s["done"] else "idle"
+            name = self.names.get(sid) or (s["project"] if s["project"] != "?" else "Codex")
+            items.append((st, -s["ts"], [cut(name, 48), "Codex", st, fmt_tokens(tokens[sid]) if sid in tokens else "--",
+                                         int(age // 60)], sid[:8]))
+        return items
+
+    def _ingest(self, f, d):
+        p, kind = d.get("payload") or {}, d.get("type")
+        if kind == "session_meta":
+            f.update(sid=p.get("id") or "", cwd=p.get("cwd") or "")
+            return
+        if not d.get("timestamp") or not f.get("sid"):
+            return
+        ts = datetime.fromisoformat(d["timestamp"].replace("Z", "+00:00")).timestamp()
+        s = self.sessions.setdefault(f["sid"], {"ts": 0.0, "busy": False, "done": False})
+        s["ts"], s["project"] = max(s["ts"], ts), os.path.basename((f.get("cwd") or "").rstrip("/")) or "?"
+        if kind == "event_msg" and p.get("type") in ("task_started", "task_complete"):
+            s["busy"] = p["type"] == "task_started"
+            s["done"] = s["done"] or not s["busy"]
+        elif kind == "turn_context":
+            f.update(model=p.get("model") or f.get("model", ""), effort=p.get("effort") or "", cwd=p.get("cwd") or f.get("cwd", ""))
+        elif kind == "event_msg" and p.get("type") == "token_count":
+            ts = datetime.fromisoformat(d["timestamp"].replace("Z", "+00:00")).timestamp()
+            if p.get("rate_limits") and ts >= self.limits_ts:
+                self.limits, self.limits_ts = p["rate_limits"], ts
+            tot = (p.get("info") or {}).get("total_token_usage")
+            if not tot:
+                return
+            prev = f.get("prev") or {}
+            if (tot.get("total_tokens") or 0) < (prev.get("total_tokens") or 0):
+                prev = {}  # o acumulado recomeçou
+            delta = {k: (tot.get(k) or 0) - (prev.get(k) or 0)
+                     for k in ("total_tokens", "input_tokens", "cached_input_tokens", "output_tokens")}
+            f["prev"] = tot
+            if delta["total_tokens"] <= 0:
+                return
+            model = f.get("model") or "Codex"
+            self.events.append(Event(ts, delta["total_tokens"], delta["input_tokens"] - delta["cached_input_tokens"],
+                                     delta["output_tokens"], delta["cached_input_tokens"], 0, "codex", f.get("sid", ""),
+                                     model, os.path.basename((f.get("cwd") or "").rstrip("/")) or "?", 0.0))
+            if ts >= self.last_ts:
+                self.last_ts = ts
+                self.last_model = f"{model} · {f['effort']}" if f.get("effort") else model
+
+    def snapshot(self):
+        """O bloco "cx" do frame, ou None sem uso do Codex nos últimos 7 dias: aí a placa fica como sempre foi."""
+        if not self.recent:
+            return None
+        now = time.time()
+        midnight = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
+        spark = minute_spark(self.events, now)
+        rl = self.limits or {}
+        return {"m": self.last_model or "Codex", "plan": (rl.get("plan_type") or "").capitalize(),
+                "tot": fmt_tokens(sum(e.total for e in self.events if e.ts >= midnight)),
+                "rate": fmt_tokens(sum(spark[-5:]) / 5), "sp": spark,
+                "n": len({e.session for e in self.events if now - e.ts < 600})} | codex_windows(rl, datetime.now())
+
+
+PROVIDERS = os.path.join(HOME, ".claude/esp-tokens-providers")  # o ajuste Provedores, escolhido na placa
+PROVIDER_MODES = ("auto", "claude", "codex", "both")
+
+
+def provider_mode():
+    try:
+        with open(PROVIDERS) as f:
+            mode = f.read().strip()
+    except OSError:
+        mode = ""
+    return mode if mode in PROVIDER_MODES else "auto"
+
+
+def with_codex(frame, cx, claude_events, codex):
+    """O frame conforme o ajuste Provedores, quando o Codex foi usado nos últimos 7 dias. "Só Claude" é o frame de
+    sempre. "Os dois" (e o automático) acrescenta o bloco cx e soma o Codex em sessões, modelos e histórico.
+    "Só Codex" põe os dados do Codex nos campos de sempre: as telas de hoje mostram o Codex sem mudar."""
+    mode = provider_mode()
+    frame |= {"prov": mode, "cxok": 1}  # cxok: a placa mostra o ajuste só quando o Mac tem o Codex
+    if mode == "claude":
+        return frame
+    now = time.time()
+    midnight = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
+    claude_today = [e for e in claude_events if e.ts >= midnight]
+    codex_today = [e for e in codex.events if e.ts >= midnight]
+    if _openai["st"]:
+        cx["st"] = _openai["st"]
+    items = codex.session_items(now)
+    if mode == "codex":
+        sess = {"n": 0, "ws": [], "rows": []}
+        add_codex_sessions(sess, items)
+        keep = {k: frame[k] for k in ("clk", "t", "dark", "agv", "act", "prov", "cxok") if k in frame}
+        return keep | {k: v for k, v in cx.items() if k not in ("n", "plan")} | {
+            "cxo": 1, "cxn": cx["n"], "org": f"Codex · {cx['plan']}" if cx["plan"] else "Codex", "cli": 0, "desk": 0,
+            "sess": sess, "mods": models(codex_today), "projs": projects([e for e in codex.events if now - e.ts < 3600], now),
+            "hist": [r[:2] + [r[4], 0] for r in history_rows([], codex_today)], "accts": []}  # sem preço: custo 0
+    frame["cx"] = cx
+    add_codex_sessions(frame["sess"], items)
+    frame["mods"] = models(claude_today + codex_today)
+    frame["hist"] = history_rows(claude_today, codex_today)
+    return frame
+
+
+def add_codex_sessions(sess, items):
+    """As sessões do Codex num workspace fixo "Codex", no fim (último campo 2; o do Claude Desktop é 1): os logs
+    não dizem em que terminal ou painel elas rodam, e o app do Codex fica fora do herdr."""
+    if not items:
+        return
+    items.sort(key=lambda r: ({"work": 0, "turn": 1}.get(r[0], 2), r[1]))
+    count = lambda st: sum(1 for r in items if r[0] == st)
+    i = len(sess["ws"])
+    sess["ws"].append(["Codex", len(items), count("work"), 0, count("turn"), 0, 2])
+    sess["rows"] = (sess["rows"] + [r[2] + [i, r[3], 0] for r in items[:MAX_PER_WS]])[:MAX_SESSIONS]
+    sess["n"] += len(items)
+
+
+def codex_windows(rl, now):
+    """As janelas do Codex no formato das do Claude. Passado o reset sem uso novo, a janela está zerada de fato.
+    Plano sem janela de 5 h (Pro) fica com p5 -1."""
+    def win(w):
+        w = w or {}
+        if w.get("resets_at") and w["resets_at"] <= now.timestamp():
+            return {"used_percentage": 0}
+        return {"used_percentage": w.get("used_percent"), "resets_at": w.get("resets_at")}
+    return window_fields(win(rl.get("primary")), win(rl.get("secondary")), now)
 
 
 def models(events):
@@ -252,9 +447,11 @@ def models(events):
             proj = e.project if e.project != "?" else first_prompt(e.session)[:40] or "?"
             per_proj[proj] = per_proj.get(proj, 0) + e.total
         top = sorted(per_proj.items(), key=lambda kv: -kv[1])[:3]
+        codex = all(e.entry == "codex" for e in es)  # sem cache escrito e sem preço na tabela: os dois vão vazios
         out.append([name, fmt_tokens(t := sum(e.total for e in es)), round(100 * t / day),
-                    *(fmt_tokens(sum(getattr(e, f) for e in es)) for f in ("inp", "out", "cread", "cwrite")),
-                    fmt_usd(sum(e.cost for e in es)), [[p, fmt_tokens(v)] for p, v in top]])
+                    *(fmt_tokens(sum(getattr(e, f) for e in es)) for f in ("inp", "out", "cread")),
+                    "" if codex else fmt_tokens(sum(e.cwrite for e in es)),
+                    "" if codex else fmt_usd(sum(e.cost for e in es)), [[p, fmt_tokens(v)] for p, v in top]])
     return out
 
 
@@ -265,7 +462,7 @@ def projects(events, now):
         by.setdefault(e.session, []).append(e)
     rows = sorted(by.values(), key=lambda es: -max(e.ts for e in es))[:8]
     return [[es[0].project if es[0].project != "?" else first_prompt(es[0].session)[:40] or "?",
-             "Desk" if es[-1].entry == "claude-desktop" else "CLI",
+             "Desk" if es[-1].entry == "claude-desktop" else "Codex" if es[-1].entry == "codex" else "CLI",
              fmt_tokens(sum(e.total for e in es)), int((now - max(e.ts for e in es)) // 60)]
             for es in rows]
 
@@ -497,6 +694,30 @@ def sessions(state, titles, herdr, events, now):
 
 
 _history = {}  # "AAAA-MM-DD" -> [tokens, custo], dias anteriores a hoje
+_cx_history = {}  # "AAAA-MM-DD" -> tokens do Codex, dias anteriores a hoje
+
+
+def codex_days(cutoff, today):
+    """Tokens do Codex por dia, pela diferença do acumulado de cada sessão (o token_count às vezes se repete)."""
+    days = {}
+    for path in glob.glob(CODEX_SESSIONS, recursive=True):
+        if os.path.getmtime(path) < cutoff:
+            continue
+        prev = 0
+        with open(path, "rb") as f:
+            for raw in f:
+                if b'"token_count"' not in raw:
+                    continue
+                try:
+                    d = json.loads(raw)
+                    tot = d["payload"]["info"]["total_token_usage"]["total_tokens"]
+                    day = datetime.fromisoformat(d["timestamp"].replace("Z", "+00:00")).astimezone().strftime("%Y-%m-%d")
+                except (ValueError, TypeError, KeyError, AttributeError):
+                    continue
+                delta, prev = (tot - prev if tot >= prev else tot), tot
+                if day < today and delta > 0:
+                    days[day] = days.get(day, 0) + delta
+    return days
 
 
 def history_loop():
@@ -531,8 +752,9 @@ def history_loop():
                         acc = days.setdefault(day, [0, 0.0])
                         acc[0] += tot
                         acc[1] += cost_usd(msg.get("model"), u)
-            global _history
+            global _history, _cx_history
             _history = days  # troca a referência: nunca há um frame com o histórico vazio no meio
+            _cx_history = codex_days(cutoff, today)
         except Exception as e:  # o histórico é extra: sem ele a tela só fica sem as barras antigas
             log(f"histórico falhou: {e!r}")
         now = datetime.now()
@@ -540,8 +762,9 @@ def history_loop():
         time.sleep(min(1800, to_midnight + 60))  # depois da meia-noite, ontem entra no histórico na hora
 
 
-def history_rows(today_events):
-    """[dia da semana, dia do mês, tokens em milhões, custo em US$] dos últimos HISTORY_DAYS dias, hoje por último."""
+def history_rows(today_events, codex_today=None):
+    """[dia da semana, dia do mês, tokens em milhões, custo em US$] dos últimos HISTORY_DAYS dias, hoje por último.
+    Com o Codex (codex_today: os eventos dele hoje), os tokens somam os dois e um 5º campo traz os do Codex."""
     now = datetime.now()
     rows = []
     for back in range(HISTORY_DAYS - 1, -1, -1):
@@ -550,7 +773,12 @@ def history_rows(today_events):
             tot, cost = sum(e.total for e in today_events), sum(e.cost for e in today_events)
         else:
             tot, cost = _history.get(d.strftime("%Y-%m-%d"), [0, 0.0])
-        rows.append([WEEKDAYS[d.weekday()], d.day, round(tot / 1e6, 1), round(cost)])
+        row = [WEEKDAYS[d.weekday()], d.day, round(tot / 1e6, 1), round(cost)]
+        if codex_today is not None:
+            cx = sum(e.total for e in codex_today) if back == 0 else _cx_history.get(d.strftime("%Y-%m-%d"), 0)
+            row[2] = round((tot + cx) / 1e6, 1)
+            row.append(round(cx / 1e6, 1))
+        rows.append(row)
     return rows
 
 
@@ -663,6 +891,11 @@ def run_action(cmd):
     parts = cmd.split()
     if len(parts) == 2 and parts[0] == "focus" and re.fullmatch(r"[0-9a-f-]{8}", parts[1]):
         return focus_session(parts[1])  # trazer à frente não troca nada: sem confirmação nem estado
+    if len(parts) == 2 and parts[0] == "prov" and parts[1] in PROVIDER_MODES:  # o ajuste Provedores, da placa
+        with open(PROVIDERS, "w") as f:
+            f.write(parts[1])
+        log(f"provedores: {parts[1]}")
+        return _wake.set()
     if _action["state"] in ("switching", "login") or not parts or parts[0] not in ("switch", "login"):
         return
     target = next((a for a in accounts() if parts[0] == "switch" and len(parts) > 1 and str(a[0]) == parts[1]), None)
@@ -815,18 +1048,25 @@ def exhaustion(start, p5, reset, now):
 STATUS_URL = "https://status.claude.com/api/v2/summary.json"
 STATUS_COMPONENTS = ("Claude Code", "Claude API (api.anthropic.com)")
 _claude = {"st": 0}  # o pior estado desses componentes na página de status: 0 ok, 1 instável, 2 fora do ar
+OPENAI_STATUS_URL = "https://status.openai.com/api/v2/summary.json"
+_openai = {"st": 0}  # o mesmo para os componentes do Codex ("Codex in ChatGPT Desktop")
+
+
+def worst_status(url, wanted):
+    rank = {"degraded_performance": 1, "under_maintenance": 1, "partial_outage": 2, "major_outage": 2}
+    try:
+        with urllib.request.urlopen(url, timeout=10) as r:
+            comps = json.load(r)["components"]
+        return max((rank.get(c["status"], 0) for c in comps if wanted(c["name"])), default=0)
+    except Exception:  # sem resposta da página não quer dizer falha do serviço: o aviso some
+        return 0
 
 
 def status_loop():
-    """De 5 em 5 min, a página de status da Anthropic."""
-    rank = {"degraded_performance": 1, "under_maintenance": 1, "partial_outage": 2, "major_outage": 2}
+    """De 5 em 5 min, as páginas de status da Anthropic e da OpenAI."""
     while True:
-        try:
-            with urllib.request.urlopen(STATUS_URL, timeout=10) as r:
-                comps = json.load(r)["components"]
-            _claude["st"] = max((rank.get(c["status"], 0) for c in comps if c["name"] in STATUS_COMPONENTS), default=0)
-        except Exception:  # sem resposta da página não quer dizer falha da Anthropic: o aviso some
-            _claude["st"] = 0
+        _claude["st"] = worst_status(STATUS_URL, lambda name: name in STATUS_COMPONENTS)
+        _openai["st"] = worst_status(OPENAI_STATUS_URL, lambda name: "Codex" in name)
         time.sleep(300)
 
 
@@ -856,8 +1096,12 @@ def limits():
         if time.time() - age < _org["changed_at"]:
             return {"p5": -1, "pw": -1, "r5": "trocou de org", "age": int(age)}
         five, week = rl.get("five_hour") or {}, rl.get("seven_day") or {}
-    now = datetime.now()
-    out = {"age": int(age)}
+    return {"age": int(age)} | window_fields(five, week, datetime.now())
+
+
+def window_fields(five, week, now):
+    """Campos do anel de 5 h e da barra da semana a partir de {used_percentage, resets_at} de cada janela."""
+    out = {}
     # depois do reset o % gravado é da janela anterior: vira "--" até chegar um dado novo
     out["p5"] = round(five.get("used_percentage") if five.get("used_percentage") is not None else -1)
     r5 = parse_reset(five.get("resets_at"))
@@ -1011,7 +1255,7 @@ def ble_loop():
                 kind, _, rest = line.rstrip("\n").partition(" ")
                 if kind == "log":
                     log(rest)
-                elif kind == "action" and not DEMO:
+                elif kind == "action" and (not DEMO or rest.startswith("prov ")):
                     threading.Thread(target=run_action, args=(rest,), daemon=True).start()
         threading.Thread(target=pump_out, daemon=True).start()
         try:
@@ -1086,8 +1330,15 @@ def settle(port):
     time.sleep(0.3)
     # o que a placa respondeu aos comandos de antes (rtc, play...) vai para o log em vez de sumir
     for line in port.read(port.in_waiting).decode(errors="replace").splitlines():
+        board_action(line.strip())  # um toque logo antes da captura não se perde
         if line.strip() and not line.startswith("{"):
             log(f"placa: {line.strip()}")
+
+
+def board_action(line):
+    """Ação pedida pela placa. Na demonstração nada troca a sua conta; o ajuste Provedores pode, para as capturas."""
+    if line.startswith("ACTION ") and (not DEMO or line.startswith("ACTION prov ")):
+        run_action(line[7:].strip())
 
 
 def ota(port, path):
@@ -1209,7 +1460,7 @@ def demo_frame():
         ["Blog pessoal", "CLI", "idle", "--", -1, 2, "00000011", 0],
         ["Migração do banco", "Desk", "turn", "1,2M", 6, 3, "0000000d", 0, "Rodo a migração em staging primeiro?"],
     ]
-    return {
+    f = {
         "m": "Opus 5.5 · high", "tot": "84,2M", "rate": fmt_tokens(sum(sp[-5:]) / 5), "sp": sp, "cli": 3, "desk": 1,
         "sub": "out 402k · cache 83,5M",
         "mods": [["Opus 5.5", "71,6M", 85, "18k", "402k", "68,9M", "2,3M", "US$ 41",
@@ -1226,6 +1477,34 @@ def demo_frame():
         "clk": now.strftime("%H:%M"), "t": local_time(), "org": "Acme Labs", "dark": dark_mode(),
         "accts": [[1, "Acme Labs", 1, 0, DEMO_P5, 38, 0], [2, "Side Project", 0, 0, 7, 12, 180]], "act": ["", "", ""],
     }
+    if not DEMO_CODEX:
+        return f
+    mode = provider_mode()  # o ajuste Provedores vale também no demo, para as capturas de cada modo
+    f |= {"prov": mode, "cxok": 1}
+    if mode == "claude":
+        return f
+    cx = {"m": "gpt-6.1-sol · medium", "plan": "Plus", "tot": "21,7M", "rate": fmt_tokens(sum(sp[-5:]) / 20),
+          "sp": [v // 4 for v in sp], "n": 2, "p5": 9, "r5": "Reset às 18h", "pw": 9, "rw": "qua 9h", "wf": 30}
+    cx_items = [("work", -t, ["Gerar testes da API", "Codex", "work", "2,0M", 0], "00000012"),
+                ("turn", -t + 60, ["Migrar o cache", "Codex", "turn", "4,4M", 2], "00000013")]
+    cx_model = ["gpt-6.1-sol", "21,7M", 20, "702k", "98k", "20,9M", "", "", [["checkout-api", "14,2M"], ["infra", "7,5M"]]]
+    cx_daily = [30, 12, 0, 22, 41, 35, 9, 18, 6, 0, 0, 25, 33, 21.7]
+    if mode == "codex":
+        sess = {"n": 0, "ws": [], "rows": []}
+        add_codex_sessions(sess, cx_items)
+        return {k: f[k] for k in ("clk", "t", "dark", "act", "prov", "cxok")} | {k: v for k, v in cx.items() if k not in ("n", "plan")} | {
+            "cxo": 1, "cxn": 2, "org": "Codex · Plus", "cli": 0, "desk": 0, "sess": sess, "mods": [cx_model[:2] + [100] + cx_model[3:]],
+            "projs": [["checkout-api", "Codex", "2,0M", 0], ["infra", "Codex", "4,4M", 2]],
+            "hist": [r[:2] + [cx_daily[i], 0] for i, r in enumerate(f["hist"])]}
+    f["cx"] = cx
+    add_codex_sessions(f["sess"], cx_items)
+    f["mods"].insert(1, cx_model)
+    f["mods"] = f["mods"][:3]  # o daemon manda os 3 que mais usaram
+    f["mods"][0][2], f["mods"][2][2] = 68, 12
+    for row, c in zip(f["hist"], cx_daily):
+        row[2] = round(row[2] + c, 1)
+        row.append(c)
+    return f
 
 
 FRAME_MAX = 7500  # o buffer serial da placa tem 8 KB
@@ -1309,8 +1588,7 @@ def serve(board, frame):
         *lines, board.buf = board.buf.split(b"\n")  # só linhas completas: "ACTION switch 12" não vira "1"
         for raw in lines:
             line = raw.decode(errors="replace").strip()
-            if line.startswith("ACTION ") and not DEMO:  # demonstração: nada troca a sua conta
-                run_action(line[7:].strip())
+            board_action(line)
             if line:
                 board.log(line)
         return True
@@ -1322,7 +1600,8 @@ def serve(board, frame):
 
 # Placas pelo WiFi (o SmallTV-Ultra, que só tem USB de energia). Elas se anunciam por mDNS como
 # _tokenpulse._tcp e recebem um frame enxuto por HTTP, com só o que a tela principal delas mostra.
-NET_KEYS = ("p5", "r5", "pw", "rw", "tot", "rate", "sp", "m", "org", "clk", "dark", "age", "mods", "projs", "hist", "accts", "st")
+NET_KEYS = ("p5", "r5", "pw", "rw", "tot", "rate", "sp", "m", "org", "clk", "dark", "age", "mods", "projs", "hist", "accts", "cx",
+            "prov", "cxok", "st")
 NET_EVERY = 2  # s entre frames: pelo WiFi, 1 por segundo só gastaria a placa
 net_boards = {}  # host -> NetBoard
 _latest = {}     # o último frame montado pelo laço principal
@@ -1447,8 +1726,13 @@ def net_loop():
             if not body:
                 continue
             try:
-                http(f"http://{board.ip}/frame", body, {"Content-Type": "application/json"})
+                reply = http(f"http://{board.ip}/frame", body, {"Content-Type": "application/json"})
                 board.fails = 0
+                if reply:  # a página da placa pediu uma troca de Provedores: vem na resposta do frame
+                    try:
+                        board_action("ACTION " + str(json.loads(reply).get("act", "")))
+                    except (ValueError, AttributeError):
+                        board.log(f"resposta do frame ignorada: {reply[:80]!r}")
             except OSError as e:
                 board.fails += 1
                 if board.fails >= 3:  # 6 s sem resposta: some até o mDNS achar de novo
@@ -1460,12 +1744,13 @@ def net_loop():
 DEMO = "--demo" in sys.argv
 AGENT = agent_version()
 DEMO_P5 = int(os.environ.get("TOKENPULSE_DEMO_P5", "42"))  # para mostrar as faixas: 42, 74, 86, 95
-DEMO_ST = int(os.environ.get("TOKENPULSE_DEMO_ST", "0"))  # o aviso da página de status: 1 instável, 2 fora do ar
+DEMO_ST = int(os.environ.get("TOKENPULSE_DEMO_ST", "0"))
+DEMO_CODEX = os.environ.get("TOKENPULSE_DEMO_CODEX") == "1"  # o bloco do Codex no frame de demonstração  # o aviso da página de status: 1 instável, 2 fora do ar
 
 
 def main():
     log(f"tokend {AGENT}")
-    usage = Usage()
+    usage, codex = Usage(), CodexUsage()
     boards = {}   # caminho da porta -> Board
     save_boards(boards)  # o arquivo da execução anterior não vale mais
     ignored = {}  # caminho da porta -> quando tentar de novo (não respondeu como placa)
@@ -1486,11 +1771,15 @@ def main():
         if DEMO:
             frame = demo_frame()
         else:
-            if not woke:  # acordado por evento do herdr: manda já, os .jsonl esperam o próximo segundo
+            if not woke or "--once" in sys.argv:  # acordado por evento do herdr: manda já, os .jsonl esperam o próximo segundo
                 usage.poll()
+                codex.poll()
             org_name = org()  # antes de limits(), que depende de saber se a org mudou
+            cx = codex.snapshot()
             frame = (usage.snapshot() | limits() | account_frame() | ({"st": _claude["st"]} if _claude["st"] else {})
                      | {"clk": datetime.now().strftime("%H:%M"), "t": local_time(), "org": org_name, "dark": dark_mode(), "agv": AGENT})
+            if cx:
+                frame = with_codex(frame, cx, usage.events, codex)
         _latest["frame"] = frame
         if "--once" in sys.argv:
             print(json.dumps(frame, ensure_ascii=False))

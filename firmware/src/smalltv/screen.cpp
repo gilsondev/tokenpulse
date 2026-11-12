@@ -86,14 +86,15 @@ struct Ui {
 uint32_t since(uint32_t t) { return t ? millis() - t : UINT32_MAX; }
 bool bandBlink() { return (config::v.alerts & 2) && since(ui.bandMs) < 1500 && since(ui.bandMs) / 250 % 2; }
 
-void drawMain() {
-  const auto& f = app::frame;
+// codex: a principal do Codex, a mesma tela lendo o bloco "cx" do frame (vem depois da do Claude na volta)
+void drawMain(bool codex = false) {
+  JsonVariantConst f = codex ? app::frame["cx"].as<JsonVariantConst>() : app::frame.as<JsonVariantConst>();
   char buf[48];
   const bool live = millis() - app::lastFrameMs <= 10000;
-  const bool stale = (f["age"] | 0) > 300;  // o % de 5h e da semana ficou velho
+  const bool stale = !codex && (f["age"] | 0) > 300;  // o % de 5h e da semana ficou velho (a API do Claude)
   band.fillScreen(BG);
 
-  String org = f["org"] | "";
+  String org = codex ? String("Codex · ") + (const char*)(f["plan"] | "") : String((const char*)(f["org"] | ""));
   if (org.length() > 18) org = org.substring(0, 17) + "…";
   text(org.c_str(), 8, 6, LABEL, TEXT);
   text(f["clk"] | "", W - 8, 6, LABEL, DIM, top_right);
@@ -108,7 +109,7 @@ void drawMain() {
 
   // anel da janela de 5 h
   const int p5 = f["p5"] | -1, cx = 64, cy = 100, r = 54;
-  const float shown = ui.p5 < 0 ? p5 : ui.p5;  // o anel anda até o valor novo
+  const float shown = codex || ui.p5 < 0 ? p5 : ui.p5;  // o anel anda até o valor novo (a animação é a do Claude)
   const uint16_t ring = stale ? DIM : bandBlink() ? TEXT : levelColor(p5);
   band.fillArc(cx, cy - oy, r - 9, r, 0, 360, TRACK);
   if (shown >= 0.5f) band.fillArc(cx, cy - oy, r - 9, r, 270, 270 + 3.6f * min(shown, 100.f), ring);
@@ -129,7 +130,7 @@ void drawMain() {
   snprintf(buf, sizeof buf, pw < 0 ? "--" : "%d%%", pw);
   text(buf, x + w, 50, LABEL, stale ? DIM : TEXT, top_right);
   band.fillRoundRect(x, 68 - oy, w, 6, 3, TRACK);
-  const float pwShown = ui.pw < 0 ? pw : ui.pw;
+  const float pwShown = codex || ui.pw < 0 ? pw : ui.pw;
   if (pwShown >= 0.5f) band.fillRoundRect(x, 68 - oy, max(6, (int)(w * min(pwShown, 100.f) / 100)), 6, 3, stale ? DIM : levelColor(pw));
   text(f["rw"] | "", x, 80, LABEL, DIM);
   text("Tokens hoje", x, 104, LABEL, MUTED);
@@ -184,7 +185,8 @@ void drawModels() {
     if (share > 0) band.fillRoundRect(8, y + 18 - oy, max(6, (W - 16) * min(share, 100) / 100), 6, 3, modelColor(name));
     snprintf(buf, sizeof buf, "In %s · out %s", (const char*)(m[3] | ""), (const char*)(m[4] | ""));
     text(buf, 8, y + 28, LABEL, DIM);
-    snprintf(buf, sizeof buf, "Lido %s · escrito %s", (const char*)(m[5] | ""), (const char*)(m[6] | ""));
+    if (*(m[6] | "")) snprintf(buf, sizeof buf, "Lido %s · escrito %s", (const char*)(m[5] | ""), (const char*)(m[6] | ""));
+    else snprintf(buf, sizeof buf, "Lido %s", (const char*)(m[5] | ""));  // o Codex não escreve cache
     text(buf, 8, y + 43, LABEL, DIM);
     y += 62;
   }
@@ -295,13 +297,13 @@ void drawModel(int i) {
   band.fillRoundRect(8, 64 - oy, W - 16, 6, 3, TRACK);
   if (share > 0) band.fillRoundRect(8, 64 - oy, max(6, (W - 16) * min(share, 100) / 100), 6, 3, c);
   const char* names[] = {"Entrada", "Saída", "Cache lido", "Cache escrito"};
-  for (int k = 0; k < 4; k++) {
+  for (int k = 0; k < (*(m[6] | "") ? 4 : 3); k++) {  // sem "Cache escrito" nos modelos do Codex
     const int x = k % 2 ? W / 2 + 4 : 8, y = 80 + k / 2 * 34;
     text(names[k], x, y, LABEL, MUTED);
     text(m[3 + k] | "", x, y + 15, LABEL, TEXT);
   }
   int y = 150;
-  if (!config::v.hideCost) {
+  if (!config::v.hideCost && *(m[7] | "")) {  // modelo sem preço na tabela (os do Codex): sem a linha
     text("Custo na API", 8, y, LABEL, MUTED);
     text(m[7] | "", W - 8, y, LABEL, ACCENT, top_right);
     y += 22;
@@ -389,6 +391,7 @@ int slots(Slot* out) {
   const uint8_t on = config::v.pages;
   int n = 0;
   out[n++] = {MAIN, 0};
+  if (!f["cx"].isNull()) out[n++] = {MAIN, 1};  // a principal do Codex, logo depois
   if ((on & 4) && f["ses"].size()) out[n++] = {SESSIONS, 0};
   if ((on & 1) && f["mods"].size()) out[n++] = {MODELS, 0};
   if (on & 8)
@@ -426,7 +429,7 @@ void draw(Slot slot) {
   else if (slot.page == PROJECTS) drawProjects();
   else if (slot.page == HISTORY) drawHistory();
   else if (slot.page == ORGS) drawOrgs();
-  else drawMain();
+  else drawMain(slot.sub == 1);
 }
 
 // OTA pelo /update: progresso vindo do Updater a cada bloco gravado.
@@ -652,6 +655,7 @@ bool shot(const String& name, const std::function<void(const uint8_t*, size_t)>&
   else if (name == "projects") slot = {PROJECTS, 0};
   else if (name == "history") slot = {HISTORY, 0};
   else if (name == "orgs") slot = {ORGS, 0};
+  else if (name == "codex") slot = {MAIN, 1};
   else if (name == "ap") {
     for (oy = 0; oy < H; oy += BAND) drawAp(), write(reinterpret_cast<const uint8_t*>(band.getBuffer()), min(BAND, H - oy) * W * 2), yield();
     return true;

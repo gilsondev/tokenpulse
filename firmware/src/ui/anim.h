@@ -1,6 +1,7 @@
 #pragma once
 // Estado da animação: o frame traz o alvo, a tela mostra o valor que chega até ele numa mola.
 #include <Arduino.h>
+#include <ArduinoJson.h>
 
 namespace anim {
 
@@ -11,7 +12,7 @@ extern uint16_t alertFrom;  // cor da faixa anterior, para a troca de cor
 extern uint32_t pwMs;       // o % da semana mudou (ou a tela abriu): um brilho passa na barra
 
 void onFrame();  // chamado a cada frame novo do daemon
-void step();     // chamado a cada quadro desenhado
+void step(JsonVariantConst src);  // a cada quadro desenhado; src: o frame, ou o bloco "cx" na principal do Codex
 void reset();    // ao trocar de tela ou girar, tudo cresce de novo
 
 // fração de 0 a 1 do tempo decorrido desde `ms`, numa animação de `dur` ms; 1 se nunca começou

@@ -37,6 +37,9 @@ void startAp() {
 
 const char* hostName() { return config::v.host[0] ? config::v.host : ap; }
 
+// Provedores mora no daemon: a página guarda o pedido aqui e a resposta do próximo /frame o entrega
+String pendingProv;
+
 void handleState() {
   JsonDocument d;
   d["board"] = app::BOARD;
@@ -53,6 +56,8 @@ void handleState() {
   d["ap"] = ap_on;
   d["apName"] = ap;
   d["safe"] = app::safe;
+  d["cxok"] = app::frame["cxok"] | 0;  // o Mac tem o Codex: a página mostra o ajuste Provedores
+  d["prov"] = pendingProv.length() ? pendingProv : String((const char*)(app::frame["prov"] | "auto"));
   JsonObject c = d["cfg"].to<JsonObject>();
   const auto& v = config::v;
   c["bright"] = v.bright, c["night"] = v.night, c["theme"] = v.theme, c["rotation"] = v.rotation;
@@ -68,6 +73,11 @@ void handleConfig() {
   auto num = [](const char* k, int lo, int hi, uint8_t& field) {
     if (server.hasArg(k)) field = constrain(server.arg(k).toInt(), lo, hi);
   };
+  if (server.hasArg("prov")) {
+    const String m = server.arg("prov");
+    if (m != "auto" && m != "claude" && m != "codex" && m != "both") return server.send(400, "text/plain", "Provedor inválido.");
+    pendingProv = m;
+  }
   if (server.hasArg("host")) {
     String h = server.arg("host");
     h.trim();
@@ -170,7 +180,9 @@ void handleFrame() {
   app::frame = std::move(next);
   app::lastFrameMs = millis();
   fresh = true;
-  server.send(204);
+  if (!pendingProv.length()) return server.send(204);
+  server.send(200, "application/json", "{\"act\":\"prov " + pendingProv + "\"}");
+  pendingProv = "";
 }
 
 }  // namespace
