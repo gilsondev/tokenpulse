@@ -2,6 +2,7 @@
 #include "ui/screens.h"
 
 #include <Update.h>
+#include <rom/rtc.h>
 
 #include "app.h"
 #include "ble.h"
@@ -71,13 +72,25 @@ void runOta(size_t size, const char* md5) {
 
 uint32_t idMs = 0;
 
+// por que a placa reiniciou da última vez: vai no hello, que o daemon registra no log
+const char* resetReason() {
+  static const char* R[] = {"?", "ligou", "pino EN", "software", "pânico", "watchdog", "watchdog", "watchdog",
+                            "deep sleep", "queda de tensão", "SDIO"};
+  static char raw[12];
+  const int r = esp_reset_reason();
+  if (r > 0 && r < 11) return R[r];
+  snprintf(raw, sizeof raw, "chip %d", (int)rtc_get_reset_reason(0));  // 21/22: USB, 23: falha na alimentação
+  return raw;
+}
+
 void handle(const String& line) {
   if (line == "id") {
     idMs = millis();
 #ifdef TOKENPULSE_BLE  // o nome no BLE: com a placa na USB, o daemon não a usa também sem fio
-    Serial.printf("hello {\"board\":\"%s\",\"fw\":\"%s\",\"ble\":\"%s\"}\n", board::NAME, firmware(), ble::name());
+    Serial.printf("hello {\"board\":\"%s\",\"fw\":\"%s\",\"ble\":\"%s\",\"reset\":\"%s\"}\n", board::NAME, firmware(),
+                  ble::name(), resetReason());
 #else
-    Serial.printf("hello {\"board\":\"%s\",\"fw\":\"%s\"}\n", board::NAME, firmware());
+    Serial.printf("hello {\"board\":\"%s\",\"fw\":\"%s\",\"reset\":\"%s\"}\n", board::NAME, firmware(), resetReason());
 #endif
   } else if (line == "imu") {
     int16_t x, y;

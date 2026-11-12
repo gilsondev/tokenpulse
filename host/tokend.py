@@ -855,8 +855,9 @@ def limits():
 class Board:
     """Uma placa conectada: a porta serial e o nome que ela informou no handshake."""
 
-    def __init__(self, path, ser, name, fw="", ble=""):
+    def __init__(self, path, ser, name, fw="", ble="", reset=""):
         self.path, self.ser, self.name, self.fw, self.ble = path, ser, name, fw, ble
+        self.reset = reset  # por que a placa reiniciou da última vez (firmware novo manda no hello)
         self.buf = b""  # linha da placa ainda sem o \n
         self.busy = False  # OTA ou screenshot rodando numa thread: o laço principal não mexe na porta
         self.gone = False  # a thread acabou com a porta (OTA reiniciou a placa, ou deu erro): reconectar
@@ -1005,11 +1006,12 @@ def connect(path, vid):
     ser = serial.Serial()
     ser.port, ser.baudrate, ser.timeout = path, BAUD, 0
     ser.write_timeout = 2  # se a placa parar de ler, o write falha e o daemon reconecta em vez de travar
-    ser.dtr = ser.rts = False  # não aciona o reset do USB-Serial/JTAG nem o auto-reset das pontes USB-serial
+    # USB nativa: o macOS liga DTR e RTS ao abrir e o pyserial baixa o DTR antes do RTS; DTR 0 com RTS 1 reinicia o
+    # S3. Com DTR já em 1 isso não acontece, e sem DTR o USB CDC do Arduino descarta o que o ESP imprime.
+    # Na ponte USB-serial, DTR mexe no reset: os dois ficam em 0.
+    ser.dtr, ser.rts = vid == ESPRESSIF_VID, False
     ser.open()
     time.sleep(0.5)
-    if vid == ESPRESSIF_VID:
-        ser.dtr = True  # sem DTR o USB CDC do Arduino descarta o que o ESP imprime; na ponte, DTR mexe no reset
     # a placa pode estar reiniciando: pela ponte USB-serial, abrir a porta reinicia o ESP32 clássico, que só
     # responde depois do boot e da abertura (~4 s). Como a ponte só é testada uma vez, a janela é maior.
     deadline, buf = time.time() + (6 if vid == ESPRESSIF_VID else 12), b""
@@ -1021,7 +1023,8 @@ def connect(path, vid):
             if line.startswith("hello "):
                 try:
                     hello = json.loads(line[6:])
-                    board = Board(path, ser, hello["board"], hello.get("fw", ""), hello.get("ble", ""))
+                    board = Board(path, ser, hello["board"], hello.get("fw", ""), hello.get("ble", ""),
+                                  hello.get("reset", ""))
                     if board.ble:
                         remember_ble(board.ble)
                     return board
@@ -1475,7 +1478,7 @@ def main():
                 first_fail.pop(path, None)
                 boards[path] = board
                 save_boards(boards)
-                board.log(f"conectada em {path}")
+                board.log(f"conectada em {path}" + (f", último reset: {board.reset}" if board.reset else ""))
             else:
                 # ESP32 com USB nativa pode estar no boot (abrir a porta não a reinicia): de 5 em 5 s no primeiro
                 # minuto do plug, depois de 60 em 60 s, para não disputar a porta de uma S3 de outro projeto.
