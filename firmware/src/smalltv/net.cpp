@@ -58,6 +58,7 @@ void handleState() {
   d["safe"] = app::safe;
   d["cxok"] = app::frame["cxok"] | 0;  // o Mac tem o Codex: a página mostra o ajuste Provedores
   d["prov"] = pendingProv.length() ? pendingProv : String((const char*)(app::frame["prov"] | "auto"));
+  if (!pendingProv.length() && !app::frame["pask"].isNull()) d["pask"] = app::frame["pask"];  // primeiro uso: destaque
   JsonObject c = d["cfg"].to<JsonObject>();
   const auto& v = config::v;
   c["bright"] = v.bright, c["night"] = v.night, c["theme"] = v.theme, c["rotation"] = v.rotation;

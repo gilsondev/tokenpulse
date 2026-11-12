@@ -16,6 +16,8 @@ void drawWaiting();
 void drawShutdown(float p);  // PWR segurado: p de 0 a 1 até a PMU desligar
 void drawAttention(int r, uint32_t ageMs);  // a sessão (índice em sess.rows) que passou a esperar você
 bool attentionCenter(int x, int y);           // o toque caiu no botão "abrir no Mac" do destaque
+void drawProvAsk();                          // primeiro uso com o Codex no Mac: quais provedores mostrar
+const char* provAskTap(int x, int y);        // o modo escolhido no toque ("both", "claude", "codex", "auto"), ou nullptr
 void drawSaver();   // OLED parada: só o relógio, em cinza sobre preto, mudando de lugar a cada minuto
 void drawInstall();  // QR code da página /comecar, para quem ainda não instalou o daemon
 void drawMain(bool live, int page);

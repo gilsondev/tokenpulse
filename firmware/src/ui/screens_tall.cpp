@@ -568,6 +568,76 @@ bool attentionCenter(int x, int y) {  // o botão "abrir no Mac", com folga para
   return abs(x - W() / 2) < bw2 / 2 + u(10) && y > ATTN_BTN_Y() - u(10) && y < ATTN_BTN_Y() + ATTN_BTN_H() + u(10);
 }
 
+// Primeiro uso com o Codex no Mac: a pergunta de quais provedores mostrar, uma vez só (a resposta vale para todas
+// as placas). O daemon manda "pask" com o que o Mac tem: "both" (Claude e Codex) ou "codex" (sem Claude Code).
+namespace {
+struct AskOpt {
+  const char *name, *hint, *mode;
+};
+const AskOpt ASK_BOTH[] = {{"Claude + Codex", "Uma principal para cada", "both"},
+                           {"Só Claude", "", "claude"},
+                           {"Só Codex", "", "codex"},
+                           {"Automático", "Quem teve uso em 7 dias", "auto"}};
+const AskOpt ASK_CODEX[] = {{"Mostrar o Codex", "As telas de sempre, com o Codex", "codex"},
+                            {"Automático", "Entra o Claude quando ele aparecer", "auto"}};
+bool askBoth() { return !strcmp(app::frame["pask"] | "", "both"); }
+int askLineY = 0, askLine = 0;  // a geometria do último desenho, para o toque
+}  // namespace
+
+void drawProvAsk() {
+  const AskOpt* opts = askBoth() ? ASK_BOTH : ASK_CODEX;
+  const int n = askBoth() ? 4 : 2, land = L(), cx = W() / 2;
+  gfx::clear();
+  int y = u(land ? 12 : 22);
+  if (!land) {  // os mascotes de quem o Mac tem; deitada não há altura para eles
+    const int px = u(7), gap = u(10), w = mascot::W * px;
+    if (askBoth()) {
+      mascot::draw(cx - w - gap / 2, y, px, mascot::WORK, BG, 0);
+      mascot::draw(cx + gap / 2, y, px, mascot::WORK, BG, 1, true);
+    } else {
+      mascot::draw(cx - w / 2, y, px, mascot::WORK, BG, 0, true);
+    }
+    y += 8 * px + u(18);
+  }
+  if (land || !askBoth()) {
+    text(fit(askBoth() ? "Este Mac usa o Claude e o Codex" : "Este Mac usa o Codex", gfx::TITLE, W() - 2 * M()).c_str(),
+         cx, y, gfx::TITLE, TEXT, top_center);
+    y += below(gfx::TITLE, 30);
+  } else {
+    text("Este Mac usa o Claude", cx, y, gfx::TITLE, TEXT, top_center);
+    y += below(gfx::TITLE, 30);
+    text("e o Codex", cx, y, gfx::TITLE, TEXT, top_center);
+    y += below(gfx::TITLE, 30);
+  }
+  text(askBoth() ? "O que a placa mostra?" : "Nenhuma sessão do Claude Code por aqui", cx, y, gfx::SMALL, MUTED, top_center);
+  y += below(gfx::SMALL, 20) + u(8);
+  // sem "agora não": o automático já é uma das respostas
+  askLineY = y;
+  askLine = min(u(72), (gfx::height() - u(land ? 10 : 20) - y) / n);
+  const uint16_t track = blend(BG, TRACK, 0.7f);
+  fb().fillSmoothRoundRect(M(), y, W() - 2 * M(), n * askLine, u(12), track);
+  const bool hints = askLine >= gfx::lineHeight(gfx::LABEL) + gfx::lineHeight(gfx::SMALL) + u(8);
+  for (int k = 0; k < n; k++) {
+    const int ly = y + k * askLine, mid = ly + askLine / 2, tx = M() + u(46);
+    fb().fillSmoothCircle(M() + u(24), mid, u(10), MUTED);
+    fb().fillSmoothCircle(M() + u(24), mid, u(10) - max(2, u(2)), track);
+    if (hints && *opts[k].hint) {
+      text(opts[k].name, tx, mid - 1, gfx::LABEL, TEXT, bottom_left, track);
+      text(opts[k].hint, tx, mid + u(3), gfx::SMALL, DIM, top_left, track);
+    } else {
+      text(opts[k].name, tx, mid, gfx::LABEL, TEXT, middle_left, track);
+    }
+    if (k < n - 1) fb().drawFastHLine(M() + u(14), ly + askLine - 1, W() - 2 * M() - u(28), BG);
+  }
+}
+
+const char* provAskTap(int x, int y) {
+  const int n = askBoth() ? 4 : 2;
+  if (y >= askLineY && y < askLineY + n * askLine && x >= M() && x <= W() - M())
+    return (askBoth() ? ASK_BOTH : ASK_CODEX)[(y - askLineY) / askLine].mode;
+  return nullptr;
+}
+
 // Descanso da OLED: as telas escolhidas (settings::web.restPages), em versão resumida, uma a cada 15 s.
 // Cada troca põe o bloco num lugar novo da tela, e o fundo é preto: o vidro não marca.
 namespace {

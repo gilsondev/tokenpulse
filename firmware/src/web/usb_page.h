@@ -19,6 +19,7 @@ static const char USB_PAGE[] PROGMEM = R"HTML(<!doctype html>
 <label>Esconder o custo em US$ <input type=checkbox name=hideCost></label>
 </section>
 <section id=prov hidden><h2>Provedores</h2>
+<p id=pq class=hint hidden></p>
 <label>O que a placa mostra <select name=prov><option value=auto>automático: quem teve uso nos últimos 7 dias<option value=claude>só Claude<option value=codex>só Codex<option value=both>Claude + Codex</select></label>
 <p class=hint>Vale para todas as placas deste Mac. Com só Claude, a placa fica como sempre foi.</p>
 </section>
@@ -77,6 +78,8 @@ async function state(){
     ['IP',s.ip||'—'],['Rede',s.ssid?s.ssid+' ('+s.rssi+' dBm)':'sem WiFi'],['Último dado',ago(s.frame)],
     ['Memória livre',Math.round(s.heap/1024)+' KB'],['Ligada há',Math.floor(s.up/60)+' min']];
   $('prov').hidden=!s.cxok;if(document.activeElement!==f.prov)f.prov.value=s.prov||'auto';
+  const ask=$('prov'),q=$('pq');ask.style.cssText=s.pask?'border:2px solid #D97757;border-radius:12px':'';q.hidden=!s.pask;
+  if(s.pask){f.prepend(ask);q.textContent=(s.pask==='codex'?'Este Mac usa o Codex.':'Este Mac usa o Claude e o Codex.')+' Escolha o que as placas mostram:'}
   const dl=$('st');dl.textContent='';
   for(const[k,v]of rows){const t=document.createElement('dt'),d=document.createElement('dd');t.textContent=k;
     if(/^http:\/\//.test(v)){const a=document.createElement('a');a.href=v+'/';a.textContent=v;d.append(a)}else d.textContent=v;dl.append(t,d)}

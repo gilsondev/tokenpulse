@@ -138,9 +138,11 @@ class Usage:
         self.sessions = {}  # sessionId -> última linha: ts, tipo, stop_reason, projeto, origem
         self.titles = {}    # sessionId -> título da sessão (linha custom-title do Claude Code)
         self.paths, self.globbed_at = [], 0.0
+        self.recent = False  # algum log do Claude Code mexido nos últimos 7 dias
 
     def poll(self):
         cutoff = time.time() - 86400
+        week_ago, recent = time.time() - 7 * 86400, False
         # o glob recursivo em ~1.240 arquivos custa ~300 ms; arquivo novo de sessão aparece no máximo a cada 15 s
         if time.time() - self.globbed_at > 15:
             self.paths, self.globbed_at = glob.glob(PROJECTS, recursive=True), time.time()
@@ -149,6 +151,7 @@ class Usage:
                 st = os.stat(path)
             except OSError:
                 continue
+            recent = recent or st.st_mtime >= week_ago
             if st.st_mtime < cutoff:
                 continue
             if st.st_size < self.offsets.get(path, 0):
@@ -160,6 +163,7 @@ class Usage:
                         break  # linha ainda sendo escrita
                     self.offsets[path] = f.tell()
                     self._ingest(raw)
+        self.recent = recent
         self.events = [e for e in self.events if e.ts >= cutoff]
         self.seen = {k: ts for k, ts in self.seen.items() if ts >= cutoff}
         self.sessions = {k: v for k, v in self.sessions.items() if v["ts"] >= cutoff}
@@ -378,12 +382,16 @@ def provider_mode():
     return mode if mode in PROVIDER_MODES else "auto"
 
 
-def with_codex(frame, cx, claude_events, codex):
+def with_codex(frame, cx, claude_events, codex, claude_recent):
     """O frame conforme o ajuste Provedores, quando o Codex foi usado nos últimos 7 dias. "Só Claude" é o frame de
-    sempre. "Os dois" (e o automático) acrescenta o bloco cx e soma o Codex em sessões, modelos e histórico.
-    "Só Codex" põe os dados do Codex nos campos de sempre: as telas de hoje mostram o Codex sem mudar."""
-    mode = provider_mode()
-    frame |= {"prov": mode, "cxok": 1}  # cxok: a placa mostra o ajuste só quando o Mac tem o Codex
+    sempre. "Os dois" acrescenta o bloco cx e soma o Codex em sessões, modelos e histórico. "Só Codex" põe os dados
+    do Codex nos campos de sempre: as telas de hoje mostram o Codex sem mudar. O automático é "os dois", ou
+    "só Codex" num Mac sem uso do Claude Code."""
+    chosen = provider_mode()
+    frame |= {"prov": chosen, "cxok": 1}  # cxok: a placa mostra o ajuste só quando o Mac tem o Codex
+    if not os.path.exists(PROVIDERS):  # ninguém escolheu ainda: a placa pergunta, com o texto do que o Mac tem
+        frame["pask"] = "both" if claude_recent else "codex"
+    mode = chosen if chosen != "auto" else "both" if claude_recent else "codex"
     if mode == "claude":
         return frame
     now = time.time()
@@ -396,7 +404,7 @@ def with_codex(frame, cx, claude_events, codex):
     if mode == "codex":
         sess = {"n": 0, "ws": [], "rows": []}
         add_codex_sessions(sess, items)
-        keep = {k: frame[k] for k in ("clk", "t", "dark", "agv", "act", "prov", "cxok") if k in frame}
+        keep = {k: frame[k] for k in ("clk", "t", "dark", "agv", "act", "prov", "cxok", "pask") if k in frame}
         return keep | {k: v for k, v in cx.items() if k not in ("n", "plan")} | {
             "cxo": 1, "cxn": cx["n"], "org": f"Codex · {cx['plan']}" if cx["plan"] else "Codex", "cli": 0, "desk": 0,
             "sess": sess, "mods": models(codex_today), "projs": projects([e for e in codex.events if now - e.ts < 3600], now),
@@ -1481,6 +1489,8 @@ def demo_frame():
         return f
     mode = provider_mode()  # o ajuste Provedores vale também no demo, para as capturas de cada modo
     f |= {"prov": mode, "cxok": 1}
+    if not os.path.exists(PROVIDERS):  # a pergunta do primeiro uso; TOKENPULSE_DEMO_ASK=codex simula um Mac sem Claude
+        f["pask"] = os.environ.get("TOKENPULSE_DEMO_ASK", "both")
     if mode == "claude":
         return f
     cx = {"m": "gpt-6.1-sol · medium", "plan": "Plus", "tot": "21,7M", "rate": fmt_tokens(sum(sp[-5:]) / 20),
@@ -1492,7 +1502,7 @@ def demo_frame():
     if mode == "codex":
         sess = {"n": 0, "ws": [], "rows": []}
         add_codex_sessions(sess, cx_items)
-        return {k: f[k] for k in ("clk", "t", "dark", "act", "prov", "cxok")} | {k: v for k, v in cx.items() if k not in ("n", "plan")} | {
+        return {k: f[k] for k in ("clk", "t", "dark", "act", "prov", "cxok", "pask") if k in f} | {k: v for k, v in cx.items() if k not in ("n", "plan")} | {
             "cxo": 1, "cxn": 2, "org": "Codex · Plus", "cli": 0, "desk": 0, "sess": sess, "mods": [cx_model[:2] + [100] + cx_model[3:]],
             "projs": [["checkout-api", "Codex", "2,0M", 0], ["infra", "Codex", "4,4M", 2]],
             "hist": [r[:2] + [cx_daily[i], 0] for i, r in enumerate(f["hist"])]}
@@ -1601,7 +1611,7 @@ def serve(board, frame):
 # Placas pelo WiFi (o SmallTV-Ultra, que só tem USB de energia). Elas se anunciam por mDNS como
 # _tokenpulse._tcp e recebem um frame enxuto por HTTP, com só o que a tela principal delas mostra.
 NET_KEYS = ("p5", "r5", "pw", "rw", "tot", "rate", "sp", "m", "org", "clk", "dark", "age", "mods", "projs", "hist", "accts", "cx",
-            "prov", "cxok", "st")
+            "prov", "cxok", "st", "pask", "cxo")
 NET_EVERY = 2  # s entre frames: pelo WiFi, 1 por segundo só gastaria a placa
 net_boards = {}  # host -> NetBoard
 _latest = {}     # o último frame montado pelo laço principal
@@ -1779,7 +1789,7 @@ def main():
             frame = (usage.snapshot() | limits() | account_frame() | ({"st": _claude["st"]} if _claude["st"] else {})
                      | {"clk": datetime.now().strftime("%H:%M"), "t": local_time(), "org": org_name, "dark": dark_mode(), "agv": AGENT})
             if cx:
-                frame = with_codex(frame, cx, usage.events, codex)
+                frame = with_codex(frame, cx, usage.events, codex, usage.recent)
         _latest["frame"] = frame
         if "--once" in sys.argv:
             print(json.dumps(frame, ensure_ascii=False))

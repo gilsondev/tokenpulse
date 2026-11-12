@@ -100,6 +100,35 @@ void drawInstall() {
   label(app::START_SHORT, w / 2, s(30) + side + s(34), ACCENT, middle_center);
 }
 
+// Primeiro uso com o Codex no Mac (o daemon manda "pask" até alguém escolher): a placa pergunta uma vez. Respondida
+// aqui, a pergunta some na hora; o próximo frame já vem sem ela.
+bool askAnswered = false;
+bool askOpen() {
+  if (app::frame["pask"].isNull()) return askAnswered = false;
+  return !askAnswered;
+}
+void answerAsk(const char* mode) {
+  char cmd[24];
+  snprintf(cmd, sizeof cmd, "ACTION prov %s", mode);
+  hostlink::action(cmd);
+  askAnswered = true;
+  gfx::slide(-1);
+  anim::reset();
+}
+
+// Na tela compacta, sem toque: o aviso e onde escolher; o BOOT deixa no automático.
+void drawAsk() {
+  const int cx = gfx::width() / 2, cy = gfx::height() / 2;
+  const bool both = !strcmp(app::frame["pask"] | "", "both");
+  fb().fillScreen(BG);
+  label(both ? "Este Mac usa o" : "Este Mac usa", cx, cy - s(52), TEXT, middle_center);
+  label(both ? "Claude e o Codex" : "o Codex", cx, cy - s(38), TEXT, middle_center);
+  label("Escolha o que mostrar", cx, cy - s(12), MUTED, middle_center);
+  label(webui::online() ? "na página da placa:" : "em outra placa", cx, cy + s(2), MUTED, middle_center);
+  if (webui::online()) label((String(webui::host()) + ".local").c_str(), cx, cy + s(16), ACCENT, middle_center);
+  label("BOOT: automático", cx, cy + s(44), DIM, middle_center);
+}
+
 void drawWaiting() {
   if (hostlink::needsInstall()) return drawInstall();
   int cx = gfx::width() / 2, cy = gfx::height() / 2;
@@ -567,6 +596,7 @@ void render() {
   }
   if (const int r = attentionRow(); r >= 0 && gfx::full() && !settingsOpen && app::hasData())
     return gfx::frame([r] { tall::drawAttention(r, millis() - attnMs); });
+  if (askOpen() && !settingsOpen && app::hasData()) return gfx::frame([] { gfx::full() ? tall::drawProvAsk() : drawAsk(); });
   if (board::PROFILE.oled && power::idle()) return gfx::frame(tall::drawSaver);
   const bool dark = settings::v.theme == 0 ? (bool)(app::frame["dark"] | true) : settings::v.theme == 2;
   if (dark != color::dark) color::apply(dark);
@@ -621,6 +651,7 @@ bool sessionStep(int dir) {
   return true;
 }
 void next() {
+  if (askOpen() && !gfx::full()) return answerAsk("auto");  // compacta: o BOOT responde "automático"
   if (attentionRow() >= 0) return dismissAttention();  // o botão fecha o destaque
   if (!sessionStep(1) && !mainStep(1)) go((page + 1) % count(), -1);
 }
@@ -642,6 +673,10 @@ void tap(int x, int y) {
   if (const int r = attentionRow(); r >= 0 && gfx::full()) {  // destaque: o botão traz a sessão, o resto fecha
     if (tall::attentionCenter(x, y)) tall::focusRow(r);
     return dismissAttention();
+  }
+  if (askOpen() && gfx::full() && app::hasData()) {  // primeiro uso: só as opções respondem
+    if (const char* mode = tall::provAskTap(x, y)) answerAsk(mode);
+    return;
   }
   if (!gfx::full()) return next();
   if (page == 0 && !codexFace && !tall::codexOnly() && !settingsOpen && (tall::orgTitleAt(x, y) || tall::suggestionAt(x, y))) {

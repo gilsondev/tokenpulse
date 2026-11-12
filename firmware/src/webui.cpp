@@ -63,6 +63,7 @@ void handleState() {
     for (const char* s : sound::NAMES) d["sounds"].add(s);
   d["cxok"] = app::frame["cxok"] | 0;  // o Mac tem o Codex: a página mostra o ajuste Provedores
   d["prov"] = app::frame["prov"] | "auto";
+  if (!app::frame["pask"].isNull()) d["pask"] = app::frame["pask"];  // primeiro uso: a página destaca a escolha
   JsonObject c = d["cfg"].to<JsonObject>();
   const auto& v = settings::v;
   const auto& w = settings::web;

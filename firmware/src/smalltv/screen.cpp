@@ -101,8 +101,9 @@ void drawMain(bool codex = false) {
   text(f["m"] | "Claude", 8, 22, LABEL, MUTED);
   // a página de status do provedor (a da Anthropic, ou a da OpenAI no "cx"): 1 instável, 2 fora do ar
   const int status = live ? f["st"] | 0 : 0;
-  const char* st = !live ? "Offline" : status > 1 ? (codex ? "Codex fora" : "Claude fora")
-                 : status ? (codex ? "Codex instável" : "Claude instável") : "Ao vivo";
+  const bool cxStatus = codex || (int)(app::frame["cxo"] | 0);  // "cxo": o ajuste está em Só Codex e o frame é dele
+  const char* st = !live ? "Offline" : status > 1 ? (cxStatus ? "Codex fora" : "Claude fora")
+                 : status ? (cxStatus ? "Codex instável" : "Claude instável") : "Ao vivo";
   const uint16_t stc = !live || status > 1 ? RED : status ? AMBER : GREEN;
   text(st, W - 8, 22, LABEL, stc, top_right);
   const int dotX = W - 16 - textWidth(st, LABEL);
@@ -382,7 +383,7 @@ void drawOrgs() {
 
 // Sem toque nem botão, as telas passam sozinhas a cada config::v.interval s. Tela sem conteúdo
 // (nenhum projeto na última hora) fica de fora da volta.
-enum Page : uint8_t { MAIN, SESSIONS, MODELS, MODEL, PROJECTS, HISTORY, ORGS };
+enum Page : uint8_t { MAIN, SESSIONS, MODELS, MODEL, PROJECTS, HISTORY, ORGS, ASK };
 struct Slot {
   Page page;
   uint8_t sub;  // qual modelo, no detalhe
@@ -395,6 +396,7 @@ int slots(Slot* out) {
   int n = 0;
   out[n++] = {MAIN, 0};
   if (!f["cx"].isNull()) out[n++] = {MAIN, 1};  // a principal do Codex, logo depois
+  if (!f["pask"].isNull()) out[n++] = {ASK, 0};  // primeiro uso com o Codex: onde escolher os provedores
   if ((on & 4) && f["ses"].size()) out[n++] = {SESSIONS, 0};
   if ((on & 1) && f["mods"].size()) out[n++] = {MODELS, 0};
   if (on & 8)
@@ -425,7 +427,20 @@ Slot pageNow() {
   return cur;
 }
 
+// Primeiro uso com o Codex no Mac: sem toque, o aviso diz onde escolher. Sai da volta quando alguém escolhe.
+void drawAsk() {
+  const bool both = !strcmp(app::frame["pask"] | "", "both");
+  band.fillScreen(BG);
+  text(both ? "Este Mac usa o Claude" : "Este Mac usa o Codex", W / 2, 60, LABEL, TEXT, top_center);
+  if (both) text("e o Codex", W / 2, 78, LABEL, TEXT, top_center);
+  text(both ? "Para escolher o que mostrar," : "Para mostrar o Codex,", W / 2, 116, LABEL, MUTED, top_center);
+  text("escolha na página da placa:", W / 2, 134, LABEL, MUTED, top_center);
+  text(net::address().c_str(), W / 2, 164, LABEL, ACCENT, top_center);
+  text("Até lá: automático", W / 2, 204, LABEL, DIM, top_center);
+}
+
 void draw(Slot slot) {
+  if (slot.page == ASK) return drawAsk();
   if (slot.page == SESSIONS) drawSessions();
   else if (slot.page == MODELS) drawModels();
   else if (slot.page == MODEL) drawModel(slot.sub);
@@ -659,6 +674,7 @@ bool shot(const String& name, const std::function<void(const uint8_t*, size_t)>&
   else if (name == "history") slot = {HISTORY, 0};
   else if (name == "orgs") slot = {ORGS, 0};
   else if (name == "codex") slot = {MAIN, 1};
+  else if (name == "ask") slot = {ASK, 0};
   else if (name == "ap") {
     for (oy = 0; oy < H; oy += BAND) drawAp(), write(reinterpret_cast<const uint8_t*>(band.getBuffer()), min(BAND, H - oy) * W * 2), yield();
     return true;
