@@ -668,6 +668,7 @@ def sessions(state, titles, herdr, events, now):
     for e in events:
         tokens[e.session] = tokens.get(e.session, 0) + e.total
     seen = herdr and terminal_in_front()  # o foco do herdr só conta se a janela do terminal está na frente
+    show_multica = mc_settings()["on"]  # Multica desligado: as runs dele (automação, não sessão sua) nem aparecem
     groups = {}
     for sid in set(state) | set(herdr):
         s, h = state.get(sid), herdr.get(sid)
@@ -689,6 +690,8 @@ def sessions(state, titles, herdr, events, now):
         entry = s["entry"] if s else ""
         origin = "Desk" if entry == "claude-desktop" else "SDK" if entry == "sdk-cli" else "CLI"
         if issue := multica_issue(s["cwd"] if s else h["cwd"] if h else ""):
+            if not show_multica:
+                continue
             origin, name = "Multica", f"{issue} {_mc['titles'].get(issue, '')}".strip()
         row = [cut(name, 48), origin, st, fmt_tokens(tokens[sid]) if sid in tokens else "--",
                int(age // 60) if age is not None else -1]
