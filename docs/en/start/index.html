@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Start · tokenpulse</title>
-<meta name="description" content="Got a tokenpulse board that is already flashed? One command on the Mac and it starts showing your Claude Code and Codex usage.">
+<title>Get started · tokenpulse</title>
+<meta name="description" content="Got a tokenpulse board that's already flashed? One command on your computer (macOS or Linux) and it starts showing your Claude Code and Codex usage.">
 <link rel="icon" type="image/svg+xml" href="../../assets/logo.svg">
 <link rel="canonical" href="https://gilsondev.github.io/tokenpulse/en/start/">
 <link rel="alternate" hreflang="pt-BR" href="https://gilsondev.github.io/tokenpulse/comecar/">
@@ -16,95 +16,405 @@
 <style>
   :root {
     --bg: #1F1E1D; --surface: #2A2927; --line: #3A3936; --text: #F5F4EE; --muted: #B8B5A9; --dim: #858278;
-    --accent: #D97757; --green: #74B37C; --code-bg: #171615;
+    --accent: #D97757; --green: #74B37C; --yellow: #E2B04A; --code-bg: #171615; --glass: #191817;
   }
   @media (prefers-color-scheme: light) {
     :root { --bg: #FAF9F5; --surface: #F0EEE6; --line: #E0DDD3; --text: #1F1E1D; --muted: #5C5A54; --dim: #8E8B82;
-            --accent: #C15F3C; --code-bg: #F0EEE6; }
+            --accent: #C15F3C; --green: #3F8A4A; --code-bg: #F0EEE6; }
   }
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.55 Inter, system-ui, sans-serif; }
-  main { max-width: 680px; margin: 0 auto; padding: 40px 16px 64px; }
-  a { color: var(--accent); }
-  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; color: var(--text); text-decoration: none; }
-  .brand img { width: 28px; height: 28px; }
-  h1 { font-size: clamp(26px, 6vw, 36px); line-height: 1.15; margin: 28px 0 10px; }
-  h2 { font-size: 20px; margin: 36px 0 10px; }
-  .lead { color: var(--muted); font-size: 18px; margin: 0; }
-  ol.steps { counter-reset: s; list-style: none; padding: 0; margin: 24px 0 0; }
-  ol.steps > li { counter-increment: s; position: relative; padding: 0 0 26px 46px; }
-  ol.steps > li::before { content: counter(s); position: absolute; left: 0; top: 0; width: 30px; height: 30px; border-radius: 50%;
-    display: grid; place-items: center; background: var(--accent); color: #fff; font-weight: 700; font-size: 14px; }
-  ol.steps h3 { margin: 2px 0 6px; font-size: 17px; }
-  ol.steps p, ul { color: var(--muted); margin: 6px 0; }
-  .cmd { display: flex; gap: 8px; align-items: stretch; margin: 10px 0; }
-  .cmd code { flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap; background: var(--code-bg); border: 1px solid var(--line);
-    border-radius: 10px; padding: 12px 14px; font: 14px/1.4 "JetBrains Mono", ui-monospace, monospace; color: var(--text); }
-  .cmd button { flex: none; font: 600 14px Inter, sans-serif; border: 0; border-radius: 10px; padding: 0 16px; cursor: pointer;
-    background: var(--accent); color: #fff; }
-  code { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 14px; }
-  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; margin: 12px 0; }
-  .card b { color: var(--text); }
-  .phone { border-left: 3px solid var(--accent); padding: 8px 14px; background: var(--surface); border-radius: 0 10px 10px 0; color: var(--muted); }
+  html { scroll-behavior: smooth; scroll-padding-top: 130px; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.6 Inter, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: .88em; }
+  p code, li code, summary code { background: var(--code-bg); border: 1px solid var(--line); border-radius: 6px; padding: 1px 5px; }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 16px; }
+
+  nav.top { position: sticky; top: 0; z-index: 20; background: color-mix(in srgb, var(--bg) 88%, transparent);
+            backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); }
+  nav.top .wrap { display: flex; align-items: center; gap: 20px; height: 56px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 18px; color: var(--text); }
+  .brand b { color: var(--accent); }
+  .brand:hover { text-decoration: none; }
+  nav.top .links { margin-left: auto; display: flex; gap: 18px; font-size: 14px; }
+  nav.top .links a { color: var(--muted); }
+
+  header.hero { padding: 48px 0 8px; }
+  .kicker { color: var(--accent); font-weight: 600; font-size: 13px; letter-spacing: .08em; text-transform: uppercase; margin: 0; }
+  h1 { font-size: clamp(30px, 5.5vw, 52px); line-height: 1.08; letter-spacing: -0.025em; margin: 10px 0 14px; max-width: 18ch; }
+  .lead { color: var(--muted); font-size: clamp(17px, 2vw, 20px); margin: 0; max-width: 680px; }
+  .needs { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin: 28px 0 0; padding: 0; list-style: none; }
+  .needs li { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; font-size: 14px; color: var(--muted); }
+  .needs b { display: block; color: var(--text); font-size: 15px; margin-bottom: 2px; }
+  .phone { margin-top: 20px; border-left: 3px solid var(--accent); background: var(--surface); padding: 14px 16px; border-radius: 0 12px 12px 0; color: var(--muted); }
   .phone b { color: var(--text); }
-  .lang { float: right; font-size: 14px; }
-  footer { margin-top: 48px; color: var(--dim); font-size: 14px; }
+  .phone button { margin-top: 10px; }
+
+  .layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0; padding-top: 32px; }
+  .progress { position: sticky; top: 56px; z-index: 10; margin: 0 -16px; padding: 10px 16px;
+              background: color-mix(in srgb, var(--bg) 92%, transparent); backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); }
+  .progress ol { list-style: none; margin: 0; padding: 0; display: flex; gap: 6px; }
+  .progress li { flex: 1; min-width: 0; }
+  .progress a { display: flex; align-items: center; gap: 8px; color: var(--dim); font-size: 13px; font-weight: 500; white-space: nowrap;
+                padding: 4px 0; border-top: 3px solid var(--line); }
+  .progress a:hover { text-decoration: none; color: var(--text); }
+  .progress .n { flex: none; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 700;
+                 border: 1px solid var(--line); color: var(--muted); }
+  .progress .t { overflow: hidden; text-overflow: ellipsis; }
+  .progress a.done { border-top-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+  .progress a.done .n { background: color-mix(in srgb, var(--accent) 22%, transparent); border-color: transparent; color: var(--accent); }
+  .progress a[aria-current="step"] { color: var(--text); border-top-color: var(--accent); }
+  .progress a[aria-current="step"] .n { background: var(--accent); border-color: var(--accent); color: #fff; }
+  @media (max-width: 599px) {
+    .progress .t { display: none; }
+    .progress a[aria-current="step"] .t { display: inline; }
+    .progress li:has(a[aria-current="step"]) { flex: 3; }
+  }
+  @media (min-width: 1100px) {
+    .layout { grid-template-columns: 190px minmax(0, 1fr); gap: 56px; padding-top: 40px; }
+    html { scroll-padding-top: 80px; }
+    .progress { top: 80px; align-self: start; margin: 0; padding: 0; background: none; backdrop-filter: none; border: 0; }
+    .progress ol { flex-direction: column; gap: 0; }
+    .progress a { border-top: 0; border-left: 3px solid var(--line); padding: 10px 0 10px 14px; font-size: 14px; }
+    .progress a.done { border-left-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+    .progress a[aria-current="step"] { border-left-color: var(--accent); }
+    .progress .n { width: 26px; height: 26px; font-size: 13px; }
+    .progress .hint { color: var(--dim); font-size: 13px; margin: 18px 0 0; }
+  }
+  .progress .hint { display: none; }
+  @media (min-width: 1100px) { .progress .hint { display: block; } }
+
+  .step { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-areas: "txt" "fig" "more";
+          gap: 18px 40px; padding: 36px 0; border-bottom: 1px solid var(--line); }
+  .step:last-child { border-bottom: 0; }
+  .step > .txt { grid-area: txt; min-width: 0; }
+  .step > .see { grid-area: fig; }
+  .step > .more { grid-area: more; min-width: 0; }
+  .step.wide { grid-template-areas: "txt" "more"; }
+  @media (min-width: 760px) {
+    .step { grid-template-columns: minmax(0, 1fr) 240px; grid-template-areas: "txt fig" "more fig"; align-items: start; }
+    .step > .more { align-self: start; }
+    .step.wide { grid-template-columns: minmax(0, 1fr); grid-template-areas: "txt" "more"; }
+  }
+  @media (min-width: 1100px) { .step { grid-template-columns: minmax(0, 1fr) 280px; } }
+  .head { display: flex; align-items: center; gap: 14px; margin-bottom: 12px; }
+  .num { flex: none; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: var(--accent); color: #fff;
+         font-weight: 700; font-size: 17px; }
+  .head small { display: block; color: var(--dim); font-size: 13px; font-weight: 500; }
+  h2 { font-size: clamp(22px, 3vw, 28px); line-height: 1.2; letter-spacing: -0.015em; margin: 0; }
+  .txt p, .txt li { color: var(--muted); }
+  .txt p { margin: 8px 0; }
+  .txt p b, .txt li b { color: var(--text); }
+  .txt ol, .txt ul { padding-left: 20px; margin: 8px 0; }
+  .txt li { margin: 6px 0; }
+  .tip { border-left: 3px solid var(--accent); background: var(--surface); border-radius: 0 12px 12px 0; padding: 10px 14px; margin: 14px 0 0; }
+  .tip.ok { border-left-color: var(--green); }
+
+  .pick { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 16px 0 0; }
+  @media (min-width: 600px) { .pick { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+  @media (min-width: 760px) { .pick { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
+  .pick button { font: inherit; text-align: left; color: var(--text); background: var(--surface); border: 1px solid var(--line); border-radius: 16px;
+                 padding: 12px; cursor: pointer; display: flex; flex-direction: column; gap: 2px; min-width: 0; transition: border-color .15s, transform .15s; }
+  .pick button:hover { border-color: color-mix(in srgb, var(--accent) 60%, var(--line)); transform: translateY(-1px); }
+  .pick button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .pick button[aria-pressed="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset;
+                                      background: color-mix(in srgb, var(--accent) 10%, var(--surface)); }
+  .pick .th { height: 92px; display: grid; place-items: center; margin-bottom: 8px; background: var(--glass); border-radius: 10px; overflow: hidden; }
+  .pick .th img { max-height: 80px; max-width: 90%; border-radius: 4px; }
+  .pick .th img.round { border-radius: 50%; }
+  .pick .th .strip { width: 22px; height: 74px; border-radius: 4px; border: 2px solid #4a4844; background: linear-gradient(#2c2b29, #191817);
+                     box-shadow: inset 0 0 0 2px #191817; }
+  .pick .cn { font-weight: 700; font-size: 18px; letter-spacing: -0.01em; }
+  .pick .md { font-size: 12px; color: var(--dim); line-height: 1.35; overflow-wrap: anywhere; }
+  .pick .tr { font-size: 12.5px; color: var(--muted); line-height: 1.35; margin-top: 4px; }
+  .pick button[aria-pressed="true"] .cn::after { content: " ✓"; color: var(--accent); }
+
+  .cmd { display: flex; gap: 8px; align-items: stretch; margin: 14px 0 6px; }
+  .cmd code { flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap; background: var(--code-bg); border: 1px solid var(--line);
+              border-radius: 12px; padding: 13px 14px; font-size: 14px; line-height: 1.4; color: var(--text); scrollbar-width: thin; }
+  button.btn { flex: none; font: 600 14px Inter, sans-serif; border: 0; border-radius: 12px; padding: 0 18px; min-height: 44px; cursor: pointer;
+               background: var(--accent); color: #fff; }
+  button.btn:hover { filter: brightness(1.08); }
+  .cmd.small code { font-size: 13px; padding: 10px 12px; }
+  .cmd.small button.btn { background: var(--surface); color: var(--text); border: 1px solid var(--line); }
+
+  .term { background: #141312; color: #E9E7DF; border: 1px solid #2E2D2A; border-radius: 12px; padding: 12px 14px 14px; margin: 14px 0 0;
+          font: 13px/1.6 "JetBrains Mono", ui-monospace, monospace; overflow-x: auto; }
+  .term .bar { display: flex; gap: 6px; margin-bottom: 8px; }
+  .term .bar i { width: 10px; height: 10px; border-radius: 50%; background: #3A3936; }
+  .term { text-align: left; }
+  .term div { white-space: pre-wrap; padding-left: 4ch; text-indent: -4ch; }
+  .term .ok { color: #74B37C; }
+  .term .warn { color: #E2B04A; }
+  .term .dim { color: #858278; }
+
+  figure.see { margin: 0; text-align: center; }
+  .see .glass { display: inline-block; vertical-align: top; background: var(--glass); border: 1px solid var(--line); border-radius: 18px; padding: 10px; max-width: 100%; }
+  .see img { display: block; max-width: 100%; max-height: 340px; width: auto; height: auto; border-radius: 8px; margin: 0 auto; }
+  .see img.round { border-radius: 50%; max-height: 260px; }
+  .see .glass.pg { width: 240px; }
+  .see img.page { max-height: none; width: 100%; object-fit: cover; object-position: top; aspect-ratio: 3 / 4; }
+  .see figcaption { color: var(--dim); font-size: 13px; margin-top: 8px; line-height: 1.45; }
+  .see .label { display: block; color: var(--accent); font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; margin-bottom: 8px; }
+  @media (max-width: 759px) { .see img { max-height: 300px; } .see img.round { max-height: 240px; } }
+
+  details { border: 1px solid var(--line); border-radius: 12px; background: var(--surface); margin: 8px 0 0; }
+  details summary { cursor: pointer; padding: 11px 14px; font-weight: 500; font-size: 15px; list-style: none; display: flex; gap: 10px; align-items: baseline; }
+  details summary::-webkit-details-marker { display: none; }
+  details summary::before { content: "+"; color: var(--accent); font-weight: 700; width: 12px; flex: none; }
+  details[open] summary::before { content: "−"; }
+  details > div { padding: 0 14px 12px 36px; color: var(--muted); font-size: 15px; }
+  details > div p { margin: 6px 0; }
+  .more h3 { font-size: 13px; color: var(--dim); text-transform: uppercase; letter-spacing: .08em; font-weight: 600; margin: 8px 0 4px; }
+
+  [data-for] { display: none !important; }
+  [data-for].on { display: block !important; }
+  span[data-for].on { display: inline !important; }
+  .see .glass[data-for].on { display: inline-block !important; }
+  .waiting { color: var(--dim); font-size: 14px; }
+  footer { border-top: 1px solid var(--line); color: var(--dim); font-size: 14px; padding: 28px 0 56px; margin-top: 24px; }
 </style>
 </head>
 <body>
-<main>
-  <a class="lang" href="../../comecar/" hreflang="pt-BR" lang="pt-BR">Português</a>
-  <a class="brand" href="../"><img src="../../assets/logo.svg" alt="">tokenpulse</a>
+<nav class="top">
+  <div class="wrap">
+    <a class="brand" href="../"><img src="../../assets/logo.svg" width="28" height="28" alt=""><span>token<b>pulse</b></span></a>
+    <div class="links">
+      <a href="../">Site</a>
+      <a href="../../comecar/" hreflang="pt-BR" lang="pt-BR">Português</a>
+    </div>
+  </div>
+</nav>
 
-  <h1>Got a tokenpulse board?</h1>
-  <p class="lead">It comes already flashed. What's left is to start, on your Mac, the program that reads your Claude Code and Codex usage and sends it to the board. It's one command, no password.</p>
+<div class="wrap">
+  <header class="hero">
+    <p class="kicker">Getting started</p>
+    <h1>Got a tokenpulse board?</h1>
+    <p class="lead">It comes already flashed. What's left is to start, on your computer, the program that reads your Claude Code and Codex usage and sends it to the board. Five steps and one command, no password.</p>
+    <ul class="needs">
+      <li><b>The board</b>and a USB cable that carries data. Caixeta only needs a USB power source and WiFi.</li>
+      <li><b>A computer with macOS or Linux</b>the same one where you use Claude Code or Codex.</li>
+      <li><b>Claude Code, Codex or both</b>with Claude Code, log in once (run <code>claude</code>).</li>
+    </ul>
+    <div class="phone" id="phone" hidden><b>Continue on the computer.</b> The steps happen there: open <b>gilsondev.github.io/tokenpulse/en/start</b> on the computer, or send it the link. <br><button type="button" class="btn" id="share">Send to the computer</button></div>
+  </header>
 
-  <p class="phone" id="phone" hidden>On your phone? The steps below happen on the <b>Mac</b>. Open <b>gilsondev.github.io/tokenpulse/en/start</b> there.</p>
+  <div class="layout">
+    <nav class="progress" aria-label="Progress">
+      <ol>
+        <li><a href="#board"><span class="n">1</span><span class="t">Which board</span></a></li>
+        <li><a href="#plug"><span class="n">2</span><span class="t">Power the board</span></a></li>
+        <li><a href="#install"><span class="n">3</span><span class="t">Install</span></a></li>
+        <li><a href="#answer"><span class="n">4</span><span class="t">Answer</span></a></li>
+        <li><a href="#done"><span class="n">5</span><span class="t">Done</span></a></li>
+      </ol>
+      <p class="hint">The board tells you at each stage what's missing.</p>
+    </nav>
 
-  <ol class="steps">
-    <li>
-      <h3>Run this command in the Mac's Terminal</h3>
-      <div class="cmd"><code id="cmd">curl -fsSL https://gilsondev.github.io/tokenpulse/install.sh | bash</code><button type="button" id="copy">Copy</button></div>
-      <p>It installs <a href="https://docs.astral.sh/uv/">uv</a> if missing, downloads the <a href="https://github.com/gilsondev/tokenpulse/releases/latest">latest release</a> to <code>~/.local/share/tokenpulse</code> and starts the daemon at macOS login. It doesn't flash firmware or touch the board. <a href="../../install.sh">Read the script</a> first, if you like.</p>
-    </li>
-    <li>
-      <h3>Connect the board</h3>
-      <div class="card"><b>Guition, ESP32-2432S028R or Waveshare:</b> plug it into the Mac with a USB cable that carries data. On the Guition, if the board powers on but the screen stays at "cabo USB" (USB cable), flip the USB-C plug: only one side carries data.</div>
-      <div class="card"><b>GeekMagic SmallTV-Ultra:</b> plug it into any USB power source. The first time, the screen shows a QR code: scan it with your phone's camera to join the <code>tokenpulse-XXXXXX</code> WiFi. The configuration page opens by itself (otherwise, open <code>http://192.168.4.1</code>): pick your network from the list, the same as the Mac's, and type the password. The page tells you when it connects. Don't use the Mac's WiFi for this, or it loses internet while connected.</div>
-    </li>
-    <li>
-      <h3>Done</h3>
-      <p>Within a few seconds the board leaves "sem dados do Mac" (no data from the Mac) and shows the 5-hour window, the week and your sessions. The on-device UI is in Brazilian Portuguese.</p>
-    </li>
-  </ol>
+    <main>
+      <section class="step wide" id="board">
+        <div class="txt">
+          <div class="head"><span class="num">1</span><div><small>Step 1 of 5</small><h2>Which board do you have?</h2></div></div>
+          <p>The next steps change a little depending on the board. Each one is named after a Brazilian tree.</p>
+          <div class="pick" role="group" aria-label="Board">
+            <button type="button" data-board="guition-jc3248w535" data-name="Guition JC3248W535">
+              <span class="th"><img src="../../screenshots/guition-jc3248w535/principal.png" alt="" loading="lazy"></span>
+              <span class="cn">Sumaúma</span><span class="md">Guition JC3248W535</span><span class="tr">3.5", touch</span></button>
+            <button type="button" data-board="cyd-2432s028r" data-name="ESP32-2432S028R">
+              <span class="th"><img src="../../screenshots/cyd-2432s028r/principal.png" alt="" loading="lazy"></span>
+              <span class="cn">Ipê</span><span class="md">ESP32-2432S028R (CYD)</span><span class="tr">2.8", yellow PCB, stylus touch</span></button>
+            <button type="button" data-board="waveshare-amoled-216" data-name="Waveshare AMOLED 2.16">
+              <span class="th"><img class="round" src="../../screenshots/waveshare-amoled-216/principal.png" alt="" loading="lazy"></span>
+              <span class="cn">Jabuticaba</span><span class="md">Waveshare AMOLED 2.16"</span><span class="tr">round, battery and Bluetooth</span></button>
+            <button type="button" data-board="waveshare-s3-lcd-147b" data-name="Waveshare 1.47B">
+              <span class="th"><span class="strip"></span></span>
+              <span class="cn">Açaí</span><span class="md">Waveshare ESP32-S3-LCD-1.47B</span><span class="tr">thin strip, no touch</span></button>
+            <button type="button" data-board="smalltv-ultra" data-name="SmallTV-Ultra">
+              <span class="th"><img src="../../screenshots/smalltv-ultra/main.png" alt="" loading="lazy"></span>
+              <span class="cn">Caixeta</span><span class="md">GeekMagic SmallTV-Ultra</span><span class="tr">cube, WiFi only, no touch</span></button>
+          </div>
+          <p class="waiting" id="pickhint">Tap your board to see its steps.</p>
+        </div>
+      </section>
 
-  <h2>Before you start</h2>
-  <ul>
-    <li>A Mac with macOS.</li>
-    <li>Claude Code, Codex or both. With Claude Code, log in once (run <code>claude</code>): without it the board shows Claude's tokens, but not the usage %.</li>
-    <li>With both on the Mac, the board asks the first time what to show: Claude only, Codex only, or both.</li>
-  </ul>
+      <section class="step" id="plug">
+        <div class="txt">
+          <div class="head"><span class="num">2</span><div><small>Step 2 of 5</small><h2 data-for="none usb">Plug the board into the computer</h2><h2 data-for="smalltv-ultra">Power Caixeta and put it on WiFi</h2></div></div>
+          <div data-for="none usb">
+            <p>Use a <b>USB cable that carries data</b> (a charge-only cable won't do). The board powers on and shows <b>"Falta o tokenpulse"</b> (tokenpulse is missing) with a QR code to this page: that means it's ready and waiting for the program in step 3.</p>
+            <p data-for="cyd-2432s028r" class="tip">The first time, the screen asks for <b>four taps with the stylus</b>, one per corner, to calibrate the touch.</p>
+            <p data-for="waveshare-amoled-216" class="tip">The first connection is over the cable. After that it also works wirelessly over Bluetooth: on macOS, the system asks for permission once.</p>
+          </div>
+          <div data-for="smalltv-ultra">
+            <ol>
+              <li>Plug it into any USB power source. Its USB port only powers it.</li>
+              <li>The screen shows a QR code. Scan it with your <b>phone</b> to join the <code>tokenpulse-caixeta</code> WiFi.</li>
+              <li>The page that opens (or <code>http://192.168.4.1</code>) lists the networks. Pick <b>the same network as the computer</b> and type the password.</li>
+              <li>The page says whether it connected. Then the screen shows the QR for this page, waiting for step 3.</li>
+            </ol>
+            <p class="tip">Don't use the computer's WiFi to join <code>tokenpulse-caixeta</code>: without a network cable, it has no internet while it's on it.</p>
+          </div>
+        </div>
+        <figure class="see">
+          <span class="label">On the board</span>
+          <span class="glass"><img src="../../screenshots/11-instalar.png" alt="Board screen: tokenpulse is missing, with a QR code to tokenpulse.s.gy/comecar" width="320" height="480" loading="lazy"></span>
+          <figcaption data-for="none usb">The waiting screen, on Sumaúma. The layout differs on the other boards; the message is the same. The on-device UI is in Brazilian Portuguese.</figcaption>
+          <figcaption data-for="smalltv-ultra">After the WiFi, Caixeta shows a QR for this same page (here, on Sumaúma's screen).</figcaption>
+        </figure>
+        <div class="more">
+          <h3>If something goes wrong</h3>
+          <details data-for="none usb"><summary>The screen doesn't show tokenpulse (blank board)</summary><div><p>The board came unflashed. Flash it from the browser on the <a href="../#install">site</a>, with Chrome or Edge and the board plugged in. Then come back.</p></div></details>
+          <details data-for="guition-jc3248w535"><summary>It powers on, but the screen stays at "cabo USB"</summary><div><p>Flip the USB-C plug: on Sumaúma, only one side of the plug carries data.</p></div></details>
+          <details data-for="none usb"><summary>The computer doesn't see the board</summary><div><p>Try another cable: many cables only charge. Avoid unpowered hubs. On Linux, also see the serial port permission note in step 3.</p></div></details>
+          <details data-for="smalltv-ultra"><summary>My network doesn't show up or won't connect</summary><div><p>Caixeta only uses 2.4 GHz networks. The page says what went wrong: password, network out of range or 5 GHz.</p></div></details>
+          <details data-for="smalltv-ultra"><summary>It still has the GeekMagic firmware</summary><div><p>The first flash goes through its factory updater, over WiFi. <a href="../#install">See how on the site</a>.</p></div></details>
+        </div>
+      </section>
 
-  <h2>If it doesn't work</h2>
-  <ul>
-    <li>The board's waiting screen says which step is missing: cable or WiFi, daemon, data.</li>
-    <li>The log is at <code>~/Library/Logs/tokenpulse.log</code>. The last lines usually say what happened: <code>tail -20 ~/Library/Logs/tokenpulse.log</code>.</li>
-    <li>SmallTV not showing up: check that it and the Mac are on the same network. Guest networks and separate VLANs block mDNS.</li>
-    <li>To update later, run the same command again.</li>
-  </ul>
+      <section class="step" id="install">
+        <div class="txt">
+          <div class="head"><span class="num">3</span><div><small>Step 3 of 5</small><h2>Run this command on the computer</h2></div></div>
+          <p>Open the Terminal (the command is the same on macOS and Linux), paste it and press Enter:</p>
+          <div class="cmd"><code id="cmd">curl -fsSL https://gilsondev.github.io/tokenpulse/install.sh | bash</code><button type="button" class="btn" id="copy">Copy</button></div>
+          <p>It installs the program that reads your usage and sends it to the board, and keeps it running on its own, also after a restart. No password. <a href="../../install.sh">Read the script</a> first, if you like.</p>
+          <p class="tip">On <b>Linux</b>, it installs a systemd user service. For a board on USB, your user may need to join the <code>dialout</code> group: if so, the installer prints the command. After running it, log out and back in.</p>
+        </div>
+        <figure class="see">
+          <span class="label">In the Terminal</span>
+          <div class="term" aria-label="Example of what the Terminal shows">
+            <div class="bar"><i></i><i></i><i></i></div>
+            <div class="ok">  ✓ uv pronto</div>
+            <div class="ok">  ✓ versão baixada</div>
+            <div class="ok">  ✓ programa ligado: roda sozinho e volta a cada login</div>
+            <div class="ok">  ✓ Claude Code logado</div>
+            <div class="dim">Procurando a placa.....</div>
+            <div class="ok">  ✓ <span id="tname">your board</span> conectada</div>
+          </div>
+          <figcaption>The end of the install, shortened (the installer speaks Portuguese). A line with <code>!</code> says what's missing and what to do.</figcaption>
+        </figure>
+        <div class="more">
+          <h3>If something goes wrong</h3>
+          <details><summary>It said "nenhuma placa ainda" (no board yet)</summary><div>
+            <p data-for="none usb">Check the cable (step 2). The program keeps looking: plug in the board and wait a few seconds, without running anything again.</p>
+            <p data-for="smalltv-ultra">Caixeta and the computer must be on the same network. Guest networks and separate VLANs block mDNS, which is how the computer finds the board.</p>
+          </div></details>
+          <details><summary>It said "Claude Code sem login" (not logged in)</summary><div><p>Run <code>claude</code> and log in to your account. Without the login, the board shows Claude's tokens, but not the usage %. No need to run the installer again.</p></div></details>
+          <details><summary>Where the log is</summary><div><p>On macOS, at <code>~/Library/Logs/tokenpulse.log</code>. The last lines usually say what happened: <code>tail -20 ~/Library/Logs/tokenpulse.log</code>.</p></div></details>
+          <details><summary>To remove</summary><div>
+            <div class="cmd small"><code id="unin">curl -fsSL https://gilsondev.github.io/tokenpulse/install.sh | bash -s -- --uninstall</code><button type="button" class="btn" data-copy="unin">Copy</button></div>
+            <p>The board goes back to "sem dados do Mac" (no data).</p>
+          </div></details>
+        </div>
+      </section>
 
-  <h2>To remove</h2>
-  <div class="cmd"><code>curl -fsSL https://gilsondev.github.io/tokenpulse/install.sh | bash -s -- --uninstall</code></div>
+      <section class="step" id="answer">
+        <div class="txt">
+          <div class="head"><span class="num">4</span><div><small>Step 4 of 5</small><h2>Answer the board's questions</h2></div></div>
+          <p>The first time, the board asks at most three questions, one per screen. Each one only shows up if it makes sense on your computer:</p>
+          <ol>
+            <li><b>Providers.</b> If the computer uses Codex, it asks what to show: automatic, Claude only, Codex only or both.</li>
+            <li><b>Multica.</b> If the computer has Multica, it asks whether to show its page. By default, it stays hidden.</li>
+            <li><b>Claude login.</b> If Claude Code isn't logged in yet, it reminds you to run <code>claude</code>. You can skip it and see tokens only.</li>
+          </ol>
+          <p data-for="guition-jc3248w535 cyd-2432s028r waveshare-amoled-216 none">Answer by tapping the screen. Everything can change later in <b>Ajustes</b> (settings), via the gear.</p>
+          <p data-for="waveshare-s3-lcd-147b">Açaí has no touch: the screen says where to answer, and the <b>BOOT button</b> picks automatic.</p>
+          <p data-for="smalltv-ultra">Caixeta has no touch: the screen shows the question and you answer on the board's page, at <a href="http://tokenpulse-caixeta.local">tokenpulse-caixeta.local</a>, from the computer or a phone on the same network.</p>
+          <p class="tip">If the board's firmware is older than the program, it updates itself first: the screen shows "Atualizando o firmware". Don't unplug the board in the meantime.</p>
+        </div>
+        <figure class="see" data-for="none guition-jc3248w535 cyd-2432s028r waveshare-amoled-216 smalltv-ultra">
+          <span class="label">On the board</span>
+          <span class="glass" data-for="guition-jc3248w535 none"><img src="../../screenshots/guition-jc3248w535/provedores.png" alt="Provider choice: automatic, Claude only, Codex only, Claude + Codex" width="320" height="480" loading="lazy"></span>
+          <span class="glass" data-for="cyd-2432s028r"><img src="../../screenshots/cyd-2432s028r/provedores.png" alt="Provider choice: automatic, Claude only, Codex only, Claude + Codex" width="320" height="240" loading="lazy"></span>
+          <span class="glass" data-for="waveshare-amoled-216"><img class="round" src="../../screenshots/waveshare-amoled-216/provedores.png" alt="Provider choice: automatic, Claude only, Codex only, Claude + Codex" width="480" height="480" loading="lazy"></span>
+          <span class="glass pg" data-for="smalltv-ultra"><img class="page" src="../../screenshots/smalltv-config.png" alt="SmallTV-Ultra settings page" width="540" height="1628" loading="lazy"></span>
+          <figcaption data-for="guition-jc3248w535 cyd-2432s028r waveshare-amoled-216 none">Ajustes → Provedores: the same choice, to change later.</figcaption>
+          <figcaption data-for="smalltv-ultra">The board's page. The questions show up at its top.</figcaption>
+        </figure>
+        <div class="more">
+          <h3>If something goes wrong</h3>
+          <details><summary>The board asked nothing</summary><div><p>That's normal: without Codex, without Multica and with Claude Code logged in, there's nothing to ask.</p></div></details>
+          <details data-for="none guition-jc3248w535 cyd-2432s028r waveshare-amoled-216 smalltv-ultra"><summary>I picked the wrong option</summary><div><p data-for="none guition-jc3248w535 cyd-2432s028r waveshare-amoled-216">Change it in Ajustes → Provedores or Ajustes → Multica.</p><p data-for="smalltv-ultra">Change it on the board's page, under Provedores or Multica.</p></div></details>
+        </div>
+      </section>
+
+      <section class="step" id="done">
+        <div class="txt">
+          <div class="head"><span class="num">5</span><div><small>Step 5 of 5</small><h2>Done</h2></div></div>
+          <p>The board shows your usage live: the 5-hour window in the ring, the week, today's tokens and what each session is doing.</p>
+          <p data-for="guition-jc3248w535 cyd-2432s028r waveshare-amoled-216 none">Swipe sideways to change screens. The gear opens the settings.</p>
+          <p data-for="waveshare-s3-lcd-147b">The BOOT button changes screens, and holding it goes back to the main one. It rotates on its own.</p>
+          <p data-for="smalltv-ultra">The screens cycle on their own. Brightness, time per screen and alerts live on the board's page.</p>
+          <p class="tip ok"><b>Updates.</b> When a new version comes out, the board says <b>"Versão nova"</b> (new version). One tap on "Atualizar agora" (update now) updates the program on the computer and then the boards' firmware, in about 1 minute.<span data-for="smalltv-ultra"> On Caixeta, the button is on the board's page.</span></p>
+        </div>
+        <figure class="see" data-for="none guition-jc3248w535 cyd-2432s028r waveshare-amoled-216 smalltv-ultra">
+          <span class="label">On the board</span>
+          <span class="glass" data-for="guition-jc3248w535 none"><img src="../../screenshots/guition-jc3248w535/principal.png" alt="Main screen: 5-hour window ring, week and today's tokens" width="320" height="480" loading="lazy"></span>
+          <span class="glass" data-for="cyd-2432s028r"><img src="../../screenshots/cyd-2432s028r/principal.png" alt="Main screen: 5-hour window ring, week and today's tokens" width="320" height="240" loading="lazy"></span>
+          <span class="glass" data-for="waveshare-amoled-216"><img class="round" src="../../screenshots/waveshare-amoled-216/principal.png" alt="Main screen: 5-hour window ring, week and today's tokens" width="480" height="480" loading="lazy"></span>
+          <span class="glass" data-for="smalltv-ultra"><img src="../../screenshots/smalltv-ultra/main.png" alt="Caixeta main screen: 5-hour window ring, week and today's tokens" width="240" height="240" loading="lazy"></span>
+          <figcaption>Mock data.</figcaption>
+        </figure>
+        <div class="more">
+          <h3>If something goes wrong</h3>
+          <details><summary>The board went back to "sem dados do Mac" (no data)</summary><div><p>The waiting screen says which stage is missing: <span data-for="none usb">cable</span><span data-for="smalltv-ultra">WiFi</span>, program or data. If the program stopped, run the step 3 command again.</p></div></details>
+          <details><summary>It shows tokens, but not the %</summary><div><p>Claude Code isn't logged in: run <code>claude</code> and log in to your account.</p></div></details>
+          <details><summary>I want to update by hand</summary><div><p>Run the same command from step 3. It downloads the latest version.</p></div></details>
+        </div>
+      </section>
+    </main>
+  </div>
 
   <footer>Everything about the project, the boards and how to flash one from scratch: <a href="../">gilsondev.github.io/tokenpulse/en</a>.</footer>
-</main>
+</div>
 <script>
-  document.getElementById("copy").addEventListener("click", async e => {
-    try { await navigator.clipboard.writeText(document.getElementById("cmd").textContent); e.target.textContent = "Copied"; }
-    catch { e.target.textContent = "Select and copy"; }
-    setTimeout(() => e.target.textContent = "Copy", 2000);
-  });
+  async function copy(btn, text, label) {
+    try { await navigator.clipboard.writeText(text); btn.textContent = "Copied"; }
+    catch { btn.textContent = "Select and copy"; }
+    setTimeout(() => btn.textContent = label, 2000);
+  }
+  document.getElementById("copy").addEventListener("click", e => { copy(e.target, document.getElementById("cmd").textContent, "Copy"); mark("install"); });
+  document.querySelectorAll("[data-copy]").forEach(b => b.addEventListener("click", () => copy(b, document.getElementById(b.dataset.copy).textContent, "Copy")));
+
+  // the chosen board shows only its steps; "none" is what shows before a choice. The choice also applies on the site (same key)
+  const usb = b => b !== "smalltv-ultra" && b !== "none";
+  function choose(b, remember) {
+    const btn = document.querySelector(`.pick button[data-board="${b}"]`);
+    if (b !== "none" && !btn) return;
+    document.querySelectorAll(".pick button").forEach(x => x.setAttribute("aria-pressed", x === btn));
+    document.querySelectorAll("[data-for]").forEach(e => {
+      const fs = e.dataset.for.split(" ");
+      e.classList.toggle("on", fs.includes(b) || (fs.includes("usb") && usb(b)));
+    });
+    document.getElementById("pickhint").hidden = b !== "none";
+    document.getElementById("tname").textContent = btn ? btn.dataset.name : "your board";
+    if (btn) mark("board");
+    if (remember) try { localStorage.setItem("placa", b); } catch (e) {}
+  }
+  document.querySelectorAll(".pick button").forEach(x => x.addEventListener("click", () => {
+    choose(x.dataset.board, true);
+    if (window.scrollY < document.getElementById("plug").offsetTop - innerHeight / 2) document.getElementById("plug").scrollIntoView();
+  }));
+  choose("none", false);
+  try { const saved = localStorage.getItem("placa"); if (saved) choose(saved, false); } catch (e) {}
+
+  // progress: the step in view is highlighted; the ones above, marked
+  const links = [...document.querySelectorAll(".progress a")];
+  function mark(id) { links.find(a => a.hash === "#" + id)?.classList.add("done"); }
+  const seen = new IntersectionObserver(es => es.forEach(e => {
+    if (!e.isIntersecting) return;
+    const i = links.findIndex(a => a.hash === "#" + e.target.id);
+    links.forEach((a, k) => { if (k === i) a.setAttribute("aria-current", "step"); else a.removeAttribute("aria-current"); if (k < i) a.classList.add("done"); });
+  }), { rootMargin: "-40% 0px -55% 0px" });
+  document.querySelectorAll(".step").forEach(s => seen.observe(s));
+
   if (/iPhone|iPad|Android/i.test(navigator.userAgent)) document.getElementById("phone").hidden = false;
+  // on a phone: send the link to the computer (AirDrop, message, email); without share, copy the link
+  document.getElementById("share").addEventListener("click", async e => {
+    const url = "https://gilsondev.github.io/tokenpulse/en/start/";
+    try { if (navigator.share) return await navigator.share({ title: "tokenpulse", url }); await navigator.clipboard.writeText(url); e.target.textContent = "Link copied"; }
+    catch {}
+  });
 </script>
 </body>
 </html>

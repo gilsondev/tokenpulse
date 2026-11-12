@@ -140,13 +140,13 @@ envio da tela em paralelo no segundo núcleo (~30 fps). As ações que a placa p
 
 ## Dispositivos suportados
 
-| Placa | Tela | Toque | Extras | Env do PlatformIO |
-|---|---|---|---|---|
-| [Guition JC3248W535](https://www.atomic14.com/esp32/boards/guition-jc3248w535/) (ESP32-S3 N16R8) | 3,5" IPS 320×480, AXS15231B QSPI | capacitivo | — | `guition-jc3248w535` (padrão) |
-| [ESP32-2432S028R](https://github.com/witnessmenow/ESP32-Cheap-Yellow-Display), a "Cheap Yellow Display" (ESP32 sem PSRAM) | 2,8" 240×320, ST7789 | resistivo | LED RGB na cor da faixa | `cyd-2432s028r` |
-| [Waveshare ESP32-S3-LCD-1.47B](https://www.waveshare.com/wiki/ESP32-S3-LCD-1.47B) | 1,47" 172×320, ST7789 | — (botão BOOT) | IMU (gira sozinha), LED RGB na cor da faixa | `waveshare-s3-lcd-147b` |
-| [Waveshare ESP32-S3-Touch-AMOLED-2.16](https://docs.waveshare.com/ESP32-S3-Touch-AMOLED-2.16) | 2,16" AMOLED 480×480, CO5300 QSPI | capacitivo | IMU (gira sozinha), alto-falante, botões KEY3 e PWR (desliga), descanso contra burn-in | `waveshare-amoled-216` |
-| GeekMagic SmallTV-Ultra (ESP8266, 4 MB, sem PSRAM) | 1,54" 240×240, ST7789 | — | telas que passam sozinhas, dados e OTA pelo WiFi, página de configuração | `smalltv-ultra` |
+| Codinome | Placa | Tela | Toque | Extras | Env do PlatformIO |
+|---|---|---|---|---|---|
+| **Sumaúma** | [Guition JC3248W535](https://www.atomic14.com/esp32/boards/guition-jc3248w535/) (ESP32-S3 N16R8) | 3,5" IPS 320×480, AXS15231B QSPI | capacitivo | — | `guition-jc3248w535` (padrão) |
+| **Ipê** | [ESP32-2432S028R](https://github.com/witnessmenow/ESP32-Cheap-Yellow-Display), a "Cheap Yellow Display" (ESP32 sem PSRAM) | 2,8" 240×320, ST7789 | resistivo | LED RGB na cor da faixa | `cyd-2432s028r` |
+| **Açaí** | [Waveshare ESP32-S3-LCD-1.47B](https://www.waveshare.com/wiki/ESP32-S3-LCD-1.47B) | 1,47" 172×320, ST7789 | — (botão BOOT) | IMU (gira sozinha), LED RGB na cor da faixa | `waveshare-s3-lcd-147b` |
+| **Jabuticaba** | [Waveshare ESP32-S3-Touch-AMOLED-2.16](https://docs.waveshare.com/ESP32-S3-Touch-AMOLED-2.16) | 2,16" AMOLED 480×480, CO5300 QSPI | capacitivo | IMU (gira sozinha), alto-falante, botões KEY3 e PWR (desliga), descanso contra burn-in | `waveshare-amoled-216` |
+| **Caixeta** | GeekMagic SmallTV-Ultra (ESP8266, 4 MB, sem PSRAM) | 1,54" 240×240, ST7789 | — | telas que passam sozinhas, dados e OTA pelo WiFi, página de configuração | `smalltv-ultra` |
 
 **SmallTV-Ultra.** O USB-C dele só alimenta, e o ESP8266 tem ~40 KB de heap: roda uma versão mínima à parte
 ([`firmware/src/smalltv/`](firmware/src/smalltv/)), sem toque. Ela alterna sozinha entre a tela principal (anel
@@ -158,7 +158,7 @@ aprovação segura a tela de sessões e faz o backlight pulsar, e cruzar 70/80/9
 segura a principal por 2 min. O anel e as barras andam com mola, o número de tokens acende quando sobe e a troca
 de tela apaga e acende o backlight.
 
-A configuração fica numa página da própria placa, em `http://tokenpulse-XXXXXX.local` (o nome aparece na tela
+A configuração fica numa página da própria placa, em `http://tokenpulse-<codinome>.local` (o nome aparece na tela
 de espera e pode ser trocado lá, por exemplo para `smalltv.local`): brilho, escurecer à noite, tema, rotação,
 tempo em cada tela, quais telas entram na volta, os alertas e esconder o custo, além de reiniciar e esquecer o WiFi.
 Em `/update` fica a atualização guiada: ela compara a versão da placa com o último release, valida o `.bin`, mostra o
@@ -254,8 +254,9 @@ v0.4.0, com mudanças não commitadas), e o `update.sh` não troca esse firmware
 
 ## Instalação
 
-**Recebeu uma placa já gravada?** No Mac, um comando instala o daemon (o `uv`, se faltar, e o último release em
-`~/.local/share/tokenpulse`) e o liga no login, sem clonar o repositório nem pedir senha:
+**Recebeu uma placa já gravada?** No macOS ou no Linux (Ubuntu, Fedora, Arch), um comando instala o daemon (o `uv`,
+se faltar, e o último release em `~/.local/share/tokenpulse`) e o liga no login, sem clonar o repositório nem pedir
+senha:
 
 ```bash
 curl -fsSL https://gilsondev.github.io/tokenpulse/install.sh | bash
@@ -267,13 +268,18 @@ code para essa página enquanto nenhum daemon falou com ele, e o botão "Prepara
 configuração volta os ajustes ao padrão e esquece o WiFi antes de você entregar a placa. Para remover:
 `curl -fsSL https://gilsondev.github.io/tokenpulse/install.sh | bash -s -- --uninstall`.
 
+**No Linux** o daemon roda como serviço do systemd do usuário (`systemctl --user status tokenpulse`), com o log em
+`~/.local/state/tokenpulse/tokenpulse.log`. A porta USB é do grupo `dialout` (`uucp` no Arch). Se você não está
+nele, o instalador mostra o comando `sudo usermod -aG`; rode e entre de novo na sessão. O SmallTV é achado pelo
+`avahi-browse` (pacote `avahi-utils`). No Linux, tocar numa sessão não traz a janela para a frente.
+
 **Gravar pelo navegador:** na seção [Instalar](https://gilsondev.github.io/tokenpulse/#instalar) do site, escolha a
 placa e clique em "Gravar a <placa> pelo navegador" (Chrome ou Edge no computador, com a placa na USB). Ele grava a imagem completa
 do último release; depois, instale o daemon com o comando acima. O SmallTV-Ultra não grava assim: o USB dele só alimenta.
 
 **Gravar uma placa do zero:**
 
-Requisitos no Mac: [uv](https://docs.astral.sh/uv/) e o Claude Code logado (`claude auth status`). Para
+Requisitos no macOS ou no Linux: [uv](https://docs.astral.sh/uv/) e o Claude Code logado (`claude auth status`). Para
 compilar o firmware em vez de usar o release, também o [PlatformIO](https://platformio.org/)
 (`uv tool install platformio`).
 
@@ -292,8 +298,8 @@ git clone https://github.com/gilsondev/tokenpulse && cd tokenpulse
 ```
 
 O `setup.sh` pausa o daemon se ele já roda, acha a porta da placa, grava o firmware do último release pela
-USB (com o `--chip` certo, via `uvx esptool`) e liga o daemon no login do macOS (log em
-`~/Library/Logs/tokenpulse.log`). Em alguns segundos a placa sai de "sem dados do Mac". A ESP32-2432S028R, de
+USB (com o `--chip` certo, via `uvx esptool`) e liga o daemon no login (log em
+`~/Library/Logs/tokenpulse.log` no macOS, `~/.local/state/tokenpulse/tokenpulse.log` no Linux). Em alguns segundos a placa sai de "sem dados do Mac". A ESP32-2432S028R, de
 touch resistivo, pede na primeira vez quatro toques com a caneta para calibrar. Gravar de novo apaga os ajustes
 e a calibração.
 
@@ -318,13 +324,13 @@ baixa o `tokenpulse-<placa>-ota.bin` das que estão atrás e espera cada uma vol
 2. No painel de fábrica, abra `http://<ip-do-smalltv>/update` e envie o `.bin` (compilado, é o
    `firmware/.pio/build/smalltv-ultra/firmware.bin`). Ele cabe no espaço de OTA do
    firmware de fábrica (~460 KB). Isso substitui o firmware da GeekMagic, que não volta sem o `.bin` dele.
-3. Sem rede salva, a placa abre o WiFi aberto `tokenpulse-XXXXXX` e mostra um QR code que faz o celular entrar
+3. Sem rede salva, a placa abre o WiFi aberto `tokenpulse-<codinome>` e mostra um QR code que faz o celular entrar
    nele. A página de configuração abre sozinha (portal cativo; senão, `http://192.168.4.1`): ela lista as redes que a
    placa enxerga com o sinal de cada uma, pede a senha e diz se conectou, com o endereço `.local`, ou o que deu
    errado (senha, rede fora de alcance ou de 5 GHz). Em ~20 s o daemon acha a placa e a tela sai de "sem dados do Mac".
 
 Depois disso o `update.sh` e o `firmware/flash.sh smalltv-ultra` atualizam pelo WiFi. Não use o WiFi do Mac
-para entrar no `tokenpulse-XXXXXX`: sem cabo de rede, o Mac fica sem internet enquanto estiver nele.
+para entrar no `tokenpulse-<codinome>`: sem cabo de rede, o Mac fica sem internet enquanto estiver nele.
 
 Opcional: aponte o `statusLine` do `~/.claude/settings.json` para `host/statusline.sh` (passe a sua statusline
 atual como argumento para encadear). Ela serve de reserva do % quando a API de uso responde 429.
@@ -360,7 +366,8 @@ Waveshare de 1,47", em OpenSCAD, inspirado no
   ESP32 com USB nativa (S3) de outro projeto não reinicia, mas a porta dela é aberta de 5 em 5 s no primeiro
   minuto depois do plug e de 60 em 60 s depois disso, o que pode atrapalhar uma gravação. Para
   mexer em outro projeto serial sem interferência, pare o daemon:
-  `launchctl bootout gui/$UID/com.gilsondev.tokenpulse` (e `host/install.sh` para religar).
+  `launchctl bootout gui/$UID/com.gilsondev.tokenpulse` (no Linux, `systemctl --user stop tokenpulse`). O
+  `host/install.sh` religa.
 - **Placa com ponte USB-serial plugada antes de ter o firmware:** pelo motivo acima, o daemon não pergunta de
   novo até ela ser replugada. O `flash.sh --usb` reinicia o daemon no fim, então o fluxo normal não esbarra nisso.
 - **Placa não volta depois do OTA:** o `flash.sh` avisa quando ela não se apresenta em 75 s. Um firmware que

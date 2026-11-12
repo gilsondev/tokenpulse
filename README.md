@@ -145,13 +145,13 @@ are a closed list (`focus`, `switch`, `login`): the daemon never runs text comin
 
 ## Supported devices
 
-| Board | Screen | Touch | Extras | PlatformIO env |
-|---|---|---|---|---|
-| [Guition JC3248W535](https://www.atomic14.com/esp32/boards/guition-jc3248w535/) (ESP32-S3 N16R8) | 3.5" IPS 320×480, AXS15231B QSPI | capacitive | — | `guition-jc3248w535` (default) |
-| [ESP32-2432S028R](https://github.com/witnessmenow/ESP32-Cheap-Yellow-Display), the "Cheap Yellow Display" (ESP32 without PSRAM) | 2.8" 240×320, ST7789 | resistive | RGB LED in the band color | `cyd-2432s028r` |
-| [Waveshare ESP32-S3-LCD-1.47B](https://www.waveshare.com/wiki/ESP32-S3-LCD-1.47B) | 1.47" 172×320, ST7789 | — (BOOT button) | IMU (auto-rotates), RGB LED in the band color | `waveshare-s3-lcd-147b` |
-| [Waveshare ESP32-S3-Touch-AMOLED-2.16](https://docs.waveshare.com/ESP32-S3-Touch-AMOLED-2.16) | 2.16" AMOLED 480×480, CO5300 QSPI | capacitive | IMU (auto-rotates), speaker, KEY3 and PWR buttons (power off), burn-in screensaver | `waveshare-amoled-216` |
-| GeekMagic SmallTV-Ultra (ESP8266, 4 MB, no PSRAM) | 1.54" 240×240, ST7789 | — | screens that cycle by themselves, data and OTA over WiFi, configuration page | `smalltv-ultra` |
+| Codename | Board | Screen | Touch | Extras | PlatformIO env |
+|---|---|---|---|---|---|
+| **Sumaúma** | [Guition JC3248W535](https://www.atomic14.com/esp32/boards/guition-jc3248w535/) (ESP32-S3 N16R8) | 3.5" IPS 320×480, AXS15231B QSPI | capacitive | — | `guition-jc3248w535` (default) |
+| **Ipê** | [ESP32-2432S028R](https://github.com/witnessmenow/ESP32-Cheap-Yellow-Display), the "Cheap Yellow Display" (ESP32 without PSRAM) | 2.8" 240×320, ST7789 | resistive | RGB LED in the band color | `cyd-2432s028r` |
+| **Açaí** | [Waveshare ESP32-S3-LCD-1.47B](https://www.waveshare.com/wiki/ESP32-S3-LCD-1.47B) | 1.47" 172×320, ST7789 | — (BOOT button) | IMU (auto-rotates), RGB LED in the band color | `waveshare-s3-lcd-147b` |
+| **Jabuticaba** | [Waveshare ESP32-S3-Touch-AMOLED-2.16](https://docs.waveshare.com/ESP32-S3-Touch-AMOLED-2.16) | 2.16" AMOLED 480×480, CO5300 QSPI | capacitive | IMU (auto-rotates), speaker, KEY3 and PWR buttons (power off), burn-in screensaver | `waveshare-amoled-216` |
+| **Caixeta** | GeekMagic SmallTV-Ultra (ESP8266, 4 MB, no PSRAM) | 1.54" 240×240, ST7789 | — | screens that cycle by themselves, data and OTA over WiFi, configuration page | `smalltv-ultra` |
 
 **SmallTV-Ultra.** Its USB-C only powers the board, and the ESP8266 has ~40 KB of heap: it runs a separate
 minimal build ([`firmware/src/smalltv/`](firmware/src/smalltv/)), without touch. It cycles by itself through
@@ -163,7 +163,7 @@ session asking for approval holds the sessions screen and makes the backlight pu
 the 5-hour window blinks the ring and holds the main screen for 2 min. The ring and bars move with springs, the
 token count lights up when it rises, and a screen change fades the backlight out and in.
 
-Configuration lives on a page on the board itself, at `http://tokenpulse-XXXXXX.local` (the name shows on the
+Configuration lives on a page on the board itself, at `http://tokenpulse-<codename>.local` (the name shows on the
 waiting screen and can be changed there, for example to `smalltv.local`): brightness, night dimming, theme,
 rotation, time on each screen, which screens join the rotation, the alerts and hiding the cost, plus restart
 and forget WiFi. `/update` has the guided update: it compares the board's version with the latest release,
@@ -265,9 +265,9 @@ changes), and `update.sh` doesn't replace that firmware with the release without
 
 ## Installation
 
-**Got a board that is already flashed?** On the Mac, one command installs the daemon (`uv`, if missing, and the
-latest release in `~/.local/share/tokenpulse`) and starts it at login, without cloning the repository or asking
-for a password:
+**Got a board that is already flashed?** On macOS or Linux (Ubuntu, Fedora, Arch), one command installs the daemon
+(`uv`, if missing, and the latest release in `~/.local/share/tokenpulse`) and starts it at login, without cloning
+the repository or asking for a password:
 
 ```bash
 curl -fsSL https://gilsondev.github.io/tokenpulse/install.sh | bash
@@ -280,6 +280,12 @@ handover" button on the configuration page resets the settings and forgets the W
 over. To remove:
 `curl -fsSL https://gilsondev.github.io/tokenpulse/install.sh | bash -s -- --uninstall`.
 
+**On Linux** the daemon runs as a systemd user service (`systemctl --user status tokenpulse`), with the log in
+`~/.local/state/tokenpulse/tokenpulse.log`. The USB port belongs to the `dialout` group (`uucp` on Arch): if you
+are not in it, the installer prints the `sudo usermod -aG` command, and you log out and back in once. The
+SmallTV is found through `avahi-browse` (package `avahi-utils`). Tapping a session doesn't bring a window to
+the front on Linux.
+
 **Flash from the browser:** in the site's [Install](https://gilsondev.github.io/tokenpulse/en/#install) section,
 pick the board and click "Flash the <board> from the browser" (Chrome or Edge on a computer, with the board on USB). It flashes
 the latest release's full image; then install the daemon with the command above. The SmallTV-Ultra can't be flashed
@@ -287,7 +293,7 @@ this way: its USB only powers the board.
 
 **Flash a board from scratch:**
 
-Requirements on the Mac: [uv](https://docs.astral.sh/uv/) and Claude Code logged in (`claude auth status`). To
+Requirements on macOS or Linux: [uv](https://docs.astral.sh/uv/) and Claude Code logged in (`claude auth status`). To
 build the firmware instead of using the release, also [PlatformIO](https://platformio.org/)
 (`uv tool install platformio`).
 
@@ -306,8 +312,8 @@ git clone https://github.com/gilsondev/tokenpulse && cd tokenpulse
 ```
 
 `setup.sh` pauses the daemon if it is already running, finds the board's port, flashes the latest release's
-firmware over USB (with the right `--chip`, via `uvx esptool`) and starts the daemon at macOS login (log in
-`~/Library/Logs/tokenpulse.log`). Within a few seconds the board leaves "sem dados do Mac" (no data from the
+firmware over USB (with the right `--chip`, via `uvx esptool`) and starts the daemon at login (log in
+`~/Library/Logs/tokenpulse.log` on macOS, `~/.local/state/tokenpulse/tokenpulse.log` on Linux). Within a few seconds the board leaves "sem dados do Mac" (no data from the
 Mac). The ESP32-2432S028R, with resistive touch, asks the first time for four stylus taps to calibrate.
 Flashing again erases the settings and the calibration.
 
@@ -333,14 +339,14 @@ downloads `tokenpulse-<board>-ota.bin` for the ones behind and waits for each to
 2. In the factory panel, open `http://<smalltv-ip>/update` and upload the `.bin` (when built, it is
    `firmware/.pio/build/smalltv-ultra/firmware.bin`). It fits in the factory firmware's OTA space (~460 KB).
    This replaces the GeekMagic firmware, which doesn't come back without its own `.bin`.
-3. With no saved network, the board opens the open WiFi `tokenpulse-XXXXXX` and shows a QR code that makes the
+3. With no saved network, the board opens the open WiFi `tokenpulse-<codename>` and shows a QR code that makes the
    phone join it. The configuration page opens by itself (captive portal; otherwise, `http://192.168.4.1`): it
    lists the networks the board sees with each one's signal, asks for the password and says whether it
    connected, with the `.local` address, or what went wrong (password, network out of range or 5 GHz). In
    ~20 s the daemon finds the board and the screen leaves "sem dados do Mac".
 
 After that, `update.sh` and `firmware/flash.sh smalltv-ultra` update over WiFi. Don't use the Mac's WiFi to
-join `tokenpulse-XXXXXX`: without a network cable, the Mac has no internet while it is on it.
+join `tokenpulse-<codename>`: without a network cable, the Mac has no internet while it is on it.
 
 Optional: point the `statusLine` in `~/.claude/settings.json` to `host/statusline.sh` (pass your current
 statusline as an argument to chain it). It serves as a fallback for the % when the usage API answers 429.
@@ -376,8 +382,8 @@ Waveshare, in OpenSCAD, inspired by the
   the port appears and when the daemon restarts (`install.sh`, end of `flash.sh --usb`). A native-USB ESP32
   (S3) from another project doesn't reset, but its port is opened every 5 s during the first minute after
   plugging and every 60 s after that, which can get in the way of flashing. To work on another serial project
-  without interference, stop the daemon: `launchctl bootout gui/$UID/com.gilsondev.tokenpulse` (and
-  `host/install.sh` to start it again).
+  without interference, stop the daemon: `launchctl bootout gui/$UID/com.gilsondev.tokenpulse` (on Linux,
+  `systemctl --user stop tokenpulse`; `host/install.sh` starts it again).
 - **Board with a USB-serial bridge plugged in before it has the firmware:** for the reason above, the daemon
   doesn't ask again until it is replugged. `flash.sh --usb` restarts the daemon at the end, so the normal flow
   doesn't hit this.
