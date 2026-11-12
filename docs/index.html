@@ -122,7 +122,11 @@
   .pick button[aria-pressed="true"] { background: var(--accent); color: #fff; font-weight: 600; }
   /* itens de grid encolhem abaixo do conteúdo: sem isto, um comando longo alarga a página no celular */
   .split > *, .steps, .steps li { min-width: 0; }
-  #instalar .steps { margin-top: 28px; }
+  #instalar .steps, #install .steps { margin-top: 28px; }
+  .flash { margin-top: 28px; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 20px; }
+  .flash p { color: var(--muted); margin: 6px 0 14px; }
+  .flash .hint { font-size: 13px; color: var(--dim); margin: 14px 0 0; }
+  .alt { margin: 32px 0 0; }
   .model { margin-top: 24px; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 24px; }
   .model img { display: block; max-width: 100%; margin: 0 auto 24px; border-radius: 10px; }
   .model h3 { margin: 0 0 12px; }
@@ -370,6 +374,17 @@ flowchart LR
       <div class="callout" data-only="waveshare-amoled-216">Ligue a AMOLED 2,16" pela USB-C na primeira vez: o Mac aprende o nome dela e, quando ela sai do cabo, continua mandando os dados por Bluetooth. Segurar o botão PWR por 2 s desliga a placa.</div>
       <div class="callout" data-only="smalltv-ultra">O SmallTV-Ultra não tem USB de dados: tudo vai pelo WiFi, e o <code>setup.sh</code> não serve para ele. O firmware de fábrica da GeekMagic é substituído e só volta com o <code>.bin</code> dele.</div>
     </div>
+    <div class="flash" data-not="smalltv-ultra">
+      <h3>Mais fácil: grave pelo navegador</h3>
+      <p>No Chrome ou no Edge do computador, com a placa plugada na USB, o botão grava o firmware do último release. Depois, instale o daemon no Mac com um comando: <a href="comecar/">veja como começar</a>.</p>
+      <esp-web-install-button manifest="firmware/guition-jc3248w535.json">
+        <button slot="activate" class="btn primary" type="button">Gravar pelo navegador</button>
+        <span slot="unsupported">Este navegador não grava pela USB. Use o Chrome ou o Edge no computador, ou os passos abaixo.</span>
+        <span slot="not-allowed">A gravação pelo navegador só funciona em HTTPS.</span>
+      </esp-web-install-button>
+      <p class="hint">Gravar apaga os ajustes da placa. Se o tokenpulse já roda neste Mac, ele ocupa a porta: pare com <code>launchctl bootout gui/$UID/com.gilsondev.tokenpulse</code> e religue depois com o mesmo comando de instalação.</p>
+    </div>
+    <h3 class="alt" data-not="smalltv-ultra">Ou pelo Terminal</h3>
     <ol class="steps">
       <li><h3>Baixe o projeto</h3><pre><code>git clone https://github.com/gilsondev/tokenpulse
 cd tokenpulse</code></pre></li>
@@ -435,6 +450,7 @@ cd tokenpulse</code></pre></li>
     document.querySelectorAll(".env").forEach(e => e.textContent = b);
     document.querySelectorAll(".chip").forEach(e => e.textContent = BOARDS[b].chip);
     document.querySelectorAll(".ota").forEach(e => e.textContent = BOARDS[b].ota);
+    document.querySelectorAll("esp-web-install-button").forEach(e => e.setAttribute("manifest", `firmware/${b}.json`));
     document.querySelectorAll("[data-only]").forEach(e => e.classList.toggle("on", e.dataset.only === b));
     document.querySelectorAll("[data-not]").forEach(e => e.classList.toggle("off", e.dataset.not === b));
     if (remember) try { localStorage.setItem("placa", b); } catch (e) {}
@@ -444,6 +460,7 @@ cd tokenpulse</code></pre></li>
   try { saved = localStorage.getItem("placa"); } catch (e) {}
   if (BOARDS[saved]) choose(saved, false);
 </script>
+<script type="module" src="https://unpkg.com/esp-web-tools@10.4.0/dist/web/install-button.js?module"></script>
 <script type="module">
   import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs";
   const dark = matchMedia("(prefers-color-scheme: dark)").matches;

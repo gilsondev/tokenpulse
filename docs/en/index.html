@@ -121,7 +121,11 @@
   .pick button[aria-pressed="true"] { background: var(--accent); color: #fff; font-weight: 600; }
   /* itens de grid encolhem abaixo do conteúdo: sem isto, um comando longo alarga a página no celular */
   .split > *, .steps, .steps li { min-width: 0; }
-  #instalar .steps { margin-top: 28px; }
+  #instalar .steps, #install .steps { margin-top: 28px; }
+  .flash { margin-top: 28px; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 20px; }
+  .flash p { color: var(--muted); margin: 6px 0 14px; }
+  .flash .hint { font-size: 13px; color: var(--dim); margin: 14px 0 0; }
+  .alt { margin: 32px 0 0; }
   .model { margin-top: 24px; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 24px; }
   .model img { display: block; max-width: 100%; margin: 0 auto 24px; border-radius: 10px; }
   .model h3 { margin: 0 0 12px; }
@@ -369,6 +373,17 @@ flowchart LR
       <div class="callout" data-only="waveshare-amoled-216">Connect the AMOLED 2.16" over USB-C the first time: the Mac learns its name and, when it leaves the cable, keeps sending data over Bluetooth. Holding the PWR button for 2 s powers the board off.</div>
       <div class="callout" data-only="smalltv-ultra">The SmallTV-Ultra has no data USB: everything goes over WiFi, and <code>setup.sh</code> doesn't work for it. The GeekMagic factory firmware is replaced and only comes back with its own <code>.bin</code>.</div>
     </div>
+    <div class="flash" data-not="smalltv-ultra">
+      <h3>Easiest: flash from the browser</h3>
+      <p>In Chrome or Edge on a computer, with the board plugged into USB, the button flashes the latest release's firmware. Then install the daemon on the Mac with one command: <a href="start/">see how to start</a>.</p>
+      <esp-web-install-button manifest="../firmware/guition-jc3248w535.json">
+        <button slot="activate" class="btn primary" type="button">Flash from the browser</button>
+        <span slot="unsupported">This browser can't flash over USB. Use Chrome or Edge on a computer, or the steps below.</span>
+        <span slot="not-allowed">Flashing from the browser only works over HTTPS.</span>
+      </esp-web-install-button>
+      <p class="hint">Flashing erases the board's settings. If tokenpulse already runs on this Mac, it holds the port: stop it with <code>launchctl bootout gui/$UID/com.gilsondev.tokenpulse</code> and start it again later with the same install command.</p>
+    </div>
+    <h3 class="alt" data-not="smalltv-ultra">Or from the Terminal</h3>
     <ol class="steps">
       <li><h3>Download the project</h3><pre><code>git clone https://github.com/gilsondev/tokenpulse
 cd tokenpulse</code></pre></li>
@@ -434,6 +449,7 @@ cd tokenpulse</code></pre></li>
     document.querySelectorAll(".env").forEach(e => e.textContent = b);
     document.querySelectorAll(".chip").forEach(e => e.textContent = BOARDS[b].chip);
     document.querySelectorAll(".ota").forEach(e => e.textContent = BOARDS[b].ota);
+    document.querySelectorAll("esp-web-install-button").forEach(e => e.setAttribute("manifest", `../firmware/${b}.json`));
     document.querySelectorAll("[data-only]").forEach(e => e.classList.toggle("on", e.dataset.only === b));
     document.querySelectorAll("[data-not]").forEach(e => e.classList.toggle("off", e.dataset.not === b));
     if (remember) try { localStorage.setItem("placa", b); } catch (e) {}
@@ -443,6 +459,7 @@ cd tokenpulse</code></pre></li>
   try { saved = localStorage.getItem("placa"); } catch (e) {}
   if (BOARDS[saved]) choose(saved, false);
 </script>
+<script type="module" src="https://unpkg.com/esp-web-tools@10.4.0/dist/web/install-button.js?module"></script>
 <script type="module">
   import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs";
   const dark = matchMedia("(prefers-color-scheme: dark)").matches;

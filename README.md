@@ -280,6 +280,11 @@ handover" button on the configuration page resets the settings and forgets the W
 over. To remove:
 `curl -fsSL https://gilsondev.github.io/tokenpulse/install.sh | bash -s -- --uninstall`.
 
+**Flash from the browser:** in the site's [Install](https://gilsondev.github.io/tokenpulse/en/#install) section,
+pick the board and click "Flash from the browser" (Chrome or Edge on a computer, with the board on USB). It flashes
+the latest release's full image; then install the daemon with the command above. The SmallTV-Ultra can't be flashed
+this way: its USB only powers the board.
+
 **Flash a board from scratch:**
 
 Requirements on the Mac: [uv](https://docs.astral.sh/uv/) and Claude Code logged in (`claude auth status`). To

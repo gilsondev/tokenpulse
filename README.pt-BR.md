@@ -267,6 +267,10 @@ code para essa página enquanto nenhum daemon falou com ele, e o botão "Prepara
 configuração volta os ajustes ao padrão e esquece o WiFi antes de você entregar a placa. Para remover:
 `curl -fsSL https://gilsondev.github.io/tokenpulse/install.sh | bash -s -- --uninstall`.
 
+**Gravar pelo navegador:** na seção [Instalar](https://gilsondev.github.io/tokenpulse/#instalar) do site, escolha a
+placa e clique em "Gravar pelo navegador" (Chrome ou Edge no computador, com a placa na USB). Ele grava a imagem completa
+do último release; depois, instale o daemon com o comando acima. O SmallTV-Ultra não grava assim: o USB dele só alimenta.
+
 **Gravar uma placa do zero:**
 
 Requisitos no Mac: [uv](https://docs.astral.sh/uv/) e o Claude Code logado (`claude auth status`). Para

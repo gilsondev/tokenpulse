@@ -19,3 +19,4 @@ hardware/stand/berco-encaixe.scad
 
 # prints com dados reais, só para uso interno
 prints-slack/
+docs/firmware/

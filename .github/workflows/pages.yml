@@ -1,0 +1,59 @@
+# Publica o site (docs/) no GitHub Pages com a imagem completa de cada placa do último release em docs/firmware/,
+# ao lado do manifesto do ESP Web Tools: a gravação pelo navegador lê o .bin do mesmo site, porque o download
+# de release do GitHub não libera CORS. Roda em push no docs/, depois de cada release (chamado pelo firmware.yml)
+# e à mão.
+name: pages
+
+on:
+  push:
+    branches: [main]
+    paths: ["docs/**", ".github/workflows/pages.yml"]
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Imagens e manifestos do último release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p docs/firmware
+          tag=$(gh release view --repo "${{ github.repository }}" --json tagName -q .tagName)
+          gh release download "$tag" --repo "${{ github.repository }}" --pattern '*-factory.bin' --dir docs/firmware
+          python3 - "$tag" <<'EOF'
+          import json, sys
+          tag = sys.argv[1]
+          boards = {
+              "guition-jc3248w535": ("Guition JC3248W535", "ESP32-S3"),
+              "cyd-2432s028r": ("ESP32-2432S028R", "ESP32"),
+              "waveshare-s3-lcd-147b": ("Waveshare ESP32-S3-LCD-1.47B", "ESP32-S3"),
+              "waveshare-amoled-216": ("Waveshare AMOLED 2.16", "ESP32-S3"),
+          }
+          for board, (name, chip) in boards.items():
+              manifest = {"name": f"tokenpulse · {name}", "version": tag, "new_install_prompt_erase": True,
+                          "builds": [{"chipFamily": chip,
+                                      "parts": [{"path": f"tokenpulse-{board}-factory.bin", "offset": 0}]}]}
+              json.dump(manifest, open(f"docs/firmware/{board}.json", "w"), indent=2)
+          EOF
+          ls -la docs/firmware
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs
+      - id: deploy
+        uses: actions/deploy-pages@v4

@@ -88,6 +88,9 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # as notas saem dos commits desde a tag anterior
       - uses: actions/download-artifact@v4
         with:
           path: dist
@@ -99,5 +102,16 @@ jobs:
         run: |
           # --target cria a tag no commit deste build quando ela ainda não existe (release automático).
           # Tag criada pelo GITHUB_TOKEN não dispara outro workflow, então não há build repetido.
+          python3 .github/scripts/next_version.py --notes "$TAG" > notes.md
           gh release create "$TAG" dist/* --repo "${{ github.repository }}" --target "${{ github.sha }}" \
-            --title "$TAG" --generate-notes
+            --title "$TAG" --notes-file notes.md
+
+  # o site serve a imagem nova para a gravação pelo navegador; o release criado pelo GITHUB_TOKEN não
+  # dispara outro workflow, então o Pages é chamado daqui
+  pages:
+    needs: release
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    uses: ./.github/workflows/pages.yml
