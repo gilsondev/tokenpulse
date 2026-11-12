@@ -10,7 +10,8 @@ constexpr int COUNT = 3;  // telas pequenas: principal, modelos, projetos (as gr
 void bootSplash();
 void installPreview();  // mostra a tela do QR de instalação por 5 s, para screenshot
 void offlinePreview();
-void attentionPreview();  // o destaque da primeira sessão que espera você, para screenshot
+void attentionPreview();
+void mcAlertPreview();    // o aviso do Multica que está no frame, para screenshot  // o destaque da primeira sessão que espera você, para screenshot
 void shuttingDown(uint32_t heldMs);  // PWR segurado há heldMs (0: soltou): a tela de desligando  // mostra a tela de sem dados por 5 s, para screenshot
 void holdFor(uint32_t ms);  // não redesenha por `ms` (o que está na tela fica, para screenshot)
 void render();             // desenha a tela atual (ou a de espera) e atualiza o LED de status

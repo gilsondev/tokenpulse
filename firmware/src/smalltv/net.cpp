@@ -38,7 +38,7 @@ void startAp() {
 const char* hostName() { return config::v.host[0] ? config::v.host : ap; }
 
 // Provedores mora no daemon: a página guarda o pedido aqui e a resposta do próximo /frame o entrega
-String pendingProv;
+String pendingAct;  // a ação para o daemon ("prov both", "mc 0"...), na resposta do próximo frame
 
 void handleState() {
   JsonDocument d;
@@ -57,8 +57,10 @@ void handleState() {
   d["apName"] = ap;
   d["safe"] = app::safe;
   d["cxok"] = app::frame["cxok"] | 0;  // o Mac tem o Codex: a página mostra o ajuste Provedores
-  d["prov"] = pendingProv.length() ? pendingProv : String((const char*)(app::frame["prov"] | "auto"));
-  if (!pendingProv.length() && !app::frame["pask"].isNull()) d["pask"] = app::frame["pask"];  // primeiro uso: destaque
+  const bool provPending = pendingAct.startsWith("prov ");
+  d["prov"] = provPending ? pendingAct.substring(5) : String((const char*)(app::frame["prov"] | "auto"));
+  if (!provPending && !app::frame["pask"].isNull()) d["pask"] = app::frame["pask"];  // primeiro uso: destaque
+  if (!app::frame["mcs"].isNull()) d["mcs"] = app::frame["mcs"];  // o Mac tem o Multica: a página mostra o ajuste
   JsonObject c = d["cfg"].to<JsonObject>();
   const auto& v = config::v;
   c["bright"] = v.bright, c["night"] = v.night, c["theme"] = v.theme, c["rotation"] = v.rotation;
@@ -77,8 +79,10 @@ void handleConfig() {
   if (server.hasArg("prov")) {
     const String m = server.arg("prov");
     if (m != "auto" && m != "claude" && m != "codex" && m != "both") return server.send(400, "text/plain", "Provedor inválido.");
-    pendingProv = m;
+    pendingAct = "prov " + m;
   }
+  for (const char* k : {"mc", "mcws", "mcme"})
+    if (server.hasArg(k)) pendingAct = String(k) + " " + constrain(server.arg(k).toInt(), 0, 4);
   if (server.hasArg("host")) {
     String h = server.arg("host");
     h.trim();
@@ -181,9 +185,9 @@ void handleFrame() {
   app::frame = std::move(next);
   app::lastFrameMs = millis();
   fresh = true;
-  if (!pendingProv.length()) return server.send(204);
-  server.send(200, "application/json", "{\"act\":\"prov " + pendingProv + "\"}");
-  pendingProv = "";
+  if (!pendingAct.length()) return server.send(204);
+  server.send(200, "application/json", "{\"act\":\"" + pendingAct + "\"}");
+  pendingAct = "";
 }
 
 }  // namespace

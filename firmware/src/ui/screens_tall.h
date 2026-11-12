@@ -11,11 +11,15 @@ namespace screens::tall {
 constexpr int PAGES = 4;  // principal, sessões, modelos, histórico; os ajustes abrem pela engrenagem
 inline bool codexMain = false;  // a principal mostrada é a do Codex (bloco "cx" do frame)
 inline bool codexOnly() { return (int)(app::frame["cxo"] | 0); }  // ajuste Provedores em "Só Codex"
+inline bool multiShown = false;  // a página do Multica (bloco "mc"), uma face a mais das sessões
 
 void drawWaiting();
 void drawShutdown(float p);  // PWR segurado: p de 0 a 1 até a PMU desligar
 void drawAttention(int r, uint32_t ageMs);  // a sessão (índice em sess.rows) que passou a esperar você
 bool attentionCenter(int x, int y);           // o toque caiu no botão "abrir no Mac" do destaque
+void drawMulti(bool live, int view, const char* issue);  // view 0 a página, 1 os projetos, 2 a issue do agente
+int multiTap(int x, int y);  // na página: o agente tocado (índice em mc.a), -2 a linha dos projetos, -1 nada
+void drawMcAlert(uint32_t ageMs);  // o aviso do Multica (bloco "mca"): issue em revisão ou run que falhou
 void drawProvAsk();                          // primeiro uso com o Codex no Mac: quais provedores mostrar
 const char* provAskTap(int x, int y);        // o modo escolhido no toque ("both", "claude", "codex", "auto"), ou nullptr
 void drawSaver();   // OLED parada: só o relógio, em cinza sobre preto, mudando de lugar a cada minuto

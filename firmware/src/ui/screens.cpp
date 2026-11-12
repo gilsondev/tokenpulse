@@ -65,6 +65,27 @@ bool mainStep(int dir) {
   return true;
 }
 
+// O Multica é uma face a mais da página de sessões, depois da última página da lista de workspaces: as outras
+// páginas mantêm os números de sempre. Dentro dele, a página, os projetos (view 1) ou a issue de um agente (view 2).
+int mcFace = 0, mcView = 0;
+String mcIssue;  // a issue aberta, pelo identificador: o daemon reordena os agentes a cada leitura
+bool hasMulti() { return !app::frame["mc"].isNull(); }
+bool mcIssueLive() {
+  for (JsonArrayConst a : app::frame["mc"]["a"].as<JsonArrayConst>())
+    if (mcIssue == (a[2] | "")) return true;
+  return false;
+}
+bool multiStep(int dir) {
+  if (!gfx::full() || page != 1 || sessWs >= 0 || !hasMulti()) return false;
+  if (dir > 0 && !mcFace && sessScroll >= tall::pagesOf(-1) - 1) mcFace = 1, mcView = 0;
+  else if (dir < 0 && mcFace && mcView) mcView = 0;
+  else if (dir < 0 && mcFace) mcFace = 0;
+  else return false;
+  gfx::slide(-dir);
+  anim::reset();
+  return true;
+}
+
 // LED de status na cor da faixa da janela de 5h, sempre respirando; acima de 90% respira mais rápido.
 // Com sessão pedindo aprovação, pisca vermelho no lugar da faixa.
 void updateLed() {
@@ -298,7 +319,7 @@ void drawProjects(bool live) {
 }
 
 void go(int to, int dir) {
-  codexFace = 0;
+  codexFace = mcFace = mcView = 0;
   detail = histSel = -1;
   detailName = sessWsName = "";
   about = 0;
@@ -412,6 +433,9 @@ bool calibrateNative() {
   return true;
 }
 
+// Automação não espera ninguém: o Agent SDK e as runs do Multica (o aviso delas é o do próprio Multica).
+bool automated(JsonArrayConst r) { return !strcmp(r[1] | "", "SDK") || !strcmp(r[1] | "", "Multica"); }
+
 // Sessão nova pedindo aprovação: nas telas cheias abre o workspace dela, e o power pulsa o brilho por 20 s.
 // A tela não fica presa como no SmallTV: com toque, a pessoa navega para onde quiser.
 void checkApproval() {
@@ -423,7 +447,7 @@ void checkApproval() {
   // a regra do SmallTV: só conta quem espera há até 1 h, e automação do Agent SDK não espera ninguém
   for (JsonArrayConst r : app::frame["sess"]["rows"].as<JsonArrayConst>()) {
     const int mins = r[4] | -1;
-    if (strcmp(r[2] | "", "block") || mins < 0 || mins > 60 || !strcmp(r[1] | "", "SDK")) continue;
+    if (strcmp(r[2] | "", "block") || mins < 0 || mins > 60 || automated(r)) continue;
     if (n++ == 0) ws = r[5] | -1;
   }
   app::blocks = n;
@@ -467,6 +491,29 @@ void attentionPreview() {  // a primeira sessão que espera você, em destaque, 
     }
 }
 
+// Aviso do Multica: o daemon manda "mca" por 60 s quando uma issue vai para revisão ou uma run falha; a placa
+// mostra uma vez cada um (pelo id), com o som e o destaque das sessões.
+int mcaSeen = -1;  // -1 até o primeiro frame: o aviso que já estava lá no boot não toca
+uint32_t mcaMs = 0;
+bool mcaOpen = false;
+void checkMcAlert() {
+  const int id = app::frame["mca"]["id"] | 0;
+  if (!app::hasData() || id == mcaSeen) return;
+  const bool first = mcaSeen < 0;
+  mcaSeen = id;
+  if (first || !id) return;
+  const auto& w = settings::web;
+  if (board::PROFILE.speaker && w.alerts & 2 && !app::muted() && w.sound < sound::COUNT) board::play(w.sound, settings::volumePct(), 0, 2);
+  if (gfx::full() && w.alerts & 1) mcaOpen = true, mcaMs = millis(), power::wake();
+}
+void mcAlertPreview() {
+  if (!app::frame["mca"].isNull()) mcaOpen = true, mcaMs = millis(), power::wake();
+}
+bool mcAlertOpen() {
+  if (mcaOpen && (millis() - mcaMs > 60000 || app::frame["mca"].isNull())) mcaOpen = false;
+  return mcaOpen;
+}
+
 void checkAttention() {
   static uint32_t seenFrame = 0;
   static String waiting;  // "id,id," de quem já esperava no frame anterior
@@ -480,7 +527,7 @@ void checkAttention() {
     const char* st = r[2] | "";
     const int mins = r[4] | -1;
     const bool block = !strcmp(st, "block");
-    if (block && mins >= 0 && mins <= 60 && strcmp(r[1] | "", "SDK")) {
+    if (block && mins >= 0 && mins <= 60 && !automated(r)) {
       const String sid = r[6] | "";
       now += sid + ",";
       if (!first && waiting.indexOf(sid + ",") < 0 && pick < 0) pick = i, pickBlock = true;
@@ -584,6 +631,7 @@ void webDone() {
 void render() {
   checkApproval();
   checkAttention();
+  checkMcAlert();
   checkWindowSounds();
   checkDeviceSounds();
   autoTurn();
@@ -596,6 +644,7 @@ void render() {
   }
   if (const int r = attentionRow(); r >= 0 && gfx::full() && !settingsOpen && app::hasData())
     return gfx::frame([r] { tall::drawAttention(r, millis() - attnMs); });
+  if (mcAlertOpen() && !settingsOpen) return gfx::frame([] { tall::drawMcAlert(millis() - mcaMs); });
   if (askOpen() && !settingsOpen && app::hasData()) return gfx::frame([] { gfx::full() ? tall::drawProvAsk() : drawAsk(); });
   if (board::PROFILE.oled && power::idle()) return gfx::frame(tall::drawSaver);
   const bool dark = settings::v.theme == 0 ? (bool)(app::frame["dark"] | true) : settings::v.theme == 2;
@@ -609,7 +658,10 @@ void render() {
     return gfx::frame([] { gfx::full() ? tall::drawWaiting() : drawWaiting(); });
   }
   if (!hasCodex()) codexFace = 0;  // o Codex saiu do frame com a face dele na tela
+  if (!hasMulti()) mcFace = 0;
+  if (mcView == 2 && !mcIssueLive()) mcView = 0;  // a run da issue aberta acabou
   tall::codexMain = page == 0 && codexFace;
+  tall::multiShown = page == 1 && mcFace;
   anim::step(tall::codexMain ? app::frame["cx"].as<JsonVariantConst>() : app::frame.as<JsonVariantConst>());
   updateLed();
   const bool live = app::live();
@@ -622,7 +674,8 @@ void render() {
       else if (about) tall::drawAbout(live, about == 2);
       else tall::drawSettings(live);
     } else if (gfx::full()) {
-      if (page == 1) tall::drawSessions(live, page, sessWs, sessScroll);
+      if (page == 1 && mcFace) tall::drawMulti(live, mcView, mcIssue.c_str());
+      else if (page == 1) tall::drawSessions(live, page, sessWs, sessScroll);
       else if (page == 2 && detail >= 0) tall::drawModelDetail(live, page, detail);
       else if (page == 2) tall::drawModels(live, page);
       else if (page == 3) tall::drawHistory(live, page, histSel);
@@ -641,7 +694,7 @@ void closeWs() {
   anim::reset();
 }
 bool sessionStep(int dir) {
-  if (!gfx::full() || page != 1) return false;
+  if (!gfx::full() || page != 1 || mcFace) return false;
   const int to = sessScroll + dir;
   if (sessWs >= 0 && to < 0) return closeWs(), true;
   if (to < 0 || to >= tall::pagesOf(sessWs)) return sessWs >= 0;  // dentro do workspace, a última página para
@@ -653,14 +706,15 @@ bool sessionStep(int dir) {
 void next() {
   if (askOpen() && !gfx::full()) return answerAsk("auto");  // compacta: o BOOT responde "automático"
   if (attentionRow() >= 0) return dismissAttention();  // o botão fecha o destaque
-  if (!sessionStep(1) && !mainStep(1)) go((page + 1) % count(), -1);
+  if (mcaOpen) return void(mcaOpen = false);
+  if (!sessionStep(1) && !multiStep(1) && !mainStep(1)) go((page + 1) % count(), -1);
 }
 void prev() {
-  if (sessionStep(-1) || mainStep(-1)) return;
+  if (sessionStep(-1) || multiStep(-1) || mainStep(-1)) return;
   const int to = (page + count() - 1) % count();
   go(to, 1);
   if (to == 0 && hasCodex()) codexFace = 1;  // voltando das sessões: a principal do Codex, a mais próxima
-  if (to == 1 && gfx::full()) sessScroll = tall::pagesOf(-1) - 1;  // voltando dos modelos: a última página
+  if (to == 1 && gfx::full()) sessScroll = tall::pagesOf(-1) - 1, mcFace = hasMulti();  // voltando dos modelos: a última
 }
 
 void scroll(int dir) {  // arrastar na vertical rola o Sobre ou passa as páginas de sessões
@@ -673,6 +727,14 @@ void tap(int x, int y) {
   if (const int r = attentionRow(); r >= 0 && gfx::full()) {  // destaque: o botão traz a sessão, o resto fecha
     if (tall::attentionCenter(x, y)) tall::focusRow(r);
     return dismissAttention();
+  }
+  if (mcaOpen) {  // aviso do Multica: o botão abre a issue no navegador do Mac, o resto fecha
+    if (tall::attentionCenter(x, y)) {
+      char cmd[40];
+      snprintf(cmd, sizeof cmd, "ACTION mcopen %s", (const char*)(app::frame["mca"]["i"] | ""));
+      hostlink::action(cmd);
+    }
+    return void(mcaOpen = false);
   }
   if (askOpen() && gfx::full() && app::hasData()) {  // primeiro uso: só as opções respondem
     if (const char* mode = tall::provAskTap(x, y)) answerAsk(mode);
@@ -727,6 +789,19 @@ void tap(int x, int y) {
     gfx::slide(m >= 0 ? -1 : 1);
     detail = m;
     detailName = m >= 0 ? String(app::frame["mods"][m][0] | "") : "";
+    anim::reset();
+    return;
+  }
+  if (page == 1 && mcFace) {
+    if (mcView) {  // projetos ou issue: o toque volta para a página
+      mcView = 0, gfx::slide(1), anim::reset();
+      return;
+    }
+    const int t = tall::multiTap(x, y);
+    if (t == -1) return next();
+    mcView = t == -2 ? 1 : 2;
+    if (t >= 0) mcIssue = app::frame["mc"]["a"][t][2] | "";
+    gfx::slide(-1);
     anim::reset();
     return;
   }

@@ -29,6 +29,12 @@ static const char PAGE[] PROGMEM = R"HTML(<!doctype html>
 <label>O que a placa mostra <select name=prov><option value=auto>automático: quem teve uso nos últimos 7 dias<option value=claude>só Claude<option value=codex>só Codex<option value=both>Claude + Codex</select></label>
 <p class=hint>Vale para todas as placas deste Mac. Com só Claude, a placa fica como sempre foi.</p>
 </section>
+<section id=mcsec hidden><h2>Multica</h2>
+<label>Página do Multica <select name=mc><option value=1>mostrar<option value=0>ocultar</select></label>
+<label>Workspace <select name=mcws></select></label>
+<label>Issues <select name=mcme><option value=0>todas do workspace<option value=1>só as minhas</select></label>
+<p class=hint>Vale para todas as placas deste Mac.</p>
+</section>
 <section><h2>Telas</h2>
 <label>Trocar de tela a cada <select name=interval><option value=0>não troca<option value=5>5 s<option value=10>10 s<option value=15>15 s<option value=30>30 s<option value=60>1 min</select></label>
 <label>Sessões trabalhando e esperando você <input type=checkbox name=sessions></label>
@@ -67,6 +73,9 @@ async function state(){
     ['Último dado',ago(s.frame)],['Daemon',ago(s.daemon)],['Memória livre',s.heap+' B'],['Ligada há',Math.floor(s.up/60)+' min']];
   if(s.safe)rows.unshift(['Modo','recuperação: travou 3 vezes no boot']);
   $('prov').hidden=!s.cxok;if(document.activeElement!==f.prov)f.prov.value=s.prov||'auto';
+  const m=s.mcs;$('mcsec').hidden=!m;
+  if(m){if(f.mcws.options.length!==m.w.length){f.mcws.textContent='';m.w.forEach((n,i)=>f.mcws.add(new Option(n,i)))}
+    for(const[k,v]of[['mc',m.on],['mcws',m.i],['mcme',m.me]])if(document.activeElement!==f[k])f[k].value=v}
   const ask=$('prov'),q=$('pq');ask.style.cssText=s.pask?'border:2px solid #D97757;border-radius:12px':'';q.hidden=!s.pask;
   if(s.pask){f.prepend(ask);q.textContent=(s.pask==='codex'?'Este Mac usa o Codex.':'Este Mac usa o Claude e o Codex.')+' Escolha o que as placas mostram:'}
   const dl=$('st');dl.textContent='';
@@ -81,6 +90,7 @@ state().then(s=>{
 });
 setInterval(state,5000);
 f.addEventListener('change',async e=>{
+  if(['mc','mcws','mcme'].includes(e.target.name)){const r=await fetch('/api/config',{method:'POST',body:new URLSearchParams({[e.target.name]:e.target.value})});return say(r.ok?'Salvo: o Mac aplica em até 2 s, em todas as placas.':await r.text())}
   if(e.target.name==='prov'){const r=await fetch('/api/config',{method:'POST',body:new URLSearchParams({prov:f.prov.value})});return say(r.ok?'Salvo: o Mac aplica em até 2 s, em todas as placas.':await r.text())}
   if(e.target.name==='host'&&!f.host.checkValidity())return say('Nome: letras minúsculas, números e hífen.');
   const b=new URLSearchParams({bright:f.bright.value,night:+f.night.checked,theme:f.theme.value,rotation:f.rotation.value,

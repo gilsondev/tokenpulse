@@ -124,6 +124,8 @@ void handle(const String& line) {
     board::play(line.substring(5).toInt(), settings::volumePct());
   } else if (line == "attn") {  // o destaque de sessão esperando você, para screenshot
     screens::attentionPreview();
+  } else if (line == "mcalert") {  // o aviso do Multica, para screenshot
+    screens::mcAlertPreview();
   } else if (line == "offline") {  // a tela de sem dados por 5 s, para screenshot com o daemon rodando
     screens::offlinePreview();
   } else if (line == "install") {  // a tela do QR de instalação por 5 s, para screenshot com o daemon rodando

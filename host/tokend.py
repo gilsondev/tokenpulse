@@ -194,7 +194,7 @@ class Usage:
         if kind == "assistant":
             q = ask_summary(msg.get("content")) or q
         self.sessions[sid] = {"ts": ts, "kind": kind, "stop": msg.get("stop_reason"),
-                              "project": os.path.basename((d.get("cwd") or "").rstrip("/")) or "?",
+                              "project": os.path.basename((d.get("cwd") or "").rstrip("/")) or "?", "cwd": d.get("cwd") or "",
                               "entry": d.get("entrypoint", "cli"), "q": q}
 
     def _ingest_line(self, d):
@@ -614,6 +614,7 @@ MAX_SESSIONS = 40   # o frame fica em ~5 KB, abaixo do buffer serial de 8 KB da 
 MAX_PER_WS = 12
 OUTSIDE = (1000, "Fora do herdr")  # terminais sem herdr, depois dos workspaces
 DESKTOP = (1001, "Claude Desktop")  # sempre o último: o Desktop não deixa escolher a conversa, só abrir o app
+MULTICA_WS = (1002, "Multica")  # as sessões que o Multica abre, numa pasta por run em vez do nome do projeto
 
 
 ASK_MAX = 120  # o resumo do que a sessão pede: cabe em 3 linhas do destaque da placa
@@ -656,7 +657,7 @@ def ask_summary(content):
 
 def sessions(state, titles, herdr, events, now):
     """Sessões agrupadas pelos workspaces do herdr.
-    ws: [nome, sessões, trabalhando, precisa de você, sua vez, em foco, é o Claude Desktop], na ordem do herdr.
+    ws: [nome, sessões, trabalhando, precisa de você, sua vez, em foco, 1 Claude Desktop / 3 Multica], na ordem do herdr.
     rows: [nome, CLI/Desk, estado, tokens, minutos desde a última atividade (-1: sem dado), índice do workspace,
            id curto da sessão (para o toque trazê-la à frente), em foco no herdr, o que ela pede (só esperando você)].
     Entram todos os painéis de Claude do herdr e as outras sessões com atividade na última hora.
@@ -686,12 +687,15 @@ def sessions(state, titles, herdr, events, now):
                 or (folder if folder != "?" else first_prompt(sid) or folder))
         entry = s["entry"] if s else ""
         origin = "Desk" if entry == "claude-desktop" else "SDK" if entry == "sdk-cli" else "CLI"
+        if issue := multica_issue(s["cwd"] if s else h["cwd"] if h else ""):
+            origin, name = "Multica", f"{issue} {_mc['titles'].get(issue, '')}".strip()
         row = [cut(name, 48), origin, st, fmt_tokens(tokens[sid]) if sid in tokens else "--",
                int(age // 60) if age is not None else -1]
         ask = s.get("q", "") if s and st in ("block", "turn") and age is not None and age <= 3600 else ""
         _known_sessions[sid[:8]] = {"pane": h["pane"] if h else None, "desk": origin == "Desk"}
         # sem herdr na máquina, o agrupamento natural é o projeto (pasta) da sessão
-        group = h["ws"] if h else DESKTOP if origin == "Desk" else OUTSIDE if herdr else (0, folder)
+        group = (MULTICA_WS if origin == "Multica" else h["ws"] if h else DESKTOP if origin == "Desk"
+                 else OUTSIDE if herdr else (0, folder))
         groups.setdefault(group, []).append((st, -(s["ts"] if s else 0), row, sid[:8],
                                               bool(seen and h and h["focused"]), ask))
     order = {"block": 0, "work": 1, "turn": 2, "idle": 3}
@@ -700,7 +704,7 @@ def sessions(state, titles, herdr, events, now):
         items.sort(key=lambda r: (order[r[0]], r[1]))
         count = lambda st: sum(1 for r in items if r[0] == st)
         ws.append([cut(key[1], 32), len(items), count("work"), count("block"), count("turn"),
-                   1 if seen and key == _herdr.get("focused_ws") else 0, 1 if key == DESKTOP else 0])
+                   1 if seen and key == _herdr.get("focused_ws") else 0, 1 if key == DESKTOP else 3 if key == MULTICA_WS else 0])
         rows += [r[2] + [i, r[3], 1 if r[4] else 0] + ([r[5]] if r[5] else []) for r in items[:MAX_PER_WS]]
     return {"n": sum(w[1] for w in ws), "ws": ws, "rows": rows[:MAX_SESSIONS]}
 
@@ -908,6 +912,13 @@ def run_action(cmd):
             f.write(parts[1])
         log(f"provedores: {parts[1]}")
         return _wake.set()
+    if len(parts) == 2 and parts[0] == "mcopen" and re.fullmatch(r"[A-Z]+\d*-\d+", parts[1]) and _mc["url"]:
+        return subprocess.Popen(["open", _mc["url"] + parts[1]])
+    if len(parts) == 2 and parts[0] in ("mc", "mcme") and parts[1] in ("0", "1"):
+        return mc_save(**{"on" if parts[0] == "mc" else "mine": parts[1] == "1"})
+    if len(parts) == 2 and parts[0] == "mcws" and parts[1].isdigit():
+        wss = [w for w in mc_list(mc_cli("workspace", "list"), "workspaces")]
+        return mc_save(i=int(parts[1]), ws=wss[int(parts[1])]["id"]) if int(parts[1]) < len(wss) else None
     if _action["state"] in ("switching", "login") or not parts or parts[0] not in ("switch", "login"):
         return
     target = next((a for a in accounts() if parts[0] == "switch" and len(parts) > 1 and str(a[0]) == parts[1]), None)
@@ -1080,6 +1091,234 @@ def status_loop():
         _claude["st"] = worst_status(STATUS_URL, lambda name: name in STATUS_COMPONENTS)
         _openai["st"] = worst_status(OPENAI_STATUS_URL, lambda name: "Codex" in name)
         time.sleep(300)
+
+
+MULTICA = shutil.which("multica") or "/opt/homebrew/bin/multica"  # o LaunchAgent roda sem o PATH do Homebrew
+MULTICA_CONFIG = os.path.join(HOME, ".multica/config.json")
+MULTICA_CFG = os.path.join(HOME, ".claude/esp-tokens-multica.json")  # o ajuste Multica, escolhido na placa
+MULTICA_EVERY = 60  # cada volta chama a CLI umas 10 vezes, e cada chamada vai ao servidor
+MC_BUCKET = {"backlog": 0, "todo": 0, "in_progress": 1, "blocked": 1, "in_review": 2, "done": 3}
+MC_PROJECT = {"planned": "Planejado", "in_progress": "Em andamento", "completed": "Concluído", "paused": "Pausado",
+              "cancelled": "Cancelado"}
+MC_PRIORITY = {"low": "baixa", "medium": "média", "high": "alta", "urgent": "urgente"}
+MC_ALERT_SECS = 60
+_MC_DIR = re.compile(r"/multica_workspaces[^/]*/[^/]+/([a-z]+\d*-\d+)-[0-9a-f]{12}(?:/|$)")
+_mc = {"mc": None, "mcs": None, "alert": None, "titles": {}, "url": ""}
+_mc_wake = threading.Event()
+
+
+def multica_ok():
+    return os.path.exists(MULTICA) and os.path.exists(MULTICA_CONFIG)
+
+
+def mc_settings():
+    try:
+        with open(MULTICA_CFG) as f:
+            s = json.load(f)
+    except (OSError, ValueError):
+        s = {}
+    return {"on": s.get("on", True), "ws": s.get("ws", ""), "mine": bool(s.get("mine"))}
+
+
+def mc_save(i=None, **kw):
+    """Grava o ajuste e já muda o que as placas recebem; a leitura nova do Multica vem logo depois."""
+    s = mc_settings() | kw
+    with open(MULTICA_CFG, "w") as f:
+        json.dump(s, f)
+    if _mc["mcs"]:
+        _mc["mcs"] = _mc["mcs"] | {"on": int(s["on"]), "me": int(s["mine"])} | ({"i": i} if i is not None else {})
+    if not s["on"]:
+        _mc["mc"] = None
+    _mc_wake.set()
+    _wake.set()
+
+
+def mc_cli(*args, ws=""):
+    """A CLI do Multica já autenticada; o daemon não lê nem guarda o token."""
+    try:
+        r = subprocess.run([MULTICA, *args, "--output", "json"] + (["--workspace-id", ws] if ws else []),
+                           capture_output=True, text=True, timeout=30)
+        return json.loads(r.stdout) if r.returncode == 0 else None
+    except (OSError, subprocess.TimeoutExpired, ValueError):
+        return None
+
+
+def mc_list(d, key):
+    """A CLI devolve a lista pura ou dentro de um objeto, conforme o comando."""
+    d = d.get(key) if isinstance(d, dict) else d
+    return [x for x in d if isinstance(x, dict)] if isinstance(d, list) else []
+
+
+def mc_ts(s):
+    """Hora ISO do Multica (fração com até 9 dígitos e Z) em epoch; 0 sem hora."""
+    m = re.match(r"(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)(\.\d+)?(Z|[+-]\d\d:\d\d)?$", s or "")
+    if not m:
+        return 0.0
+    frac = (m.group(2) or "")[:7]
+    return datetime.fromisoformat(m.group(1) + frac + (m.group(3) or "Z").replace("Z", "+00:00")).timestamp()
+
+
+def mc_issues(ws):
+    issues = []
+    while len(issues) < 500:
+        d = mc_cli("issue", "list", "--limit", "100", "--offset", str(len(issues)), "--fields",
+                   "id,identifier,title,status,status_category,priority,assignee_type,assignee_id,creator_id,"
+                   "project_id,updated_at", ws=ws)
+        if d is None:
+            return None
+        page = mc_list(d, "issues")
+        issues += page
+        if not page or not (isinstance(d, dict) and d.get("has_more")):
+            return issues
+    return issues
+
+
+def multica_issue(cwd):
+    """A issue de uma sessão que o Multica abriu: a pasta da run é <workspace>/<issue>-<hash>/workdir."""
+    m = _MC_DIR.search(cwd or "")
+    return m.group(1).upper() if m else ""
+
+
+def mc_alert(kind, issue, who, detail):
+    ident = issue.get("identifier", "")
+    _mc["alert"] = {"id": int(time.time()), "k": kind, "i": ident, "t": cut(plain(issue.get("title", "")), 60),
+                    "m": " · ".join(x for x in (ident, who) if x), "x": detail, "at": time.time()}
+    log(f"multica: aviso {kind} {ident}")
+
+
+def multica_once(state):
+    """Uma volta: issues, projetos, agentes e as runs de cada agente, no workspace escolhido."""
+    s = mc_settings()
+    if not state.get("wss") or time.time() - state.get("wss_at", 0) > 3600:
+        state["wss"] = mc_list(mc_cli("workspace", "list"), "workspaces") or state.get("wss") or []
+        state["me"] = (mc_cli("user", "profile", "get") or {}).get("id", "")
+        state["wss_at"] = time.time()
+        try:
+            with open(MULTICA_CONFIG) as f:
+                cfg = json.load(f)
+            state["app"], state["default"] = cfg.get("app_url", ""), cfg.get("workspace_id", "")
+        except (OSError, ValueError):
+            pass
+    wss = state["wss"]
+    ids = [w.get("id") for w in wss]
+    wid = s["ws"] if s["ws"] in ids else state.get("default") if state.get("default") in ids else ids[0] if ids else ""
+    _mc["mcs"] = {"on": int(s["on"]), "w": [cut(w.get("name", ""), 32) for w in wss[:5]],
+                  "i": ids.index(wid) if wid in ids else 0, "me": int(s["mine"])}
+    if not s["on"] or not wid:
+        _mc["mc"] = None
+        return
+    if (wid, s["mine"]) != state.get("scope"):  # outro workspace ou filtro: começa sem avisos do que já existia
+        state.update(scope=(wid, s["mine"]), prev=None)
+    issues = mc_issues(wid)
+    if issues is None:
+        return  # servidor fora: fica a última leitura
+    agents = mc_list(mc_cli("agent", "list", ws=wid), "agents")
+    projects = mc_list(mc_cli("project", "list", ws=wid), "projects")
+    provider = {r.get("id"): r.get("provider", "") for r in mc_list(mc_cli("runtime", "list", ws=wid), "runtimes")}
+    me, now = state.get("me"), time.time()
+    my_agents = {a.get("id") for a in agents if a.get("owner_id") == me}
+    # "suas" são as issues criadas por você ou atribuídas a você, a um agente seu ou a um squad de que você (ou um
+    # agente seu) participa. Os squads mudam pouco: a lista de membros é relida de hora em hora
+    if state.get("squads_of") != wid or now - state.get("squads_at", 0) > 3600:
+        mine_ids = {me} | my_agents
+        state["squads"] = {sq.get("id") for sq in mc_list(mc_cli("squad", "list", ws=wid), "squads")
+                           if any(m.get("member_id") in mine_ids
+                                  for m in mc_list(mc_cli("squad", "member", "list", sq.get("id", ""), ws=wid), "members"))}
+        state.update(squads_of=wid, squads_at=now)
+    ours = {me} | my_agents | state["squads"]
+    mine = lambda i: i.get("creator_id") in ours or i.get("assignee_id") in ours
+    if s["mine"]:
+        issues = [i for i in issues if mine(i)]
+        agents = [a for a in agents if a.get("id") in my_agents]
+    by_id = {i.get("id"): i for i in issues}
+    names = {a.get("id"): a.get("name", "") for a in agents}
+    pname = {p.get("id"): p.get("title", "") for p in projects}
+    week = now - 7 * 86400
+    slug = next((w.get("slug", "") for w in wss if w.get("id") == wid), "")
+    _mc["url"] = f"{state.get('app', '').rstrip('/')}/{slug}/issues/" if state.get("app") and slug else ""
+    _mc["titles"] = {i.get("identifier", ""): i.get("title", "") for i in issues}
+
+    counts = [0, 0, 0, 0]
+    for i in issues:
+        b = MC_BUCKET.get(i.get("status_category") or i.get("status"))
+        if b is not None and (b != 3 or mc_ts(i.get("updated_at")) >= week):  # Feito: só os da semana
+            counts[b] += 1
+
+    runs, last = [], state.get("at", now)
+    for a in agents:
+        for t in mc_list(mc_cli("agent", "tasks", a.get("id", ""), "--limit", "10", ws=wid), "tasks"):
+            st, issue = t.get("status"), by_id.get(t.get("issue_id")) or {}
+            # os avisos são só das suas issues e dos seus agentes, com qualquer filtro: o do colega não pede nada a você
+            if (st == "failed" and state.get("prev") is not None and mc_ts(t.get("completed_at")) >= last - 5 and issue
+                    and (mine(issue) or a.get("id") in my_agents)):
+                tries = f"tentativa {t.get('attempt')} de {t.get('max_attempts')}" if t.get("max_attempts") else ""
+                mc_alert("fail", issue, " · ".join(x for x in (a.get("name", ""), tries) if x),
+                         cut(plain(str(t.get("error") or "")), 40))
+            if st in ("completed", "failed", "cancelled") or not issue:
+                continue
+            usage = t.get("usage") if isinstance(t.get("usage"), list) else []
+            tok = sum((u.get("input_tokens") or 0) + (u.get("output_tokens") or 0) + (u.get("cache_read_tokens") or 0)
+                      + (u.get("cache_write_tokens") or 0) for u in usage if isinstance(u, dict))
+            model = next((u.get("model") for u in usage if isinstance(u, dict) and u.get("model")), "")
+            start = mc_ts(t.get("started_at"))
+            runs.append((0 if start else 1, -(start or mc_ts(t.get("created_at"))), a, t, issue, tok, model))
+    runs.sort(key=lambda r: r[:2])
+    rows = []
+    for queued, neg_ts, a, t, issue, tok, model in runs[:4]:
+        prs = len(mc_list(mc_cli("issue", "pull-requests", issue.get("id", ""), ws=wid), "pull_requests")) if not queued else 0
+        rows.append([cut(a.get("name", ""), 24), (provider.get(a.get("runtime_id")) or "").capitalize(),
+                     issue.get("identifier", ""), cut(plain(issue.get("title", "")), 60), 0 if queued else 1,
+                     int((now + neg_ts) // 60), fmt_tokens(tok) if tok else "--", cut(pname.get(issue.get("project_id"), ""), 32),
+                     MC_PRIORITY.get(issue.get("priority"), ""), t.get("attempt") or 1, prs,
+                     model_label(model, None) if model else ""])
+
+    prev = state.get("prev")
+    for i in issues:  # issue que chegou em revisão desde a última volta
+        if (prev is not None and i.get("status") == "in_review" and prev.get(i.get("id"), "in_review") != "in_review"
+                and mine(i)):
+            who = names.get(i.get("assignee_id"), "")
+            mc_alert("rev", i, who, "")
+    state["prev"] = {i.get("id"): i.get("status") for i in issues}
+    state["at"] = now
+
+    review = {}
+    for i in issues:
+        if i.get("status") == "in_review":
+            review[i.get("project_id")] = review.get(i.get("project_id"), 0) + 1
+    order = {"in_progress": 0, "planned": 1, "paused": 2, "completed": 3}
+    pjs = sorted((p for p in projects if p.get("issue_count") and p.get("status") != "cancelled"),
+                 key=lambda p: (order.get(p.get("status"), 4), -(p.get("issue_count") or 0)))
+    _mc["mc"] = {"w": cut(next((w.get("name", "") for w in wss if w.get("id") == wid), ""), 32), "c": counts,
+                 "r": sum(1 for r in runs if not r[0]), "q": sum(1 for r in runs if r[0]), "a": rows,
+                 "p": [[cut(plain(p.get("title", "")), 32), MC_PROJECT.get(p.get("status"), p.get("status", "")),
+                        p.get("done_count") or 0, p.get("issue_count") or 0, review.get(p.get("id"), 0)] for p in pjs[:6]]}
+
+
+def multica_loop():
+    """De minuto em minuto, o Multica pela CLI; ação da placa acorda antes."""
+    state = {}
+    while True:
+        if multica_ok():
+            try:
+                multica_once(state)
+            except Exception as e:  # resposta fora do formato não derruba o daemon
+                log(f"multica: {e!r}")
+        else:
+            _mc.update(mc=None, mcs=None)
+        _mc_wake.wait(MULTICA_EVERY)
+        _mc_wake.clear()
+
+
+def multica_frame():
+    if not _mc["mcs"]:
+        return {}
+    f = {"mcs": _mc["mcs"]}
+    if _mc["mc"]:
+        f["mc"] = _mc["mc"]
+    a = _mc["alert"]
+    if a and time.time() - a["at"] < MC_ALERT_SECS:
+        f["mca"] = {k: v for k, v in a.items() if k != "at"}
+    return f
 
 
 def limits():
@@ -1267,8 +1506,8 @@ def ble_loop():
                 kind, _, rest = line.rstrip("\n").partition(" ")
                 if kind == "log":
                     log(rest)
-                elif kind == "action" and (not DEMO or rest.startswith("prov ")):
-                    threading.Thread(target=run_action, args=(rest,), daemon=True).start()
+                elif kind == "action":  # a regra do demo fica no board_action, como na USB
+                    threading.Thread(target=board_action, args=("ACTION " + rest,), daemon=True).start()
         threading.Thread(target=pump_out, daemon=True).start()
         try:
             while proc.poll() is None:
@@ -1349,7 +1588,10 @@ def settle(port):
 
 def board_action(line):
     """Ação pedida pela placa. Na demonstração nada troca a sua conta; o ajuste Provedores pode, para as capturas."""
-    if line.startswith("ACTION ") and (not DEMO or line.startswith("ACTION prov ")):
+    parts = line.split()
+    if DEMO and len(parts) == 3 and parts[1] in ("mc", "mcme", "mcws") and parts[2].isdigit():  # o Multica do demo
+        _demo_mc[{"mc": "on", "mcme": "me", "mcws": "i"}[parts[1]]] = min(int(parts[2]), 1)
+    elif line.startswith("ACTION ") and (not DEMO or line.startswith("ACTION prov ")):
         run_action(line[7:].strip())
 
 
@@ -1489,6 +1731,8 @@ def demo_frame():
         "clk": now.strftime("%H:%M"), "t": local_time(), "org": "Acme Labs", "dark": dark_mode(),
         "accts": [[1, "Acme Labs", 1, 0, DEMO_P5, 38, 0], [2, "Side Project", 0, 0, 7, 12, 180]], "act": ["", "", ""],
     }
+    if DEMO_MULTICA:
+        f |= demo_multica(f)
     if not DEMO_CODEX:
         return f
     mode = provider_mode()  # o ajuste Provedores vale também no demo, para as capturas de cada modo
@@ -1519,6 +1763,34 @@ def demo_frame():
         row[2] = round(row[2] + c, 1)
         row.append(c)
     return f
+
+
+_demo_mc = {"on": 1, "i": 0, "me": 0, "alert": 0}
+
+
+def demo_multica(f):
+    """O Multica fictício das capturas. TOKENPULSE_DEMO_MC_ALERT=rev|fail mostra um aviso."""
+    f["sess"]["ws"].append(["Multica", 2, 2, 0, 0, 0, 3])
+    i = len(f["sess"]["ws"]) - 1
+    f["sess"]["rows"] += [["TP-42 Refatorar o checkout", "Multica", "work", "3,4M", 0, i, "00000014", 0],
+                          ["TP-47 Testes da API", "Multica", "work", "0,8M", 0, i, "00000015", 0]]
+    f["sess"]["n"] += 2
+    out = {"mcs": {"on": _demo_mc["on"], "w": ["Acme Growth", "Pessoal"], "i": _demo_mc["i"], "me": _demo_mc["me"]}}
+    if not _demo_mc["on"]:
+        return out
+    out["mc"] = {"w": ["Acme Growth", "Pessoal"][_demo_mc["i"]], "c": [15, 3, 1, 5], "r": 2, "q": 1, "a": [
+        ["Opus Dev", "Claude", "TP-42", "Refatorar o checkout", 1, 12, "3,4M", "Checkout novo", "alta", 3, 1, "Opus 5.5"],
+        ["Codex Rev", "Codex", "TP-47", "Testes da API", 1, 3, "0,8M", "Checkout novo", "média", 1, 0, "gpt-6.1-sol"],
+        ["Sonnet Docs", "Claude", "TP-51", "Atualizar o README", 0, 1, "--", "Design system", "", 1, 0, ""]],
+        "p": [["Checkout novo", "Em andamento", 12, 20, 1], ["Design system", "Em andamento", 5, 18, 0],
+              ["App mobile", "Planejado", 0, 9, 0], ["Infra 2027", "Concluído", 7, 7, 0]]}
+    kind = os.environ.get("TOKENPULSE_DEMO_MC_ALERT", "")
+    if kind == "rev":
+        out["mca"] = {"id": 1, "k": "rev", "i": "TP-38", "t": "Ajustar o webhook de pagamento", "m": "TP-38 · Opus Dev", "x": ""}
+    elif kind == "fail":
+        out["mca"] = {"id": 2, "k": "fail", "i": "TP-51", "t": "Atualizar o README",
+                      "m": "TP-51 · Sonnet Docs · tentativa 2 de 3", "x": "exit 1 · npm test"}
+    return out
 
 
 FRAME_MAX = 7500  # o buffer serial da placa tem 8 KB
@@ -1615,7 +1887,7 @@ def serve(board, frame):
 # Placas pelo WiFi (o SmallTV-Ultra, que só tem USB de energia). Elas se anunciam por mDNS como
 # _tokenpulse._tcp e recebem um frame enxuto por HTTP, com só o que a tela principal delas mostra.
 NET_KEYS = ("p5", "r5", "pw", "rw", "tot", "rate", "sp", "m", "org", "clk", "dark", "age", "mods", "projs", "hist", "accts", "cx",
-            "prov", "cxok", "st", "pask", "cxo")
+            "prov", "cxok", "st", "pask", "cxo", "mc", "mcs", "mca")
 NET_EVERY = 2  # s entre frames: pelo WiFi, 1 por segundo só gastaria a placa
 net_boards = {}  # host -> NetBoard
 _latest = {}     # o último frame montado pelo laço principal
@@ -1688,7 +1960,7 @@ def session_list(frame, limit=8):
     rows = []
     for r in (frame.get("sess") or {}).get("rows") or []:
         st, mins = r[2], r[4]
-        if st in ("block", "turn") and not (0 <= mins <= 60 and r[1] != "SDK"):
+        if st in ("block", "turn") and not (0 <= mins <= 60 and r[1] not in ("SDK", "Multica")):
             st = "idle"
         rows.append([r[0][:28], st, mins])
     group = {"work": 0, "block": 1, "turn": 1}
@@ -1759,6 +2031,7 @@ DEMO = "--demo" in sys.argv
 AGENT = agent_version()
 DEMO_P5 = int(os.environ.get("TOKENPULSE_DEMO_P5", "42"))  # para mostrar as faixas: 42, 74, 86, 95
 DEMO_ST = int(os.environ.get("TOKENPULSE_DEMO_ST", "0"))
+DEMO_MULTICA = os.environ.get("TOKENPULSE_DEMO_MULTICA") == "1"
 DEMO_CODEX = os.environ.get("TOKENPULSE_DEMO_CODEX") == "1"  # o bloco do Codex no frame de demonstração  # o aviso da página de status: 1 instável, 2 fora do ar
 
 
@@ -1774,6 +2047,7 @@ def main():
         threading.Thread(target=history_loop, daemon=True).start()
         threading.Thread(target=herdr_events, daemon=True).start()
         threading.Thread(target=status_loop, daemon=True).start()
+        threading.Thread(target=multica_loop, daemon=True).start()
     if "--once" not in sys.argv:
         threading.Thread(target=net_loop, daemon=True).start()
         threading.Thread(target=ble_loop, daemon=True).start()
@@ -1795,6 +2069,7 @@ def main():
                      | {"clk": datetime.now().strftime("%H:%M"), "t": local_time(), "org": org_name, "dark": dark_mode(), "agv": AGENT})
             if cx or os.path.exists(PROVIDERS):  # depois de escolhido, o ajuste continua nos ajustes da placa
                 frame = with_codex(frame, cx, usage.events, codex, usage.recent)
+            frame |= multica_frame()
         _latest["frame"] = frame
         if "--once" in sys.argv:
             print(json.dumps(frame, ensure_ascii=False))

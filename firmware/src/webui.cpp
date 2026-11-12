@@ -64,6 +64,7 @@ void handleState() {
   d["cxok"] = app::frame["cxok"] | 0;  // o Mac tem o Codex: a página mostra o ajuste Provedores
   d["prov"] = app::frame["prov"] | "auto";
   if (!app::frame["pask"].isNull()) d["pask"] = app::frame["pask"];  // primeiro uso: a página destaca a escolha
+  if (!app::frame["mcs"].isNull()) d["mcs"] = app::frame["mcs"];    // o Mac tem o Multica: a página mostra o ajuste
   JsonObject c = d["cfg"].to<JsonObject>();
   const auto& v = settings::v;
   const auto& w = settings::web;
@@ -87,6 +88,8 @@ void handleConfig() {
     if (m != "auto" && m != "claude" && m != "codex" && m != "both") return server.send(400, "text/plain", "Provedor inválido.");
     hostlink::action(("ACTION prov " + m).c_str());
   }
+  for (const char* k : {"mc", "mcws", "mcme"})  // o ajuste Multica também mora no daemon
+    if (server.hasArg(k)) hostlink::action((String("ACTION ") + k + " " + constrain(server.arg(k).toInt(), 0, 4)).c_str());
   if (server.hasArg("host")) {
     String h = server.arg("host");
     h.trim();

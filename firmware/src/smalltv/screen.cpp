@@ -77,7 +77,8 @@ int textWidth(const char* s, Vlw& f) {
 // Estado do que está na tela: valores que andam até os do frame (a mola), e quando cada alerta começou.
 struct Ui {
   float p5 = -1, pw = -1;
-  uint32_t tokMs = 0, bandMs = 0, approveMs = 0;
+  uint32_t tokMs = 0, bandMs = 0, approveMs = 0, mcaMs = 0;
+  int mca = -1;  // o id do último aviso do Multica; -1 até o primeiro frame (o do boot não segura a tela)
   int level = -1, blocks = -1;  // -1 até o primeiro frame: o boot não dispara alerta
   String tot;
   int dotX = 0;
@@ -287,6 +288,52 @@ void drawSessions() {
   }
 }
 
+// Multica: agentes rodando no número grande, os blocos de fazendo, revisão e fila, e o primeiro agente rodando.
+void drawMulti() {
+  char buf[64];
+  JsonVariantConst mc = app::frame["mc"];
+  header("Multica");
+  const int run = mc["r"] | 0;
+  snprintf(buf, sizeof buf, "%d", run);
+  text(buf, W / 2, 40, HERO, run ? GREEN : DIM, top_center);
+  text(run == 1 ? "agente rodando" : "agentes rodando", W / 2, 106, LABEL, MUTED, top_center);
+  const int counts[] = {mc["c"][1] | 0, mc["c"][2] | 0, mc["q"] | 0};
+  static const char* NAMES[] = {"Fazendo", "Revisão", "Fila"};
+  const uint16_t COLORS[] = {GREEN, YELLOW, MUTED};
+  for (int k = 0; k < 3; k++) {
+    const int x = 8 + k * 76, hot = k == 1 && counts[k];
+    band.fillRoundRect(x, 132 - oy, 72, 50, 8, hot ? blend(BG, YELLOW, 0.2f) : TRACK);
+    snprintf(buf, sizeof buf, "%d", counts[k]);
+    text(buf, x + 36, 136, NUM, COLORS[k], top_center);
+    text(NAMES[k], x + 36, 164, LABEL, MUTED, top_center);
+  }
+  JsonArrayConst a = mc["a"][0];
+  if (a.isNull() || !(int)(a[4] | 0)) return;
+  snprintf(buf, sizeof buf, "%s · %s · %d min", (const char*)(a[0] | ""), (const char*)(a[2] | ""), (int)(a[5] | 0));
+  text(fit(buf, W - 16, LABEL).c_str(), 8, 200, LABEL, TEXT);
+}
+
+// O aviso do Multica: issue que foi para revisão (amarelo) ou run que falhou (vermelho), por até 1 min.
+void drawMcAlert() {
+  JsonVariantConst a = app::frame["mca"];
+  const bool fail = !strcmp(a["k"] | "", "fail");
+  const uint16_t c = fail ? RED : YELLOW;
+  band.fillScreen(BG);
+  text(fail ? "Run falhou" : "Pede sua revisão", W / 2, 30, NUM, c, top_center);
+  String t = a["t"] | "", l2;
+  while (textWidth(t.c_str(), LABEL) > W - 16 && t.lastIndexOf(' ') > 0) {  // em até duas linhas, nas palavras
+    l2 = t.substring(t.lastIndexOf(' ') + 1) + (l2.length() ? " " + l2 : "");
+    t = t.substring(0, t.lastIndexOf(' '));
+  }
+  text(fit(t, W - 16, LABEL).c_str(), W / 2, 90, LABEL, TEXT, top_center);
+  if (l2.length()) text(fit(l2, W - 16, LABEL).c_str(), W / 2, 110, LABEL, TEXT, top_center);
+  text(fit(a["m"] | "", W - 16, LABEL).c_str(), W / 2, 146, LABEL, MUTED, top_center);
+  if (*(a["x"] | "")) text(fit(a["x"] | "", W - 16, LABEL).c_str(), W / 2, 166, LABEL, TEXT, top_center);
+  const int left = (W - 16) * (60000 - min<uint32_t>(since(ui.mcaMs), 60000)) / 60000;
+  band.fillRoundRect(8, 214 - oy, W - 16, 4, 2, blend(BG, c, 0.25f));
+  if (left > 0) band.fillRoundRect(8, 214 - oy, left, 4, 2, c);
+}
+
 // Detalhe de um modelo: [nome, tokens, %, entrada, saída, cache lido, cache escrito, custo, [[projeto, tokens]]].
 void drawModel(int i) {
   JsonArrayConst m = app::frame["mods"][i];
@@ -383,7 +430,7 @@ void drawOrgs() {
 
 // Sem toque nem botão, as telas passam sozinhas a cada config::v.interval s. Tela sem conteúdo
 // (nenhum projeto na última hora) fica de fora da volta.
-enum Page : uint8_t { MAIN, SESSIONS, MODELS, MODEL, PROJECTS, HISTORY, ORGS, ASK };
+enum Page : uint8_t { MAIN, SESSIONS, MODELS, MODEL, PROJECTS, HISTORY, ORGS, ASK, MULTI, MCALERT };
 struct Slot {
   Page page;
   uint8_t sub;  // qual modelo, no detalhe
@@ -398,6 +445,7 @@ int slots(Slot* out) {
   if (!f["cx"].isNull()) out[n++] = {MAIN, 1};  // a principal do Codex, logo depois
   if (!f["pask"].isNull()) out[n++] = {ASK, 0};  // primeiro uso com o Codex: onde escolher os provedores
   if ((on & 4) && f["ses"].size()) out[n++] = {SESSIONS, 0};
+  if (!f["mc"].isNull()) out[n++] = {MULTI, 0};  // o Multica, depois das sessões (o ajuste dele mora no Mac)
   if ((on & 1) && f["mods"].size()) out[n++] = {MODELS, 0};
   if (on & 8)
     for (int i = 0; i < (int)min<size_t>(f["mods"].size(), 3); i++) out[n++] = {MODEL, (uint8_t)i};
@@ -408,6 +456,7 @@ int slots(Slot* out) {
 }
 
 Slot pageNow() {
+  const auto& f = app::frame;
   static Slot cur = {MAIN, 0};
   static uint32_t sinceMs = 0;
   Slot list[10];
@@ -418,6 +467,7 @@ Slot pageNow() {
   // alertas passam na frente da volta: sessão pedindo aprovação segura a tela de sessões enquanto durar,
   // e cruzar 70/80/90% segura a principal por 2 min
   if ((config::v.alerts & 1) && ui.blocks > 0) return sinceMs = millis(), cur = {SESSIONS, 0};
+  if ((config::v.alerts & 1) && since(ui.mcaMs) < 60000 && !f["mca"].isNull()) return sinceMs = millis(), cur = {MCALERT, 0};
   if ((config::v.alerts & 2) && since(ui.bandMs) < 120000) return sinceMs = millis(), cur = {MAIN, 0};
   if (!config::v.interval) return cur = {MAIN, 0};
   if (at < 0 || millis() - sinceMs >= config::v.interval * 1000UL) {  // passou o tempo, ou a tela sumiu
@@ -441,6 +491,8 @@ void drawAsk() {
 
 void draw(Slot slot) {
   if (slot.page == ASK) return drawAsk();
+  if (slot.page == MULTI) return drawMulti();
+  if (slot.page == MCALERT) return drawMcAlert();
   if (slot.page == SESSIONS) drawSessions();
   else if (slot.page == MODELS) drawModels();
   else if (slot.page == MODEL) drawModel(slot.sub);
@@ -565,6 +617,9 @@ void onFrame() {
   for (JsonArrayConst s : f["ses"].as<JsonArrayConst>()) blocks += !strcmp(s[1] | "", "block");
   if (ui.blocks >= 0 && blocks > ui.blocks) ui.approveMs = millis();
   ui.blocks = blocks;
+  const int mca = f["mca"]["id"] | 0;
+  if (ui.mca >= 0 && mca && mca != ui.mca) ui.mcaMs = millis();
+  ui.mca = mca;
 }
 
 // A mola: os valores mostrados andam 25% do caminho por passo. true enquanto ainda andam.
@@ -675,6 +730,8 @@ bool shot(const String& name, const std::function<void(const uint8_t*, size_t)>&
   else if (name == "orgs") slot = {ORGS, 0};
   else if (name == "codex") slot = {MAIN, 1};
   else if (name == "ask") slot = {ASK, 0};
+  else if (name == "multica") slot = {MULTI, 0};
+  else if (name == "mcalert") slot = {MCALERT, 0};
   else if (name == "ap") {
     for (oy = 0; oy < H; oy += BAND) drawAp(), write(reinterpret_cast<const uint8_t*>(band.getBuffer()), min(BAND, H - oy) * W * 2), yield();
     return true;
