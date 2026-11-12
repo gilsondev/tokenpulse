@@ -218,13 +218,16 @@ void header(bool live, const char* title, bool dropdown = false, bool sub = true
   gear(W() - M() - u(10), u(19), u(10), gearActive ? ACCENT : MUTED);
   if (!sub && live) return;
   char buf[32];
-  if (live) snprintf(buf, sizeof buf, "CLI %d · Desk %d", (int)(f["cli"] | 0), (int)(f["desk"] | 0));
+  const int st = live ? (f["st"] | 0) : 0;  // a página de status da Anthropic: 1 instável, 2 fora do ar
+  if (st) strcpy(buf, st > 1 ? "Claude fora do ar" : "Claude instável");
+  else if (live) snprintf(buf, sizeof buf, "CLI %d · Desk %d", (int)(f["cli"] | 0), (int)(f["desk"] | 0));
   else snprintf(buf, sizeof buf, "Offline há %lu min", (millis() - app::lastFrameMs) / 60000);
+  const uint16_t sc = !live || st > 1 ? RED : st ? AMBER : GREEN;
   const int sy = u(10) + below(HT, 22), w = gfx::textWidth(buf, HS);
   // o modelo divide a linha com o status: corta o modelo, nunca o status
   text(fit(f["m"] | "Claude", HS, W() - 2 * M() - w - u(24)).c_str(), M(), sy, HS, DIM);
-  text(buf, W() - M(), sy, HS, live ? DIM : RED, top_right);
-  fb().fillSmoothCircle(W() - M() - w - u(8), sy + gfx::lineHeight(HS) / 2 - u(2), max(2, u(3)), live ? GREEN : RED);
+  text(buf, W() - M(), sy, HS, sc == GREEN ? DIM : sc, top_right);
+  fb().fillSmoothCircle(W() - M() - w - u(8), sy + gfx::lineHeight(HS) / 2 - u(2), max(2, u(3)), sc);
 }
 
 // Outra org salva no cswap para sugerir quando a janela esgota: a de menor % conhecido.

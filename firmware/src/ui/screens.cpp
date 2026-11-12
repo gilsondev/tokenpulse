@@ -123,8 +123,10 @@ void drawMain(bool live) {
   if (live) fb().fillCircle(L.statusX + s(3), L.statusY + s(6), s(2) + pulse * s(2), blend(DARK_GREEN, GREEN, pulse));
   else fb().fillCircle(L.statusX + s(3), L.statusY + s(6), s(3), RED);
   label(live ? "Ao vivo" : "Offline", L.statusX + s(10), L.statusY, live ? GREEN : RED);
-  snprintf(buf, sizeof buf, "CLI %d · Desk %d", (int)(f["cli"] | 0), (int)(f["desk"] | 0));
-  label(buf, L.sessX, L.sessY, DIM, L.sessDatum);
+  const int st = f["st"] | 0;  // a página de status da Anthropic: 1 instável, 2 fora do ar
+  if (st) strcpy(buf, st > 1 ? "Claude fora" : "Claude instável");
+  else snprintf(buf, sizeof buf, "CLI %d · Desk %d", (int)(f["cli"] | 0), (int)(f["desk"] | 0));
+  label(buf, L.sessX, L.sessY, st > 1 ? RED : st ? AMBER : DIM, L.sessDatum);
   fb().drawFastHLine(m, L.statusY + s(18), gfx::width() - 2 * m, TRACK);
 
   const bool stale = app::stale();

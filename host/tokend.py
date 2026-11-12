@@ -803,6 +803,33 @@ def usage_loop():
             pass
 
 
+def exhaustion(start, p5, reset, now):
+    """Quando a janela de 5 h esgota no ritmo médio desde o início dela, se for antes do reset."""
+    # ponytail: ritmo médio da janela inteira; uma rajada recente só pesa aos poucos
+    if not start or not reset or p5 < 10 or now - start < timedelta(minutes=20):
+        return None
+    end = start + (now - start) * 100 / p5
+    return end if end < reset - timedelta(minutes=5) else None
+
+
+STATUS_URL = "https://status.claude.com/api/v2/summary.json"
+STATUS_COMPONENTS = ("Claude Code", "Claude API (api.anthropic.com)")
+_claude = {"st": 0}  # o pior estado desses componentes na página de status: 0 ok, 1 instável, 2 fora do ar
+
+
+def status_loop():
+    """De 5 em 5 min, a página de status da Anthropic."""
+    rank = {"degraded_performance": 1, "under_maintenance": 1, "partial_outage": 2, "major_outage": 2}
+    while True:
+        try:
+            with urllib.request.urlopen(STATUS_URL, timeout=10) as r:
+                comps = json.load(r)["components"]
+            _claude["st"] = max((rank.get(c["status"], 0) for c in comps if c["name"] in STATUS_COMPONENTS), default=0)
+        except Exception:  # sem resposta da página não quer dizer falha da Anthropic: o aviso some
+            _claude["st"] = 0
+        time.sleep(300)
+
+
 def limits():
     try:
         status_at = os.path.getmtime(STATUS)
@@ -842,6 +869,9 @@ def limits():
         start = r5 - timedelta(hours=5) if r5 else None
     if start and out["p5"] <= 0:  # 0% ou "--" parece erro: o rótulo diz que a janela acabou de começar
         out["s5"] = f"janela nova · {clock(start)}"
+    end = exhaustion(start, out["p5"], r5, now)
+    if end and int(time.time()) // 3 % 2:  # o anel só tem uma linha: alterna com o reset a cada 3 s
+        out["r5"] = f"Acaba ~{clock(end)}"
     out["pw"] = round(week.get("used_percentage") if week.get("used_percentage") is not None else -1)
     rw = parse_reset(week.get("resets_at"))
     out["rw"] = f"{WEEKDAYS[rw.weekday()]} {rw.hour}h" if rw else ""
@@ -1192,7 +1222,7 @@ def demo_frame():
                                             ["Claude Desktop", 1, 0, 0, 1, 0, 1]],
                  "rows": sessions},
         "hist": hist,
-        "p5": DEMO_P5, "r5": "Reset às 17h", "pw": 38, "rw": "seg 6h", "wf": 49, "age": 30,
+        "p5": DEMO_P5, "st": DEMO_ST, "r5": "Reset às 17h", "pw": 38, "rw": "seg 6h", "wf": 49, "age": 30,
         "clk": now.strftime("%H:%M"), "t": local_time(), "org": "Acme Labs", "dark": dark_mode(),
         "accts": [[1, "Acme Labs", 1, 0, DEMO_P5, 38, 0], [2, "Side Project", 0, 0, 7, 12, 180]], "act": ["", "", ""],
     }
@@ -1430,6 +1460,7 @@ def net_loop():
 DEMO = "--demo" in sys.argv
 AGENT = agent_version()
 DEMO_P5 = int(os.environ.get("TOKENPULSE_DEMO_P5", "42"))  # para mostrar as faixas: 42, 74, 86, 95
+DEMO_ST = int(os.environ.get("TOKENPULSE_DEMO_ST", "0"))  # o aviso da página de status: 1 instável, 2 fora do ar
 
 
 def main():
@@ -1443,6 +1474,7 @@ def main():
         threading.Thread(target=usage_loop, daemon=True).start()
         threading.Thread(target=history_loop, daemon=True).start()
         threading.Thread(target=herdr_events, daemon=True).start()
+        threading.Thread(target=status_loop, daemon=True).start()
     if "--once" not in sys.argv:
         threading.Thread(target=net_loop, daemon=True).start()
         threading.Thread(target=ble_loop, daemon=True).start()
@@ -1457,7 +1489,7 @@ def main():
             if not woke:  # acordado por evento do herdr: manda já, os .jsonl esperam o próximo segundo
                 usage.poll()
             org_name = org()  # antes de limits(), que depende de saber se a org mudou
-            frame = (usage.snapshot() | limits() | account_frame()
+            frame = (usage.snapshot() | limits() | account_frame() | ({"st": _claude["st"]} if _claude["st"] else {})
                      | {"clk": datetime.now().strftime("%H:%M"), "t": local_time(), "org": org_name, "dark": dark_mode(), "agv": AGENT})
         _latest["frame"] = frame
         if "--once" in sys.argv:
