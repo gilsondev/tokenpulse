@@ -41,9 +41,14 @@ main() {  # numa função: com curl | bash, nada roda antes de o script chegar i
   echo "3/4 ligando o daemon ($tag)"
   "$dir/host/install.sh"
 
-  echo "4/4 conferindo o login do Claude Code"
-  if ! PATH="$HOME/.local/bin:$PATH" claude auth status >/dev/null 2>&1; then
-    echo "  aviso: o Claude Code não parece logado. Rode \"claude\" e faça login; sem isso a placa não mostra o % de uso."
+  echo "4/4 conferindo o Claude Code e o Codex"
+  has_claude=$(PATH="$HOME/.local/bin:$PATH" command -v claude || true)
+  if [ -n "$has_claude" ] && ! PATH="$HOME/.local/bin:$PATH" claude auth status >/dev/null 2>&1; then
+    echo "  aviso: o Claude Code não parece logado. Rode \"claude\" e faça login; sem isso a placa não mostra o % de uso do Claude."
+  fi
+  [ -d "$HOME/.codex/sessions" ] && echo "  Codex encontrado: a placa também mostra o uso dele."
+  if [ -z "$has_claude" ] && [ ! -d "$HOME/.codex/sessions" ]; then
+    echo "  aviso: não achei o Claude Code nem o Codex neste Mac. A placa mostra o uso assim que um dos dois for usado."
   fi
 
   echo

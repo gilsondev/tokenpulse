@@ -262,18 +262,20 @@ class CodexUsage:
         self.paths, self.globbed_at, self.recent = [], 0.0, False
         self.sessions = {}  # id -> última atividade, se há tarefa rodando, se terminou alguma, pasta
         self.names, self.names_at = {}, 0.0
+        self.last_use = 0.0  # o log do Codex mexido por último, em qualquer data
 
     def poll(self):
         now = time.time()
         if now - self.globbed_at > 15:
             self.paths, self.globbed_at = glob.glob(CODEX_SESSIONS, recursive=True), now
         # 7 dias: o % da semana pode estar num arquivo de dias atrás; e sem uso nesse prazo o Codex some da placa
-        week_ago, self.recent = now - 7 * 86400, False
+        week_ago, self.recent, self.last_use = now - 7 * 86400, False, 0.0
         for path in self.paths:
             try:
                 st = os.stat(path)
             except OSError:
                 continue
+            self.last_use = max(self.last_use, st.st_mtime)
             if st.st_mtime < week_ago:
                 continue
             self.recent = True
@@ -355,9 +357,10 @@ class CodexUsage:
                 self.last_ts = ts
                 self.last_model = f"{model} · {f['effort']}" if f.get("effort") else model
 
-    def snapshot(self):
-        """O bloco "cx" do frame, ou None sem uso do Codex nos últimos 7 dias: aí a placa fica como sempre foi."""
-        if not self.recent:
+    def snapshot(self, chosen=False):
+        """O bloco "cx" do frame, ou None sem uso do Codex nos últimos 7 dias: aí a placa fica como sempre foi.
+        chosen: o Codex foi escolhido em Provedores; aí o bloco vai mesmo parado, com o aviso no lugar do reset."""
+        if not self.recent and not chosen:
             return None
         now = time.time()
         midnight = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
@@ -366,7 +369,8 @@ class CodexUsage:
         return {"m": self.last_model or "Codex", "plan": (rl.get("plan_type") or "").capitalize(),
                 "tot": fmt_tokens(sum(e.total for e in self.events if e.ts >= midnight)),
                 "rate": fmt_tokens(sum(spark[-5:]) / 5), "sp": spark,
-                "n": len({e.session for e in self.events if now - e.ts < 600})} | codex_windows(rl, datetime.now())
+                "n": len({e.session for e in self.events if now - e.ts < 600})} | codex_windows(rl, datetime.now()) | (
+            {} if self.recent else {"r5": f"Sem uso há {int((now - self.last_use) // 86400)} dias" if self.last_use else "Sem uso"})
 
 
 PROVIDERS = os.path.join(HOME, ".claude/esp-tokens-providers")  # o ajuste Provedores, escolhido na placa
@@ -392,7 +396,7 @@ def with_codex(frame, cx, claude_events, codex, claude_recent):
     if not os.path.exists(PROVIDERS):  # ninguém escolheu ainda: a placa pergunta, com o texto do que o Mac tem
         frame["pask"] = "both" if claude_recent else "codex"
     mode = chosen if chosen != "auto" else "both" if claude_recent else "codex"
-    if mode == "claude":
+    if mode == "claude" or not cx:  # sem cx: automático sem Codex recente, a placa de sempre
         return frame
     now = time.time()
     midnight = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
@@ -1785,10 +1789,11 @@ def main():
                 usage.poll()
                 codex.poll()
             org_name = org()  # antes de limits(), que depende de saber se a org mudou
-            cx = codex.snapshot()
+            # a escolha explícita em Provedores vale mesmo sem uso recente: não muda a placa sozinha depois de 7 dias
+            cx = codex.snapshot(chosen=provider_mode() in ("codex", "both"))
             frame = (usage.snapshot() | limits() | account_frame() | ({"st": _claude["st"]} if _claude["st"] else {})
                      | {"clk": datetime.now().strftime("%H:%M"), "t": local_time(), "org": org_name, "dark": dark_mode(), "agv": AGENT})
-            if cx:
+            if cx or os.path.exists(PROVIDERS):  # depois de escolhido, o ajuste continua nos ajustes da placa
                 frame = with_codex(frame, cx, usage.events, codex, usage.recent)
         _latest["frame"] = frame
         if "--once" in sys.argv:

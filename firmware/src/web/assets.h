@@ -47,7 +47,7 @@ static const char WIFI_PAGE[] PROGMEM = R"HTML(<!doctype html>
 <main>
 <a class=brand href=/wifi><img src=/logo.svg alt="">tokenpulse</a>
 <h1>Conectar a placa ao seu WiFi</h1><p class=sub id=sub></p>
-<p>Escolha a <b>mesma rede do Mac</b> em que você usa o Claude Code: é por ela que o Mac manda os dados para a placa.</p>
+<p>Escolha a <b>mesma rede do Mac</b> em que você usa o Claude Code ou o Codex: é por ela que o Mac manda os dados para a placa.</p>
 <section><ol class=steps>
 <li id=s1><h3>Escolha a rede</h3>
 <div id=list class=nets><p class=hint><span class=spin></span>procurando redes…</p></div>

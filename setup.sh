@@ -15,7 +15,11 @@ case $board in
     ;;
 esac
 command -v uv >/dev/null || { echo "falta o uv: https://docs.astral.sh/uv/" >&2; exit 1; }
-claude auth status >/dev/null 2>&1 || echo "aviso: o Claude Code não parece logado (rode claude auth status); sem login a placa não mostra o % de uso" >&2
+if command -v claude >/dev/null; then
+  claude auth status >/dev/null 2>&1 || echo "aviso: o Claude Code não parece logado (rode claude auth status); sem login a placa não mostra o % de uso do Claude" >&2
+elif [ ! -d "$HOME/.codex/sessions" ]; then
+  echo "aviso: não achei o Claude Code nem o Codex neste Mac; a placa mostra o uso assim que um dos dois for usado" >&2
+fi
 
 # o daemon, se já roda, segura a porta e testaria a placa antes de ela ter o firmware: pausa até o fim
 launchctl bootout "gui/$(id -u)/com.gilsondev.tokenpulse" 2>/dev/null || true
