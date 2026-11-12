@@ -11,9 +11,13 @@ constexpr uint16_t EYE = 0x18E3;
 const char* const BODY_ROWS[] = {"..oooooooo..", ".oooooooooo.", "oooooooooooo", "ooeeooooeeoo",
                                  "ooeeooooeeoo", "oooooooooooo", ".oooooooooo."};
 const char* const LEGS[] = {".o.o....o.o.", "..o.o..o.o.."};
+constexpr uint16_t CODEX_BODY = 0x150F;  // #10A37F
+// e = o ">" do prompt, c = o cursor "_", que pisca enquanto a sessão trabalha
+const char* const CODEX_ROWS[] = {"..oooooooo..", ".oooooooooo.", "ooeooooooooo", "oooeoooooooo",
+                                  "ooeoocccccoo", "oooooooooooo", ".oooooooooo."};
 }  // namespace
 
-void draw(int x, int y, int px, Mood mood, uint16_t bg, uint32_t seed) {
+void draw(int x, int y, int px, Mood mood, uint16_t bg, uint32_t seed, bool codex) {
   auto& fb = gfx::fb();
   const uint32_t t = millis() + seed * 377;
   int dx = 0, dy = 0, legs = 0;
@@ -22,14 +26,17 @@ void draw(int x, int y, int px, Mood mood, uint16_t bg, uint32_t seed) {
   if (mood == TURN && t % 1600 < 220) dy = -px;                           // pulinho
   if (mood == OFFLINE) dy = (t / 700 % 2) ? -px / 2 : 0;  // respira devagar
   const bool blink = mood == TURN && t % 2900 < 120;
-  const uint16_t body = mood == IDLE ? blend(BODY, bg, 0.55f) : BODY;
+  const uint16_t body = mood == IDLE ? blend(codex ? CODEX_BODY : BODY, bg, 0.55f) : codex ? CODEX_BODY : BODY;
   for (int r = 0; r < 8; r++) {
-    const char* row = r < 7 ? BODY_ROWS[r] : LEGS[legs];
+    const char* row = r < 7 ? (codex ? CODEX_ROWS : BODY_ROWS)[r] : LEGS[legs];
     for (int c = 0; c < W; c++) {
       char p = row[c];
       if (p == '.') continue;
       uint16_t col = body;
-      if (p == 'e' && mood == OFFLINE) {  // olha para o cabo, à direita: só a metade direita do olho
+      if (codex) {
+        if (p == 'c') col = mood == IDLE || (mood == WORK && t / 400 % 2) ? body : EYE;
+        else if (p == 'e') col = EYE;
+      } else if (p == 'e' && mood == OFFLINE) {  // olha para o cabo, à direita: só a metade direita do olho
         col = c == 3 || c == 9 ? EYE : body;
       } else if (p == 'e') {
         const bool closed = mood == IDLE || blink;

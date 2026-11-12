@@ -464,7 +464,8 @@ void drawModels(bool live, int page) {
     snprintf(buf, sizeof buf, "Entrada %s · saída %s", (const char*)m[3], (const char*)m[4]);
     const int y2 = y1 + below(gfx::LABEL, 22);
     text(fit(buf, gfx::SMALL, w).c_str(), x, y2, gfx::SMALL, DIM);
-    snprintf(buf, sizeof buf, "Cache lido %s · escrito %s", (const char*)m[5], (const char*)m[6]);
+    if (*(m[6] | "")) snprintf(buf, sizeof buf, "Cache lido %s · escrito %s", (const char*)m[5], (const char*)m[6]);
+    else snprintf(buf, sizeof buf, "Cache lido %s", (const char*)m[5]);  // o Codex não escreve cache
     text(fit(buf, gfx::SMALL, w).c_str(), x, y2 + below(gfx::SMALL, 18), gfx::SMALL, DIM);
     i++;
   }
@@ -876,7 +877,7 @@ void spark(int cx, int cy, int r) {
 int directSession(int ws) {
   JsonArrayConst w = app::frame["sess"]["ws"][ws];
   int ids[1];
-  return (int)(w[6] | 0) && (int)(w[1] | 0) == 1 && sessionsOf(ws, ids, 1) == 1 ? ids[0] : -1;
+  return (int)(w[6] | 0) == 1 && (int)(w[1] | 0) == 1 && sessionsOf(ws, ids, 1) == 1 ? ids[0] : -1;
 }
 
 // Pasta em pixel art, do tamanho do mascote: o ícone de um workspace, na cor do estado mais urgente.
@@ -919,7 +920,9 @@ void drawWorkspacePage(bool live, int sp) {
     card(x, y + (int)((1 - in) * u(16)), cw, ch, u(14), bg, (int)(w[5] | 0));
     if (in < 0.9f) continue;
     const uint16_t fc = mood == mascot::BLOCK ? RED : mood == mascot::TURN ? YELLOW : mood == mascot::WORK ? GREEN : blend(DIM, bg, 0.3f);
-    if ((int)(w[6] | 0)) spark(x + pad + 4 * MASCOT_PX(), y + (COMPACT() ? u(10) : u(14)) + 4 * MASCOT_PX(), 4 * MASCOT_PX() + MASCOT_PX() / 2);
+    // o ícone: o asterisco no Claude Desktop (1), o mascote do Codex no workspace dele (2), a pasta nos outros
+    if ((int)(w[6] | 0) == 1) spark(x + pad + 4 * MASCOT_PX(), y + (COMPACT() ? u(10) : u(14)) + 4 * MASCOT_PX(), 4 * MASCOT_PX() + MASCOT_PX() / 2);
+    else if ((int)(w[6] | 0) == 2) mascot::draw(x + pad, y + (COMPACT() ? u(10) : u(14)), MASCOT_PX(), mood, bg, k, true);
     else folder(x + pad, y + (COMPACT() ? u(10) : u(14)), MASCOT_PX(), fc, bg);
     snprintf(buf, sizeof buf, total == 1 ? "1 sessão" : "%d sessões", total);
     text(buf, x + cw - u(10), y + (COMPACT() ? u(10) : u(14)), gfx::SMALL, DIM, top_right, bg);
@@ -962,10 +965,11 @@ void sessionCard(int r, int k, bool desk) {
   const int pad = u(12), statusY = y + ch - max(u(20), gfx::lineHeight(gfx::SMALL) + 2);
   const int iconY = y + (COMPACT() ? u(10) : u(14)), px = MASCOT_PX();
   if (desk) spark(x + pad + 4 * px, iconY + 4 * px, 4 * px + px / 2);
-  else mascot::draw(x + pad, iconY, px, mood, cardBg, k);
   const char* origin = row[1] | "CLI";
+  const bool codex = !strcmp(origin, "Codex");
+  if (!desk) mascot::draw(x + pad, iconY, px, mood, cardBg, k, codex);
   const int by = y + (COMPACT() ? u(6) : u(12)), bw = gfx::textWidth(origin, gfx::SMALL) + 2 * u(10);
-  badge(origin, x + cw - u(10), by, !strcmp(origin, "Desk") ? ACCENT : GREEN, cardBg);
+  badge(origin, x + cw - u(10), by, !strcmp(origin, "Desk") ? ACCENT : codex ? 0x150F : GREEN, cardBg);
   // os tokens na linha do selo, à esquerda dele, depois do mascote: embaixo do selo encostariam no título
   const int room = cw - u(10) - bw - u(8) - (pad + mascot::W * MASCOT_PX() + u(14));
   if (room >= gfx::textWidth(row[3] | "", gfx::SMALL))  // inteiro ou nada: "135,…" não diz nada
@@ -1053,7 +1057,8 @@ void drawModelDetail(bool live, int page, int idx) {
   snprintf(buf, sizeof buf, "%d%%", (int)m[2]);
   text(buf, M() + lw, u(72), gfx::TITLE, ACCENT, top_right);
   if (settings::v.hideCost) strcpy(buf, "Tokens hoje");
-  else snprintf(buf, sizeof buf, "Tokens hoje · %s na API", (const char*)(m[7] | "--"));
+  else if (*(m[7] | "")) snprintf(buf, sizeof buf, "Tokens hoje · %s na API", (const char*)m[7]);
+  else strcpy(buf, "Tokens hoje");  // modelo sem preço na tabela (os do Codex)
   text(fit(buf, gfx::SMALL, lw).c_str(), M(), u(68) + below(gfx::NUM, 38), gfx::SMALL, MUTED);
 
   // composição numa barra empilhada
@@ -1079,7 +1084,7 @@ void drawModelDetail(bool live, int page, int idx) {
     fb().fillSmoothCircle(bx + r, by + r, r, cols[first]);
     if (x >= bx + bw - r) fb().fillSmoothCircle(bx + bw - r - 1, by + r, r, cols[last]);
   }
-  for (int k = 0; k < 4; k++) {
+  for (int k = 0; k < (*(m[6] | "") ? 4 : 3); k++) {  // sem "Cache escrito" nos modelos do Codex
     const int y = u(168) + k * below(gfx::LABEL, 26), d = max(3, u(5));
     fb().fillSmoothCircle(M() + d, y + gfx::lineHeight(gfx::LABEL) / 2 - 1, d, cols[k]);
     text(names[k], M() + u(18), y, gfx::LABEL, MUTED);
@@ -1144,6 +1149,14 @@ void drawHistory(bool live, int page, int sel) {
   const bool cost = !settings::v.hideCost;
   snprintf(buf, sizeof buf, "US$ %d", (int)s[3]);
   if (cost) text(buf, W() - M(), ny, gfx::NUM, ACCENT, top_right);
+  if (s.size() > 4) {  // com o Codex o número é a soma; esta linha separa os dois (o custo é só o do Claude)
+    snprintf(buf, sizeof buf, "Claude %.1fM · Codex %.1fM", (float)s[2] - (float)s[4], (float)s[4]);
+    String split = buf;
+    split.replace('.', ',');
+    // deitada não há espaço entre o número e as barras: a linha vai à direita do dia
+    if (L()) text(fit(split.c_str(), gfx::SMALL, W() / 2 - M()).c_str(), W() - M(), u(66), gfx::SMALL, DIM, top_right);
+    else text(fit(split.c_str(), gfx::SMALL, W() - 2 * M()).c_str(), M(), ny + gfx::lineHeight(gfx::NUM) + u(2), gfx::SMALL, DIM);
+  }
 
   const int slot = (W() - 2 * M() + gap()) / n, bw = slot - gap(), chY = CH_Y(), chH = CH_H();
   fb().drawFastHLine(M(), chY + chH, W() - 2 * M(), TRACK);

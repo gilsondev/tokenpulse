@@ -10,7 +10,8 @@ enum Mood : uint8_t { WORK, TURN, IDLE, BLOCK, OFFLINE };  // BLOCK: esperando v
 constexpr int W = 12;  // em pixels do sprite; na tela cada um vira um bloco de `px` × `px`
 constexpr int W_OFFLINE = 23;  // com o cabo e a tomada ao lado
 
-// (x, y): canto superior esquerdo; `seed` desencontra a animação de mascotes vizinhos
-void draw(int x, int y, int px, Mood mood, uint16_t bg, uint32_t seed = 0);
+// (x, y): canto superior esquerdo; `seed` desencontra a animação de mascotes vizinhos. codex: o bichinho verde
+// com o rosto ">_" das sessões do Codex, no lugar do laranja do Claude
+void draw(int x, int y, int px, Mood mood, uint16_t bg, uint32_t seed = 0, bool codex = false);
 
 }  // namespace mascot
