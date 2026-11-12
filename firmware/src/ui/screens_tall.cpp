@@ -2,6 +2,7 @@
 
 #include "../app.h"
 #include "../hostlink.h"
+#include "../power.h"
 #include "../webui.h"
 #include "../ble.h"
 #include "../sd.h"
@@ -30,6 +31,13 @@ bool L() { return gfx::width() > gfx::height(); }  // deitada (Ajustes → Tela 
 float K() { return gfx::height() / (L() ? 320.f : 480.f); }
 int u(float v) { return lroundf(v * K()); }
 int M() { return u(16); }  // margem
+// alvo de toque mínimo: 7,5 mm na tela física (a faixa dos 44 pt dos guias de toque). Com 9 mm, a AMOLED ficava
+// com elementos enormes para o tamanho de texto que ela tem
+int TAPPX() { return lroundf(7.5f * board::PROFILE.pxPerMm); }
+// a fonte de um controle pela altura dele: o texto acompanha o alvo de toque, que cresce nas telas densas
+gfx::Font fontFor(int h) {
+  return h >= 2 * gfx::lineHeight(gfx::TITLE) ? gfx::TITLE : h >= 2 * gfx::lineHeight(gfx::LABEL) ? gfx::LABEL : gfx::SMALL;
+}
 int below(gfx::Font f, int gap) { return max(u(gap), gfx::lineHeight(f)); }  // próxima linha de texto
 
 // Pontos de página no rodapé: todos com 6 px de altura no mesmo eixo; a página atual é uma pílula.
@@ -88,6 +96,16 @@ String wrap2(const char* s, gfx::Font f, int maxW, String& l2) {
     l1 = l1.substring(0, cut);
   }
   return l1;
+}
+
+// Título que não cabe numa linha quebra em duas, em vez de virar reticências. Devolve a altura usada.
+int title2(const char* t, int cx, int y, int maxW, uint16_t c, gfx::Font f = gfx::TITLE) {
+  String l2, l1 = wrap2(t, f, maxW, l2);
+  const int lh = gfx::lineHeight(f) + u(4);
+  if (!l2.length()) return text(l1.c_str(), cx, y, f, c, top_center), lh;
+  text(l1.c_str(), cx, y, f, c, top_center);
+  text(l2.c_str(), cx, y + lh, f, c, top_center);
+  return 2 * lh;
 }
 
 // Ícone de passo de um guia: 0 feito (✓), 1 agora (anel girando), 2 depois (ponto).
@@ -206,7 +224,7 @@ void header(bool live, const char* title, bool dropdown = false, int sub = 1) {
   char clkBuf[8];  // a hora contínua (RTC + frames) anda entre os frames e sem o Mac; sem ela, a do frame
   const int32_t secs = app::secondsOfDay();
   if (secs >= 0) snprintf(clkBuf, sizeof clkBuf, "%02d:%02d", (int)(secs / 3600), (int)(secs / 60 % 60));
-  const gfx::Font HT = board::PROFILE.dense ? gfx::TITLE : gfx::LABEL, HS = board::PROFILE.dense ? gfx::LABEL : gfx::SMALL;
+  const gfx::Font HT = gfx::LABEL, HS = gfx::SMALL;  // na tela densa, o gfx já sobe um tamanho
   const char* clk = secs >= 0 ? clkBuf : (const char*)(f["clk"] | "");
   const int clkW = gfx::textWidth(clk, gfx::TITLE), clkCy = u(8) + gfx::lineHeight(gfx::TITLE) / 2;
   const int pw = powerIcon(W() - M() - u(30) - clkW - u(8), clkCy, true);
@@ -492,17 +510,27 @@ void drawWeb(bool) {
   char qr[64];
   gfx::clear();
   // só o título: modelo e contadores de sessão não dizem nada nesta tela
-  text("Página web", M(), u(22), gfx::TITLE, TEXT, middle_left);
-  text("Toque para voltar", W() - M(), u(22), gfx::SMALL, DIM, middle_right);
+  text("‹ Página web", M(), u(22), gfx::TITLE, TEXT, middle_left);
+  if (webui::online()) text("Toque para voltar", W() - M(), u(22), gfx::SMALL, DIM, middle_right);
   const bool net = webui::online();
   if (net) snprintf(qr, sizeof qr, "http://%s.local/", webui::host());
   else snprintf(qr, sizeof qr, "WIFI:T:nopass;S:%s;;", webui::apName());
-  const int top = u(48), textH = below(gfx::SMALL, 22) * 3 + below(gfx::LABEL, 24) + u(8);
+  int top = u(48);
+  // com o daemon por perto, o caminho principal é a senha digitada no computador; o QR fica como alternativa
+  const bool pc = !net && hostlink::lastIdMs() && millis() - hostlink::lastIdMs() < 15000;
+  if (pc) {
+    const String st = webui::joinStatus();
+    top += title2(st.length() ? st.c_str() : "Digite a senha do WiFi no computador (toque para pedir de novo)", W() / 2, top - u(8), W() - 2 * M(), ACCENT,
+                  gfx::LABEL);
+    text("ou pelo celular:", W() / 2, top, gfx::SMALL, DIM, top_center);
+    top += below(gfx::SMALL, 22);
+  }
+  const int textH = below(gfx::SMALL, 22) * 3 + below(gfx::LABEL, 24) + u(8);
   const int side = min(W() - 2 * M(), gfx::height() - top - textH - u(8));
   fb().qrcode(qr, (W() - side) / 2, top, side);
   int y = top + side + u(14);
   if (net) {
-    text("Escaneie, ou abra no celular ou no Mac:", W() / 2, y, gfx::SMALL, MUTED, middle_center);
+    text("Escaneie, ou abra no celular ou no computador:", W() / 2, y, gfx::SMALL, MUTED, middle_center);
     snprintf(qr, sizeof qr, "%s.local", webui::host());
     text(qr, W() / 2, y + below(gfx::SMALL, 22), gfx::LABEL, ACCENT, middle_center);
   } else {
@@ -514,24 +542,33 @@ void drawWeb(bool) {
   }
 }
 
-// Falta instalar o daemon: título, QR code da página /comecar e o endereço curto, em coluna nas duas orientações.
-// O QR fica com a altura que sobra: deitada numa tela de 240 px ele encolhe em vez de empurrar o texto para fora.
+// Falta instalar o daemon: título, QR code da página /comecar e o endereço curto, numa coluna centrada na altura.
+// O QR cresce até metade da largura com o que sobra; numa tela baixa (deitada, 240 px) ele encolhe em vez de
+// empurrar o texto para fora. Na redonda, o bloco centrado fica longe das bordas curvas.
 void drawInstall() {
   gfx::clear();
-  const int titleY = u(24), qrTop = titleY + below(gfx::TITLE, 22);
-  const int textH = below(gfx::SMALL, 22) + below(gfx::LABEL, 24) + u(12);
-  const int side = min(W() - 2 * M(), gfx::height() - qrTop - textH - u(8));
-  text("Falta o tokenpulse no Mac", W() / 2, titleY, gfx::TITLE, TEXT, middle_center);
-  fb().qrcode(app::START_URL, (W() - side) / 2, qrTop, side);
-  const int y = qrTop + side + u(14);
-  text("Escaneie, ou abra no Mac:", W() / 2, y, gfx::SMALL, MUTED, middle_center);
-  text(app::START_SHORT, W() / 2, y + below(gfx::SMALL, 22), gfx::LABEL, ACCENT, middle_center);
+  const int cx = W() / 2, maxW = W() - 2 * M() - (board::PROFILE.oled ? u(40) : 0), gap = u(18);
+  String l2;
+  wrap2("Falta o tokenpulse no computador", gfx::TITLE, maxW, l2);
+  const int titleH = (gfx::lineHeight(gfx::TITLE) + u(4)) * (l2.length() ? 2 : 1);
+  const int textH = gfx::lineHeight(gfx::LABEL) + u(8) + gfx::lineHeight(gfx::TITLE) + u(10) + gfx::lineHeight(gfx::SMALL);
+  const int side = max(u(90), min(W() / 2, gfx::height() - titleH - textH - 2 * gap - u(24)));
+  int y = max(u(10), (gfx::height() - (titleH + gap + side + gap + textH)) / 2);
+  y += title2("Falta o tokenpulse no computador", cx, y, maxW, TEXT) + gap;
+  fb().qrcode(app::START_URL, cx - side / 2, y, side);
+  y += side + gap;
+  text("No computador, abra:", cx, y, gfx::LABEL, MUTED, top_center);
+  y += gfx::lineHeight(gfx::LABEL) + u(8);
+  text(app::START_SHORT, cx, y, gfx::TITLE, ACCENT, top_center);
+  y += gfx::lineHeight(gfx::TITLE) + u(10);
+  text("ou escaneie para receber o link", cx, y, gfx::SMALL, DIM, top_center);
 }
 
 // Destaque de uma sessão que passou a esperar você: o mascote grande, o título, o workspace e o estado, na cor
 // do estado. O botão "Abrir Sessão" traz a janela da sessão para a frente; tocar fora dele, ou o KEY3, fecha.
-int ATTN_BTN_Y() { return gfx::height() - u(92); }
-int ATTN_BTN_H() { return u(50); }
+// o botão fica logo acima da barra de tempo (em h - u(22)): com a altura de 9 mm, ancorado no topo ele a cobria
+int ATTN_BTN_H() { return max(u(50), TAPPX()); }
+int ATTN_BTN_Y() { return gfx::height() - u(36) - ATTN_BTN_H(); }
 void drawAttention(int r, uint32_t ageMs) {
   JsonArrayConst row = app::frame["sess"]["rows"][r];
   const bool block = !strcmp(row[2] | "", "block");
@@ -545,8 +582,11 @@ void drawAttention(int r, uint32_t ageMs) {
   mascot::draw(cx - mascot::W * px / 2, my, px, block ? mascot::BLOCK : mascot::TURN, bg);
   int y = my + 8 * px + u(14);
   const int lh = gfx::lineHeight(gfx::NUM);
-  text(fit(row[0] | "", gfx::NUM, maxW).c_str(), cx, y, gfx::NUM, TEXT, top_center, bg);
+  String t2, t1 = wrap2(row[0] | "", gfx::NUM, maxW, t2);  // o título em até duas linhas, sem cortar no meio
+  if (*ask) t1 = fit(row[0] | "", gfx::NUM, maxW), t2 = "";  // com a pergunta embaixo, uma linha só
+  text(fit(t1.c_str(), gfx::NUM, maxW).c_str(), cx, y, gfx::NUM, TEXT, top_center, bg);
   y += lh + u(2);
+  if (t2.length()) text(fit(t2.c_str(), gfx::NUM, maxW).c_str(), cx, y, gfx::NUM, TEXT, top_center, bg), y += lh + u(2);
   char buf[64];
   const int mins = row[4] | 0;
   const char* ws = app::frame["sess"]["ws"][(int)(row[5] | 0)][0] | "";
@@ -565,17 +605,17 @@ void drawAttention(int r, uint32_t ageMs) {
     text(l1.c_str(), cx, y, gfx::LABEL, TEXT, top_center, bg);
     y += ql, rest = last ? "" : l2;
   }
-  const int by = ATTN_BTN_Y(), bh = ATTN_BTN_H(), bw2 = min(maxW, u(260));
-  fb().fillSmoothRoundRect(cx - bw2 / 2, by, bw2, bh, bh / 2, c);
-  text("Abrir Sessão", cx, by + bh / 2, gfx::LABEL, BG, middle_center, c);
+  const int by = ATTN_BTN_Y(), bh = ATTN_BTN_H(), bw2 = maxW;
+  fb().fillSmoothRoundRect(cx - bw2 / 2, by, bw2, bh, min(bh / 2, u(26)), c);
+  text("Abrir Sessão", cx, by + bh / 2, fontFor(bh) == gfx::SMALL ? gfx::LABEL : fontFor(bh), BG, middle_center, c);
   // o tempo até o destaque sair sozinho
   const int left = maxW * (60000 - min<uint32_t>(ageMs, 60000)) / 60000;
   fb().fillRoundRect(M(), h - u(22), maxW, u(4), u(2), blend(bg, c, 0.25f));
   if (left > 0) fb().fillRoundRect(M(), h - u(22), left, u(4), u(2), c);
 }
 
-bool attentionCenter(int x, int y) {  // o botão "abrir no Mac", com folga para o dedo
-  const int bw2 = min(W() - 2 * M(), u(260));
+bool attentionCenter(int x, int y) {  // o botão "abrir no computador", com folga para o dedo
+  const int bw2 = W() - 2 * M();
   return abs(x - W() / 2) < bw2 / 2 + u(10) && y > ATTN_BTN_Y() - u(10) && y < ATTN_BTN_Y() + ATTN_BTN_H() + u(10);
 }
 
@@ -595,27 +635,31 @@ bool askBoth() { return !strcmp(app::frame["pask"] | "", "both"); }
 int askLineY = 0, askLine = 0;  // a geometria do último desenho, para o toque
 }  // namespace
 
+// As opções têm alvo de 9 mm ou mais: sem altura para isso numa coluna, os mascotes saem e as opções viram uma
+// grade de 2 colunas (a AMOLED com 4 opções).
+int askCols = 1, askCellW = 0;
 void drawProvAsk() {
   const AskOpt* opts = askBoth() ? ASK_BOTH : ASK_CODEX;
   const int n = askBoth() ? 4 : 2, land = L(), cx = W() / 2;
+  const int titleH = (land || !askBoth() ? 1 : 2) * below(gfx::TITLE, 30) + below(gfx::SMALL, 20) + u(8);
+  const int px = u(7), mascotH = 8 * px + u(18);
+  const bool mascots = !land && gfx::height() - u(22) - mascotH - titleH - u(16) >= n * TAPPX();
   gfx::clear();
   int y = u(land ? 12 : 22);
-  if (!land) {  // os mascotes de quem o Mac tem; deitada não há altura para eles
-    const int px = u(7), gap = u(10), w = mascot::W * px;
+  if (mascots) {  // os mascotes de quem o Mac tem, quando sobra altura
+    const int gap = u(10), w = mascot::W * px;
     if (askBoth()) {
       mascot::draw(cx - w - gap / 2, y, px, mascot::WORK, BG, 0);
       mascot::draw(cx + gap / 2, y, px, mascot::WORK, BG, 1, true);
     } else {
       mascot::draw(cx - w / 2, y, px, mascot::WORK, BG, 0, true);
     }
-    y += 8 * px + u(18);
+    y += mascotH;
   }
   if (land || !askBoth()) {
-    text(fit(askBoth() ? "Este Mac usa o Claude e o Codex" : "Este Mac usa o Codex", gfx::TITLE, W() - 2 * M()).c_str(),
-         cx, y, gfx::TITLE, TEXT, top_center);
-    y += below(gfx::TITLE, 30);
+    y += title2(askBoth() ? "Achei o Claude e o Codex" : "Achei o Codex", cx, y, W() - 2 * M(), TEXT) + u(4);
   } else {
-    text("Este Mac usa o Claude", cx, y, gfx::TITLE, TEXT, top_center);
+    text("Achei o Claude", cx, y, gfx::TITLE, TEXT, top_center);
     y += below(gfx::TITLE, 30);
     text("e o Codex", cx, y, gfx::TITLE, TEXT, top_center);
     y += below(gfx::TITLE, 30);
@@ -623,29 +667,37 @@ void drawProvAsk() {
   text(askBoth() ? "O que a placa mostra?" : "Nenhuma sessão do Claude Code por aqui", cx, y, gfx::SMALL, MUTED, top_center);
   y += below(gfx::SMALL, 20) + u(8);
   // sem "agora não": o automático já é uma das respostas
-  askLineY = y;
-  askLine = min(u(72), (gfx::height() - u(land ? 10 : 20) - y) / n);
+  const int room = gfx::height() - u(land ? 10 : 16) - y, gap = u(10);
+  askCols = room / n >= TAPPX() ? 1 : 2;
+  const int rows = (n + askCols - 1) / askCols;
+  askLineY = y, askLine = (room + gap) / rows, askCellW = (W() - 2 * M() - (askCols - 1) * gap) / askCols;
   const uint16_t track = blend(BG, TRACK, 0.7f);
-  fb().fillSmoothRoundRect(M(), y, W() - 2 * M(), n * askLine, u(12), track);
-  const bool hints = askLine >= gfx::lineHeight(gfx::LABEL) + gfx::lineHeight(gfx::SMALL) + u(8);
   for (int k = 0; k < n; k++) {
-    const int ly = y + k * askLine, mid = ly + askLine / 2, tx = M() + u(46);
-    fb().fillSmoothCircle(M() + u(24), mid, u(10), MUTED);
-    fb().fillSmoothCircle(M() + u(24), mid, u(10) - max(2, u(2)), track);
-    if (hints && *opts[k].hint) {
-      text(opts[k].name, tx, mid - 1, gfx::LABEL, TEXT, bottom_left, track);
-      text(opts[k].hint, tx, mid + u(3), gfx::SMALL, DIM, top_left, track);
-    } else {
-      text(opts[k].name, tx, mid, gfx::LABEL, TEXT, middle_left, track);
+    const int x = M() + (k % askCols) * (askCellW + gap), ly = y + (k / askCols) * askLine, h = askLine - gap;
+    fb().fillSmoothRoundRect(x, ly, askCellW, h, u(12), track);
+    const gfx::Font NF = h >= 2 * gfx::lineHeight(gfx::TITLE) + gfx::lineHeight(gfx::SMALL) ? gfx::TITLE : gfx::LABEL;
+    const bool hint = *opts[k].hint && h >= gfx::lineHeight(NF) + gfx::lineHeight(gfx::SMALL) + u(12);
+    const int mid = ly + h / 2;
+    if (askCols == 1) {
+      fb().fillSmoothCircle(x + u(24), mid, u(10), MUTED);
+      fb().fillSmoothCircle(x + u(24), mid, u(10) - max(2, u(2)), track);
     }
-    if (k < n - 1) fb().drawFastHLine(M() + u(14), ly + askLine - 1, W() - 2 * M() - u(28), BG);
+    const int tx = askCols == 1 ? x + u(46) : x + u(14), tw = askCellW - (tx - x) - u(10);
+    if (hint) {
+      text(fit(opts[k].name, NF, tw).c_str(), tx, mid - 1, NF, TEXT, bottom_left, track);
+      String l2, l1 = wrap2(opts[k].hint, gfx::SMALL, tw, l2);
+      text(fit(l1.c_str(), gfx::SMALL, tw).c_str(), tx, mid + u(3), gfx::SMALL, DIM, top_left, track);
+      if (askCols > 1 && l2.length()) text(fit(l2.c_str(), gfx::SMALL, tw).c_str(), tx, mid + u(3) + gfx::lineHeight(gfx::SMALL), gfx::SMALL, DIM, top_left, track);
+    } else {
+      text(fit(opts[k].name, NF, tw).c_str(), tx, mid, NF, TEXT, middle_left, track);
+    }
   }
 }
 
 const char* provAskTap(int x, int y) {
-  const int n = askBoth() ? 4 : 2;
-  if (y >= askLineY && y < askLineY + n * askLine && x >= M() && x <= W() - M())
-    return (askBoth() ? ASK_BOTH : ASK_CODEX)[(y - askLineY) / askLine].mode;
+  const int n = askBoth() ? 4 : 2, row = (y - askLineY) / max(1, askLine), col = (x - M()) / max(1, askCellW + u(10));
+  const int k = row * askCols + col;
+  if (y >= askLineY && x >= M() && x <= W() - M() && col < askCols && k < n) return (askBoth() ? ASK_BOTH : ASK_CODEX)[k].mode;
   return nullptr;
 }
 
@@ -802,7 +854,7 @@ void drawSaver() {
     return (void)restClock(x, y, false, cw, chh);
   }
   if (!app::hasData() || millis() - app::lastFrameMs > 60000) {  // o mascote tentando ligar o cabo
-    const char* s = "Sem dados do Mac";
+    const char* s = "Sem dados do computador";
     const int px = u(6), mw = mascot::W_OFFLINE * px, gap = u(14), th = gfx::lineHeight(gfx::LABEL);
     place(mw, 10 * px + gap + th, x, y);
     mascot::draw(x, y + 2 * px, px, mascot::OFFLINE, 0);
@@ -845,22 +897,23 @@ void drawWaiting() {
   const int lw = land ? W() * 2 / 5 : W(), lcx = lw / 2, px = u(8);
   const int sx = land ? lw + u(8) : M(), sw = W() - M() - sx;  // coluna dos passos
   mascot::draw(lcx - mascot::W_OFFLINE * px / 2, u(land ? 76 : 70), px, mascot::OFFLINE, BG);
-  text("Sem dados do Mac", lcx, u(land ? 178 : 172), gfx::TITLE, TEXT, middle_center);
+  // deitada na CYD a coluna tem ~130 px: o título quebra em duas linhas e o resto desce junto
+  const int extra = title2("Sem dados do computador", lcx, u(land ? 166 : 160), lw - 2 * M(), TEXT) - gfx::lineHeight(gfx::TITLE) - u(4);
   const bool usb = hostlink::usbPlugged(), port = usb && hostlink::portOpen();
   const uint32_t id = hostlink::lastIdMs();
   const bool daemon = port && id && millis() - id < 15000;
   if (app::lastFrameMs) snprintf(buf, sizeof buf, "Último dado há %lu min", (millis() - app::lastFrameMs) / 60000);
   else strcpy(buf, "Nenhum dado desde que a placa ligou");
   String sub2, sub1 = wrap2(buf, gfx::SMALL, lw - 2 * M(), sub2);
-  text(sub1.c_str(), lcx, u(land ? 204 : 198), gfx::SMALL, MUTED, middle_center);
-  if (sub2.length()) text(sub2.c_str(), lcx, u(land ? 204 : 198) + below(gfx::SMALL, 18), gfx::SMALL, MUTED, middle_center);
+  text(sub1.c_str(), lcx, u(land ? 204 : 198) + extra, gfx::SMALL, MUTED, middle_center);
+  if (sub2.length()) text(sub2.c_str(), lcx, u(land ? 204 : 198) + extra + below(gfx::SMALL, 18), gfx::SMALL, MUTED, middle_center);
 
   struct Step {
     const char *name, *ok, *wait;
     bool done;
   } steps[] = {
-      {"Cabo USB", "O Mac reconheceu a placa", "Gire o plugue USB-C ou troque o cabo", usb},
-      {"Daemon tokend", "Abriu a porta e se apresentou", "Rode: launchctl kickstart -k gui/$UID/com.gilsondev.tokenpulse", daemon},
+      {"Cabo USB", "O computador reconheceu a placa", "Gire o plugue USB-C ou troque o cabo", usb},
+      {"Programa no computador", "Abriu a porta e se apresentou", "Rode o instalador de tokenpulse.s.gy/comecar", daemon},
       {"Dados", "Chegando", "Esperando o primeiro envio", false},
   };
   int y = u(land ? 64 : 236);
@@ -879,14 +932,16 @@ void drawWaiting() {
     if (!st.done) blocked = true;
     y += u(land ? 76 : 70);
   }
-  snprintf(buf, sizeof buf, "%s · %s", board::NAME, hostlink::firmware());
+  snprintf(buf, sizeof buf, "%s · %s", board::NICK, hostlink::firmware());
   text(buf, W() / 2, gfx::height() - u(16), gfx::SMALL, DIM, middle_center);
 }
 
 // Workspaces e sessões em grade, em páginas com quantos cartões a tela comporta sem apertar. O cartão
 // precisa do mascote, de duas linhas de título e do status; a grade sai disso.
 // sem a linha do modelo (header com sub = false), a grade sobe para logo abaixo do título
-int GRID_Y() { return app::live() ? u(10) + max(gfx::lineHeight(gfx::TITLE), u(22)) + u(12) : u(62); }
+// o título com "‹" volta: a faixa dele tem pelo menos 6 mm, e o conteúdo começa abaixo dela
+int BACK_H() { return TAPPX() * 4 / 5; }
+int GRID_Y() { return max(app::live() ? u(10) + max(gfx::lineHeight(gfx::TITLE), u(22)) + u(12) : u(62), BACK_H() + u(4)); }
 int CARD_GAP() { return u(8); }
 int GRID_BOTTOM() { return gfx::height() - u(30); }  // acima dos pontos de página
 int COLS() { return W() >= 460 ? 3 : 2; }
@@ -1136,7 +1191,8 @@ void drawModelDetail(bool live, int page, int idx) {
   if (m.isNull()) return drawModels(live, page);
   char buf[64];
   gfx::clear();
-  header(live, m[0], false, SUB_WARN);
+  snprintf(buf, sizeof buf, "‹ %s", (const char*)(m[0] | "?"));
+  header(live, buf, false, SUB_WARN);
   const int up = lift();
   // em pé, tudo numa coluna; deitada, composição à esquerda e projetos à direita
   const bool land = L();
@@ -1190,13 +1246,12 @@ void drawModelDetail(bool live, int page, int idx) {
   int i = 0;
   for (JsonArrayConst p : projs) {
     const int y = py0 + below(gfx::SMALL, 22) + i * max(u(44), gfx::lineHeight(gfx::LABEL) + u(14));
-    if (y + gfx::lineHeight(gfx::LABEL) + u(10) > gfx::height() - u(land ? 24 : 40)) break;  // a dica "toque para voltar" fica livre
+    if (y + gfx::lineHeight(gfx::LABEL) + u(10) > gfx::height() - u(24)) break;
     text(fit(p[0], gfx::LABEL, pw - u(70)).c_str(), rx, y, gfx::LABEL, TEXT);
     text(p[1], rx + pw, y, gfx::LABEL, MUTED, top_right);
     gfx::bar(rx, y + below(gfx::LABEL, 24), pw, max(4, u(6)), anim::entrance(i + 1) * parseTokens(p[1]) / top, ACCENT);
     i++;
   }
-  if (!land) text("Toque para voltar", W() / 2, gfx::height() - u(34), gfx::SMALL, DIM, middle_center);
   dots(page);
 }
 
@@ -1289,13 +1344,16 @@ struct Row {
   Kind kind = SEG;
 };
 // sem a linha de baixo do cabeçalho (ajustes ao vivo), o conteúdo sobe para o espaço dela
-int SET_Y() { return subLine ? u(L() ? 58 : 62) : u(46); }
+int SET_Y() { return max(subLine ? u(L() ? 58 : 62) : u(46), BACK_H() + u(4)); }
 // Sobrando altura no grupo, cada linha comum cresce até u(18): o controle mais alto erra menos o toque.
 int rowGrow = 0;
-int ROW_H() { return u((L() ? 62 : 68) + (board::PROFILE.dense ? 12 : 0)) + rowGrow; }  // o controle mais alto da AMOLED pede a linha maior
-int SEG_TOP() { return below(gfx::SMALL, 20); }
-int SEG_H() { return u(board::PROFILE.dense ? 48 : 38) + rowGrow; }
-int CYCLE_H() { return u(62); }  // o seletor de som, numa linha só: alto para o toque nos ‹ › não errar
+// Alvo de toque mínimo: 9 mm na tela física, qualquer que seja a densidade. Os ajustes rolam em vez de encolher
+// os controles para caber.
+int TAP() { return TAPPX(); }
+int SEG_TOP() { return below(gfx::LABEL, 24); }
+int SEG_H() { return max(u(38), TAP()) + rowGrow; }
+int ROW_H() { return SEG_TOP() + SEG_H() + u(14); }
+int CYCLE_H() { return max(u(62), TAP()); }  // o seletor de som, numa linha só: alto para o toque nos ‹ › não errar
 
 // Som do alerta, no controle: 0 desligado, 1 a 3 o volume (settings::web.alerts e .volume).
 uint8_t soundLevel = 0;
@@ -1311,6 +1369,12 @@ Row screenRows[] = {
     board::ROTATIONS == 4 ? Row{"Lado do cabo USB", &settings::v.orient, {"Embaixo", "Direita", "Em cima", "Esquerda"}, 4}
                           : Row{"Posição", &settings::v.orient, {"Vertical", "Horizontal"}, 2},
 };
+// Com bateria, o brilho tem dois: no USB e na bateria (que economiza). O resto é o mesmo da lista de cima.
+Row screenRowsBat[] = {
+    {"Brilho no USB", &settings::v.bright, {"25%", "50%", "75%", "100%"}, 4},
+    {"Brilho na bateria", &settings::web.batBright, {"25%", "50%", "70%", "100%"}, 4},
+    screenRows[1], screenRows[2], screenRows[3], screenRows[4],
+};
 // Os sons: o volume vale para todos; cada aviso escolhe o seu (os da janela também podem ficar desligados).
 Row soundRows[] = {
     {"Volume", &soundLevel, {"Desligado", "Baixo", "Médio", "Alto"}, 4},
@@ -1319,7 +1383,7 @@ Row soundRows[] = {
     {"5h renovou", &settings::web.soundNew, {}, sound::COUNT + 1, CYCLE},
     {"Semana", &settings::web.soundWeek, {}, sound::COUNT + 1, CYCLE},
     {"Bateria fraca", &settings::web.soundBat, {}, sound::COUNT + 1, CYCLE},
-    {"Mac sem dados", &settings::web.soundMac, {}, sound::COUNT + 1, CYCLE},
+    {"Computador sem dados", &settings::web.soundMac, {}, sound::COUNT + 1, CYCLE},
     {"Bluetooth", &settings::web.soundBle, {}, sound::COUNT + 1, CYCLE},
 };
 // Provedores: o ajuste mora no daemon (vale para o Mac todo) e a placa só pede a troca; o frame diz o atual
@@ -1350,7 +1414,7 @@ struct Group {
   uint8_t n;
 };
 const Group GROUPS[] = {
-    {"Tela", screenRows, board::PROFILE.imu ? 4 : 5},
+    board::PROFILE.battery ? Group{"Tela", screenRowsBat, board::PROFILE.imu ? 5 : 6} : Group{"Tela", screenRows, board::PROFILE.imu ? 4 : 5},
     {"Som", soundRows, 8},
     {"Descanso", restRows, 2},
     {"Cartão SD", nullptr, 0},  // tela própria: o estado do cartão e o botão de formatar
@@ -1373,32 +1437,30 @@ int items(Item* out) {
   out[n++] = ABOUT;
   return n;
 }
-int MASK_LINE() { return u(46); }  // uma opção da lista de interruptores
+int MASK_LINE() { return max(u(46), TAP() + u(6)); }  // uma opção da lista de interruptores
+// botões lado a lado só quando cada um tem largura de sobra; senão, uma opção por linha
+Kind kindOf(const Row& r) {
+  return r.kind == SEG && r.count >= 3 && (W() - 2 * M()) / r.count < TAP() * 3 / 2 ? RADIO : r.kind;
+}
 // a lista de escolha única ocupa a altura que sobra na tela: opção alta erra menos o toque
 int lineOf(const Row& r) {
-  return r.kind == RADIO && r.value == &provSel ? max(MASK_LINE(), min(u(100), (gfx::height() - SET_Y() - SEG_TOP() - u(12)) / r.count)) : MASK_LINE();
+  return kindOf(r) == RADIO && r.value == &provSel ? max(MASK_LINE(), min(u(100), (gfx::height() - SET_Y() - SEG_TOP() - u(12)) / r.count)) : MASK_LINE();
 }
 // a lista de interruptores é mais alta que uma linha comum; o seletor de som, sem título em cima, mais baixo
 int rowHeight(const Row& r) {
-  return r.kind == MASK || r.kind == RADIO ? SEG_TOP() + r.count * lineOf(r) : r.kind == CYCLE ? CYCLE_H() + u(10) : ROW_H();
+  const Kind k = kindOf(r);
+  return k == MASK || k == RADIO ? SEG_TOP() + r.count * lineOf(r) + u(10) : k == CYCLE ? CYCLE_H() + u(10) : ROW_H();
 }
-int listRowH(int n) { return min(u(72), (gfx::height() - SET_Y() - M()) / n); }
+// a lista de grupos: linhas de pelo menos 9 mm; com mais grupos que a altura, ela rola
+int listRowH(int n) { return max(TAP() + u(8), min(u(72), (gfx::height() - SET_Y() - M()) / max(1, n))); }
+int listFirst = 0;  // o primeiro grupo à mostra
+int listFits(int n) { return max(1, (gfx::height() - SET_Y() - u(6)) / listRowH(n)); }
 
-// Onde fica a linha i do grupo (o nome em y, o controle em y + SEG_TOP). Deitada, duas seguidas de até 3
-// opções dividem a linha.
+// Onde fica a linha i do grupo: o nome em y, o controle em y + SEG_TOP, uma linha embaixo da outra.
 Cell cell(const Group& g, int i) {
-  const int full = W() - 2 * M(), gap = u(12), half = (full - gap) / 2;
-  int line = 0, col = -1;
-  for (int k = 0; k <= i; k++) {
-    const bool small = L() && g.rows[k].count <= 3 && g.rows[k].kind == SEG;
-    if (k > 0) line += !(small && col == 0) ? 1 : 0;
-    col = small ? (col == 0 ? 1 : 0) : -1;
-    if (small && col == 0 && !(k + 1 < g.n && g.rows[k + 1].count <= 3 && g.rows[k + 1].kind == SEG)) col = -1;
-  }
-  int y = SET_Y() + line * ROW_H();
-  for (int k = 0; k < i; k++)  // a lista de interruptores é mais alta que uma linha comum
-    if (g.rows[k].kind != SEG) y += rowHeight(g.rows[k]) - ROW_H();
-  return col < 0 ? Cell{M(), y, full} : Cell{M() + col * (half + gap), y, half};
+  int y = SET_Y();
+  for (int k = 0; k < i; k++) y += rowHeight(g.rows[k]);
+  return Cell{M(), y, W() - 2 * M()};
 }
 
 // Distribui a altura livre do grupo entre as linhas comuns (a lista de interruptores fica como está).
@@ -1407,7 +1469,7 @@ void fitRows(const Group& g) {
   const Cell last = cell(g, g.n - 1);
   const int bottom = last.y + rowHeight(g.rows[g.n - 1]), free = gfx::height() - u(10) - bottom;
   int lines = 0;
-  for (int k = 0; k < g.n; k++) lines += g.rows[k].kind != MASK && g.rows[k].kind != RADIO && cell(g, k).x == M();  // a 2ª coluna não soma
+  for (int k = 0; k < g.n; k++) lines += kindOf(g.rows[k]) != MASK && kindOf(g.rows[k]) != RADIO;
   if (lines && free > 0) rowGrow = min(u(18), free / lines);
 }
 
@@ -1462,38 +1524,43 @@ void summary(Item it, char* buf, size_t n) {
 }
 
 void drawRow(const Row& r, Cell c, uint16_t track) {
-  const int sh = r.kind == CYCLE ? CYCLE_H() : SEG_H();
-  if (r.kind == CYCLE) {  // numa linha só: o nome à esquerda, o som à direita entre ‹ ›; os lados trocam
-    fb().fillSmoothRoundRect(c.x, c.y, c.w, sh, sh / 2, track);
+  const Kind kind = kindOf(r);
+  const int sh = kind == CYCLE ? CYCLE_H() : SEG_H();
+  if (kind == CYCLE) {  // numa linha só: o nome à esquerda, o som à direita entre ‹ ›; os lados trocam
+    const gfx::Font F = fontFor(sh);
+    fb().fillSmoothRoundRect(c.x, c.y, c.w, sh, min(sh / 2, u(28)), track);
     const int cy = c.y + sh / 2;
-    text(r.name, c.x + u(16), cy, gfx::SMALL, MUTED, middle_left, track);
+    text(r.name, c.x + u(16), cy, F, MUTED, middle_left, track);
     const bool off = *r.value >= sound::COUNT;
     text("›", c.x + c.w - u(16), cy, gfx::TITLE, ACCENT, middle_right, track);
-    const int vr = c.x + c.w - u(36);
-    text(off ? "Desligado" : sound::NAMES[*r.value], vr, cy, gfx::SMALL, off ? DIM : TEXT, middle_right, track);
-    text("‹", vr - gfx::textWidth(off ? "Desligado" : sound::NAMES[*r.value], gfx::SMALL) - u(12), cy, gfx::TITLE, ACCENT, middle_right, track);
+    const int vr = c.x + c.w - u(40);
+    text(off ? "Desligado" : sound::NAMES[*r.value], vr, cy, F, off ? DIM : TEXT, middle_right, track);
+    text("‹", vr - gfx::textWidth(off ? "Desligado" : sound::NAMES[*r.value], F) - u(14), cy, gfx::TITLE, ACCENT, middle_right, track);
     return;
   }
   const int sy = c.y + SEG_TOP();
-  text(r.name, c.x, c.y, gfx::SMALL, MUTED);
-  fb().fillSmoothRoundRect(c.x, sy, c.w, sh, sh / 2, track);
-  if (r.kind == MASK || r.kind == RADIO) {  // uma opção por linha: o interruptor à direita, ou o círculo da escolha à esquerda
+  text(r.name, c.x, c.y, gfx::LABEL, MUTED);
+  fb().fillSmoothRoundRect(c.x, sy, c.w, sh, min(sh / 2, u(28)), track);
+  if (kind == MASK || kind == RADIO) {  // uma opção por linha: o interruptor à direita, ou o círculo da escolha à esquerda
     const int ln = lineOf(r);
+    // o círculo e o texto crescem com a linha: numa linha alta (tela densa) eles não ficam perdidos nela
+    const int rr = max(u(10), ln / 5), cxr = c.x + max(u(26), rr + u(16));
+    const gfx::Font OF = fontFor(ln) == gfx::SMALL ? gfx::LABEL : fontFor(ln);
     fb().fillSmoothRoundRect(c.x, sy, c.w, r.count * ln - u(6), u(12), track);
     for (int k = 0; k < r.count; k++) {
       const int ly = sy + k * ln, mid = ly + (ln - u(6)) / 2;
-      if (r.kind == RADIO) {
+      if (kind == RADIO) {
         const bool on = *r.value == k;
-        fb().fillSmoothCircle(c.x + u(26), mid, u(10), on ? ACCENT : MUTED);
-        fb().fillSmoothCircle(c.x + u(26), mid, u(10) - max(2, u(2)), track);
-        if (on) fb().fillSmoothCircle(c.x + u(26), mid, u(5), ACCENT);
-        text(r.opts[k], c.x + u(46), mid, gfx::LABEL, TEXT, middle_left, track);
+        fb().fillSmoothCircle(cxr, mid, rr, on ? ACCENT : MUTED);
+        fb().fillSmoothCircle(cxr, mid, rr - max(2, rr / 5), track);
+        if (on) fb().fillSmoothCircle(cxr, mid, rr / 2, ACCENT);
+        text(r.opts[k], cxr + rr + u(14), mid, OF, TEXT, middle_left, track);
         if (k < r.count - 1) fb().drawFastHLine(c.x + u(14), ly + ln - u(3), c.w - u(28), BG);
         continue;
       }
       const bool on = *r.value >> k & 1;
-      text(r.opts[k], c.x + u(14), mid, gfx::LABEL, TEXT, middle_left, track);
-      const int sw = u(44), sh2 = u(24), sx = c.x + c.w - u(14) - sw;
+      text(r.opts[k], c.x + u(14), mid, OF, TEXT, middle_left, track);
+      const int sh2 = max(u(24), ln * 2 / 5), sw = sh2 * 11 / 6, sx = c.x + c.w - u(14) - sw;
       fb().fillSmoothRoundRect(sx, mid - sh2 / 2, sw, sh2, sh2 / 2, on ? ACCENT : blend(track, TEXT, 0.25f));
       fb().fillSmoothCircle(on ? sx + sw - sh2 / 2 : sx + sh2 / 2, mid, sh2 / 2 - u(3), on ? BG : MUTED);
       if (k < r.count - 1) fb().drawFastHLine(c.x + u(14), ly + MASK_LINE() - u(3), c.w - u(28), BG);
@@ -1503,16 +1570,23 @@ void drawRow(const Row& r, Cell c, uint16_t track) {
   for (int k = 0; k < r.count; k++) {
     // bordas calculadas do mesmo jeito para todos: segmentos de largura igual, texto no centro
     const int x0 = c.x + c.w * k / r.count, x1 = c.x + c.w * (k + 1) / r.count;
-    const bool on = r.kind == MASK ? *r.value >> k & 1 : *r.value == k;
-    if (on) fb().fillSmoothRoundRect(x0 + 3, sy + 3, x1 - x0 - 6, sh - 6, (sh - 6) / 2, ACCENT);
-    text(r.opts[k], (x0 + x1) / 2, sy + sh / 2, gfx::SMALL, on ? BG : TEXT, middle_center, on ? ACCENT : track);
+    const bool on = kind == MASK ? *r.value >> k & 1 : *r.value == k;
+    if (on) fb().fillSmoothRoundRect(x0 + 3, sy + 3, x1 - x0 - 6, sh - 6, min((sh - 6) / 2, u(25)), ACCENT);
+    text(r.opts[k], (x0 + x1) / 2, sy + sh / 2, fontFor(sh), on ? BG : TEXT, middle_center, on ? ACCENT : track);
   }
 }
 }  // namespace
 
-void settingsHome() { group = -1, groupTop = 0; }
+void settingsHome() { group = -1, groupTop = 0, listFirst = 0; }
 bool settingsScroll(int dir) {
-  if (group < 0 || group == G_SD) return false;
+  if (group < 0) {  // a lista de grupos: 2 linhas por gesto
+    Item list[8];
+    const int n = items(list), to = constrain(listFirst + 2 * dir, 0, max(0, n - listFits(n)));
+    if (to == listFirst) return false;
+    listFirst = to;
+    return true;
+  }
+  if (group == G_SD) return false;
   const Group& g = GROUPS[group];
   int to = groupTop;
   for (int moved = 0; moved < 3;) {  // 3 linhas por gesto, contando só as que começam na margem
@@ -1597,17 +1671,26 @@ void drawSettings(bool live) {
   }
   header(live, "Ajustes", false, false);
   Item list[8];
-  const int n = items(list), rh = listRowH(n), w = W() - 2 * M();
+  const int n = items(list), rh = listRowH(n), fits = listFits(n);
+  listFirst = constrain(listFirst, 0, max(0, n - fits));
+  const int w = W() - 2 * M() - (n > fits ? u(10) : 0);
+  // linha alta: a fonte sobe um tamanho junto com ela, para o texto acompanhar o alvo
+  const bool big = rh - u(8) >= 2 * gfx::lineHeight(gfx::TITLE) - u(4);
+  const gfx::Font NF = big ? gfx::TITLE : gfx::LABEL, SF = gfx::LABEL;
   static const char* NAMES[] = {"Tela", "Som", "Descanso", "Cartão SD", "Provedores", "Multica", "Conta", "Sobre"};
   char buf[48];
-  for (int i = 0; i < n; i++) {
-    const int y = SET_Y() + i * rh, h = rh - u(8);
+  for (int i = listFirst; i < min(n, listFirst + fits); i++) {
+    const int y = SET_Y() + (i - listFirst) * rh, h = rh - u(8);
     fb().fillSmoothRoundRect(M(), y, w, h, u(10), track);
-    text(NAMES[list[i]], M() + u(14), y + h / 2, gfx::LABEL, TEXT, middle_left, track);
+    text(NAMES[list[i]], M() + u(14), y + h / 2, NF, TEXT, middle_left, track);
     text("›", M() + w - u(12), y + h / 2, gfx::TITLE, MUTED, middle_right, track);
     summary(list[i], buf, sizeof buf);
-    const int room = w - u(60) - gfx::textWidth(NAMES[list[i]], gfx::LABEL);
-    text(fit(buf, gfx::SMALL, room).c_str(), M() + w - u(32), y + h / 2, gfx::SMALL, MUTED, middle_right, track);
+    const int room = w - u(60) - gfx::textWidth(NAMES[list[i]], NF);
+    text(fit(buf, SF, room).c_str(), M() + w - u(32), y + h / 2, SF, MUTED, middle_right, track);
+  }
+  if (n > fits) {  // barra de rolagem: há grupos abaixo ou acima
+    const int th = fits * rh - u(8), bh = max(u(16), th * fits / n);
+    fb().fillSmoothRoundRect(W() - M() - u(4), SET_Y() + (th - bh) * listFirst / (n - fits), u(4), bh, u(2), TRACK);
   }
 }
 
@@ -1616,8 +1699,8 @@ int settingsTap(int x, int y) {
   if (group < 0) {
     Item list[8];
     const int n = items(list), rh = listRowH(n);
-    const int i = (y - SET_Y()) / rh;
-    if (y < SET_Y() || i >= n || x < M() || x > W() - M()) return -1;
+    const int i = listFirst + (y - SET_Y()) / rh;
+    if (y < SET_Y() || i >= min(n, listFirst + listFits(n)) || x < M() || x > W() - M()) return -1;
     if (list[i] == ACCOUNT) return 2;
     if (list[i] == ABOUT) return 1;
     group = list[i], groupTop = 0;
@@ -1632,16 +1715,17 @@ int settingsTap(int x, int y) {
   for (int i = groupTop; i < g.n; i++) {
     const Cell c = cell(g, i);
     Row& r = g.rows[i];
-    const int top = r.kind == CYCLE ? c.y : c.y + SEG_TOP();
-    const int bottom = r.kind == MASK || r.kind == RADIO ? top + r.count * lineOf(r) : top + SEG_H() + 4;
+    const Kind kind = kindOf(r);
+    const int top = kind == CYCLE ? c.y : c.y + SEG_TOP();
+    const int bottom = kind == MASK || kind == RADIO ? top + r.count * lineOf(r) : top + SEG_H() + 4;
     if (x < c.x || x >= c.x + c.w || y < top - 6 || y > bottom) continue;
     auto& web = settings::web;
-    if (r.kind == CYCLE) {  // à direita avança; na metade da esquerda (o nome e o ‹) volta
+    if (kind == CYCLE) {  // à direita avança; na metade da esquerda (o nome e o ‹) volta
       *r.value = (*r.value + (x - c.x < c.w / 2 ? r.count - 1 : 1)) % r.count;
     } else {
-      const int k = r.kind == MASK || r.kind == RADIO ? constrain((y - top) / lineOf(r), 0, r.count - 1)
+      const int k = kind == MASK || kind == RADIO ? constrain((y - top) / lineOf(r), 0, r.count - 1)
                                    : min<int>((x - c.x) * r.count / c.w, r.count - 1);
-      if (r.kind == MASK) {
+      if (kind == MASK) {
         if ((*r.value ^ 1 << k) & 31) *r.value ^= 1 << k;  // ao menos uma tela fica ligada
       } else if (r.value == &provSel) {
         provSel = k;
@@ -1675,15 +1759,17 @@ int settingsTap(int x, int y) {
 
 // Sobre: o que a placa sabe de si mesma, e reiniciar com toque duplo de confirmação.
 // Deitada, os itens vão em 2 colunas, rótulo em cima e valor embaixo; os botões vêm logo depois.
-int aboutStep() { return L() || gfx::ui() == gfx::LARGE ? max(u(39), gfx::lineHeight(gfx::SMALL) + gfx::lineHeight(gfx::LABEL)) : below(gfx::LABEL, 26) + u(3); }
+// o Sobre em letra de leitura: o nome do item em LABEL e o valor em TITLE (antes SMALL e LABEL, pequenos demais)
+int aboutStep() { return L() || gfx::ui() == gfx::LARGE ? gfx::lineHeight(gfx::LABEL) + gfx::lineHeight(gfx::TITLE) + u(8) : below(gfx::TITLE, 30) + u(4); }
+int ABOUT_BTN_H() { return max(u(48), TAP()); }
 // com bateria, ela é o primeiro item e a página web desce uma posição
-int aboutItems() { return board::PROFILE.battery ? 8 : 7; }
+int aboutItems() { return board::PROFILE.battery ? 9 : 8; }
 int aboutWebItem() { return aboutItems() - 2; }
-int aboutRows() { return L() ? (aboutItems() + 1) / 2 : aboutItems(); }
+int aboutRows() { return aboutItems(); }  // uma coluna, que rola: em duas os valores eram cortados
 int RESTART_Y() { return L() ? max(u(232), SET_Y() + u(4) + aboutRows() * aboutStep() + u(6)) : max(u(384), SET_Y() + u(4) + aboutRows() * aboutStep() + u(6)); }
 // Rolagem em linhas inteiras: o item de cima sempre começa logo abaixo do cabeçalho
 int aboutOff = 0;
-int aboutMaxOff() { return max(0, (RESTART_Y() + u(48) + u(12) - gfx::height() + aboutStep() - 1) / aboutStep()); }
+int aboutMaxOff() { return max(0, (RESTART_Y() + ABOUT_BTN_H() + u(12) - gfx::height() + aboutStep() - 1) / aboutStep()); }
 void aboutTop() { aboutOff = 0; }
 bool aboutScroll(int dir) {
   const int to = constrain(aboutOff + dir * 3, 0, aboutMaxOff());
@@ -1722,7 +1808,7 @@ void drawAbout(bool live, bool armed) {
   String ram = buf;
   if (live) strcpy(buf, "Ao vivo pela USB");
   else if (app::lastFrameMs) snprintf(buf, sizeof buf, "Sem dados há %lu min", (millis() - app::lastFrameMs) / 60000);
-  else strcpy(buf, "Esperando o Mac");
+  else strcpy(buf, "Esperando o computador");
   String link = buf;
   // a entrada da página web: o endereço, ou o convite para ligar o WiFi (toque no item)
   String web = webui::online() ? String(webui::host()) + ".local" : webui::apOn() ? String("WiFi ") + webui::apName()
@@ -1731,7 +1817,10 @@ void drawAbout(bool live, bool armed) {
   String bat = "Sem bateria";
   if (board::powerState(ps) && ps.battery) {
     const int eta = chargeEtaMin(ps);
-    if (!ps.usb) snprintf(buf, sizeof buf, "%d%% · na bateria", ps.pct);
+    const int left = power::batteryLeftMin();
+    if (!ps.usb && left < 0) snprintf(buf, sizeof buf, "%d%% · medindo a duração", ps.pct);
+    else if (!ps.usb && left >= 60) snprintf(buf, sizeof buf, "%d%% · dura ~%dh%02d", ps.pct, left / 60, left % 60);
+    else if (!ps.usb) snprintf(buf, sizeof buf, "%d%% · dura ~%d min", ps.pct, max(left, 1));
     else if (!ps.charging) snprintf(buf, sizeof buf, "%d%% · carregada", ps.pct);
     // na tensão constante o % fica parado perto de 95% por até 1 h: o ritmo não serve mais para prever
     else if (ps.finishing) snprintf(buf, sizeof buf, "%d%% · terminando", ps.pct);
@@ -1742,7 +1831,7 @@ void drawAbout(bool live, bool armed) {
   }
   const char* all[][2] = {
       {"Bateria", bat.c_str()},
-      {"Placa", board::NAME},          {"Firmware", hostlink::firmware()}, {"Ligada há", upTxt.c_str()},
+      {"Placa", board::NICK}, {"Modelo", board::NAME},          {"Firmware", hostlink::firmware()}, {"Ligada há", upTxt.c_str()},
       {"PSRAM", psram.c_str()}, {"RAM interna", ram.c_str()},  {"Página web", web.c_str()},
       {"Conexão", link.c_str()},
   };
@@ -1751,7 +1840,7 @@ void drawAbout(bool live, bool armed) {
   // tela grande: rótulo em cima, valor embaixo. Na média em pé os pares não cabem empilhados: um por linha.
   // Deitada: empilhados, em 2 colunas.
   const bool stacked = L() || gfx::ui() == gfx::LARGE;
-  const int cols = L() ? 2 : 1, colW = (W() - 2 * M() - (cols - 1) * u(16)) / cols, step = aboutStep();
+  const int cols = 1, colW = W() - 2 * M(), step = aboutStep();
   for (int k = 0; k < n; k++) {
     const auto& it = items[k];
     const int row = k % rows - off, x = M() + (k / rows) * (colW + u(16)), y = top + row * step;
@@ -1760,9 +1849,9 @@ void drawAbout(bool live, bool armed) {
     const bool link = k == aboutWebItem();
     const String val = link ? String(it[1]) + " ›" : String(it[1]);
     const uint16_t c = link ? ACCENT : TEXT;
-    text(it[0], x, y, gfx::SMALL, DIM);
-    if (stacked) text(fit(val.c_str(), gfx::LABEL, colW).c_str(), x, y + below(gfx::SMALL, 18), gfx::LABEL, c);
-    else text(fit(val.c_str(), gfx::LABEL, W() - 2 * M() - u(110)).c_str(), W() - M(), y, gfx::LABEL, c, top_right);
+    text(it[0], x, y, gfx::LABEL, DIM);
+    if (stacked) text(fit(val.c_str(), gfx::TITLE, colW).c_str(), x, y + gfx::lineHeight(gfx::LABEL), gfx::TITLE, c);
+    else text(fit(val.c_str(), gfx::TITLE, W() - 2 * M() - u(120)).c_str(), W() - M(), y, gfx::TITLE, c, top_right);
   }
   if (const int mo = aboutMaxOff()) {  // barra de rolagem: a página continua para baixo
     const int th = gfx::height() - top - u(8), bh = th * rows / (rows + mo);
@@ -1770,16 +1859,16 @@ void drawAbout(bool live, bool armed) {
   }
   // touch resistivo: calibrar o toque divide a linha com o reiniciar
   const bool cal = board::PROFILE.calibrate;
-  const int bw = cal ? (W() - 2 * M() - u(8)) / 2 : W() - 2 * M(), rx = W() - M() - bw, by = RESTART_Y() - off * step, bh = u(48);
+  const int bw = cal ? (W() - 2 * M() - u(8)) / 2 : W() - 2 * M(), rx = W() - M() - bw, by = RESTART_Y() - off * step, bh = ABOUT_BTN_H();
   const uint16_t c = armed ? RED : blend(BG, TRACK, 0.7f);
   if (cal) {
     const uint16_t cb = blend(BG, TRACK, 0.7f);
     fb().fillSmoothRoundRect(M(), by, bw, bh, u(12), cb);
-    text("Calibrar o toque", M() + bw / 2, by + bh / 2, gfx::LABEL, TEXT, middle_center, cb);
+    text("Calibrar o toque", M() + bw / 2, by + bh / 2, fontFor(bh) == gfx::SMALL ? gfx::LABEL : fontFor(bh), TEXT, middle_center, cb);
   }
   fb().fillSmoothRoundRect(rx, by, bw, bh, u(12), c);
   const char* label = armed ? (cal ? "Toque de novo" : "Toque de novo para reiniciar") : "Reiniciar a placa";
-  text(label, rx + bw / 2, by + bh / 2, gfx::LABEL, armed ? BG : TEXT, middle_center, c);
+  text(label, rx + bw / 2, by + bh / 2, fontFor(bh) == gfx::SMALL ? gfx::LABEL : fontFor(bh), armed ? BG : TEXT, middle_center, c);
   // a dica só entra se couber embaixo dos botões (na média deitada não cabe)
   if (by + bh + gfx::lineHeight(gfx::SMALL) < gfx::height() - u(8))
     text("Toque fora para voltar aos ajustes", W() / 2, gfx::height() - u(22), gfx::SMALL, DIM, middle_center);
@@ -1788,36 +1877,35 @@ void drawAbout(bool live, bool armed) {
 int aboutButtonAt(int x, int y) {
   // o item "página web": a mesma conta de posição do drawAbout, na página rolada
   y += aboutOff * aboutStep();
-  const int cols = L() ? 2 : 1, colW = (W() - 2 * M() - (cols - 1) * u(16)) / cols, k = aboutWebItem();
+  const int cols = 1, colW = W() - 2 * M(), k = aboutWebItem();
   const int ix = M() + (k / aboutRows()) * (colW + u(16)), iy = SET_Y() + u(4) + k % aboutRows() * aboutStep();
   if (x >= ix && x < ix + colW && y >= iy - u(4) && y < iy + aboutStep()) return 3;
-  if (y < RESTART_Y() || y >= RESTART_Y() + u(48)) return 0;
+  if (y < RESTART_Y() || y >= RESTART_Y() + ABOUT_BTN_H()) return 0;
   return board::PROFILE.calibrate && x < W() / 2 ? 2 : 1;
 }
-bool gearAt(int x, int y) { return x >= W() - u(64) && y < u(52); }
-bool orgTitleAt(int x, int y) { return x < W() / 2 && y < u(30); }
-bool suggestionAt(int x, int y) { return sugW && x >= sugX && x < sugX + sugW && y >= sugY && y < sugY + sugH; }
+bool gearAt(int x, int y) { return x >= W() - max(u(64), TAPPX()) && y < max(u(52), TAPPX() * 2 / 3); }
+bool orgTitleAt(int x, int y) { return x < W() / 2 && y < max(u(30), TAPPX() * 2 / 3); }
+// a pílula "esgotado · trocar" é baixa: o toque vale numa faixa de 9 mm centrada nela
+bool suggestionAt(int x, int y) {
+  const int pad = max(0, (TAPPX() - sugH) / 2);
+  return sugW && x >= sugX && x < sugX + sugW && y >= sugY - pad && y < sugY + sugH + pad;
+}
 void setGearActive(bool on) { gearActive = on; }
 
 // Conta: a org atual, as contas que o cswap conhece e o login de uma org nova. A troca roda no Mac
 // (cswap ou o login do Claude Code no navegador); a placa só pede e acompanha.
-// Em pé, tudo numa coluna. Deitada, a org atual, o status e "entrar em outra org" à esquerda, e a lista
-// de orgs à direita.
-int ACC_LIST_Y() { return u(L() ? 86 : 200); }
-int ACC_ROW() { return u(62); }
-int ACC_NEW_Y() { return u(L() ? 212 : 392); }
+// Trocar de org. Em pé, tudo numa coluna; deitada, a org atual, o status e "entrar em outra org" à esquerda e a
+// lista à direita. Cada org é uma linha inteira tocável de 9 mm ou mais (antes era um botão "Trocar" de 2 mm na
+// AMOLED); o primeiro toque arma e o segundo, em 5 s, confirma, porque a troca vale para todas as sessões do Mac.
 struct AccCols {
   int lw, rx, rw;  // largura da coluna esquerda; início e largura da lista
 };
-AccCols accCols() {
-  if (!L()) return {W() - 2 * M(), M(), W() - 2 * M()};
-  const int gap = u(24), lw = (W() - 2 * M() - gap) / 2;
-  return {lw, M() + lw + gap, W() - 2 * M() - lw - gap};
-}
-// trocar de org troca o login de todas as sessões do Mac: o primeiro toque arma, o segundo (em 5 s) confirma
+// uma coluna em pé e deitada: em duas, a lista ficava estreita e cortava os nomes
+AccCols accCols() { return {W() - 2 * M(), M(), W() - 2 * M()}; }
 int armedAcct = -2;  // número da conta armada; 0 = "entrar em outra org"; -2 nada
 uint32_t armedMs = 0;
 bool armed(int num) { return armedAcct == num && millis() - armedMs < 5000; }
+int accRowY = 0, accRowH = 0, accRows = 0, accNewY = 0, accNewH = 0;  // o último desenho, para o toque
 
 String ago(int mins) {
   char b[16];
@@ -1827,82 +1915,82 @@ String ago(int mins) {
   return b;
 }
 
-
 void drawAccount(bool live) {
   char buf[64];
   gfx::clear();
-  header(live, "Trocar de org", false, false);
+  header(live, "‹ Trocar de org", false, false);
   const AccCols ac = accCols();
   const int lw = ac.lw, rx = ac.rx, rw = ac.rw;
-  text("Org atual", M(), u(66), gfx::SMALL, DIM);
-  text(app::frame["org"] | "--", M(), u(66) + below(gfx::SMALL, 18), gfx::NUM, TEXT);
+  const uint16_t card = blend(BG, TRACK, 0.6f);
+  int y = SET_Y();  // a org atual é a linha "Em uso" da lista: sem bloco repetido em cima
 
   JsonArrayConst act = app::frame["act"];
   const char* st = act[0] | "";
   const char* target = act[1] | "";
-  const uint16_t card = blend(BG, TRACK, 0.6f);
-  if (*st) {
-    fb().fillSmoothRoundRect(M(), u(124), lw, u(72), u(12), card);
-    if (!strcmp(st, "switching")) {
-      stepIcon(M() + u(20), u(160), 1);
-      snprintf(buf, sizeof buf, "Trocando para %s…", target);
-      text(fit(buf, gfx::LABEL, lw - u(48)).c_str(), M() + u(38), u(160), gfx::LABEL, TEXT, middle_left, card);
-    } else if (!strcmp(st, "login")) {
-      // o login acontece no navegador do Mac: a placa mostra em que passo está
-      stepIcon(M() + u(20), u(142), 0);
-      text(fit("Login aberto no navegador do Mac", gfx::SMALL, lw - u(48)).c_str(), M() + u(38), u(142), gfx::SMALL, TEXT, middle_left, card);
-      stepIcon(M() + u(20), u(166), 1);
+  if (*st) {  // em que pé está a troca: uma linha, ou os três passos do login no navegador
+    const bool login = !strcmp(st, "login");
+    const int lh = gfx::lineHeight(gfx::LABEL) + u(8), h = (login ? 3 : 1) * lh + u(16);
+    fb().fillSmoothRoundRect(M(), y, lw, h, u(12), card);
+    int ly = y + u(8) + lh / 2;
+    auto line = [&](int icon, const char* t, uint16_t c) {
+      stepIcon(M() + u(20), ly, icon);
+      text(fit(t, gfx::LABEL, lw - u(48)).c_str(), M() + u(38), ly, gfx::LABEL, c, middle_left, card);
+      ly += lh;
+    };
+    if (!strcmp(st, "switching")) snprintf(buf, sizeof buf, "Trocando para %s…", target), line(1, buf, TEXT);
+    else if (login) {
+      line(0, "Login aberto no navegador do computador", TEXT);
       snprintf(buf, sizeof buf, "Escolha a org %s e autorize", *target ? target : "desejada");
-      text(fit(buf, gfx::SMALL, lw - u(48)).c_str(), M() + u(38), u(166), gfx::SMALL, AMBER, middle_left, card);
-      stepIcon(M() + u(20), u(188), 2);
-      text(fit("A placa confirma a troca", gfx::SMALL, lw - u(48)).c_str(), M() + u(38), u(188), gfx::SMALL, DIM, middle_left, card);
-    } else if (!strcmp(st, "done")) {
-      stepIcon(M() + u(20), u(160), 0);
-      snprintf(buf, sizeof buf, "Pronto: agora na org %s", (const char*)(app::frame["org"] | "?"));
-      text(fit(buf, gfx::LABEL, lw - u(48)).c_str(), M() + u(38), u(160), gfx::LABEL, GREEN, middle_left, card);
-    } else {
-      snprintf(buf, sizeof buf, "Não deu certo: %s", (const char*)(act[2] | "erro"));
-      text(fit(buf, gfx::SMALL, lw - u(24)).c_str(), M() + u(14), u(160), gfx::SMALL, RED, middle_left, card);
-    }
+      line(1, buf, AMBER);
+      line(2, "A placa confirma a troca", DIM);
+    } else if (!strcmp(st, "done")) snprintf(buf, sizeof buf, "Pronto: agora na org %s", (const char*)(app::frame["org"] | "?")), line(0, buf, GREEN);
+    else snprintf(buf, sizeof buf, "Não deu certo: %s", (const char*)(act[2] | "erro")), line(2, buf, RED);
+    y += h + u(12);
   }
 
-  text("Orgs salvas no cswap", rx, ACC_LIST_Y() - below(gfx::SMALL, 20), gfx::SMALL, DIM);
+  // "entrar em outra org": embaixo da coluna da esquerda deitada; em pé, no fim da página
+  accNewH = max(u(52), TAP());
   JsonArrayConst accts = app::frame["accts"];
-  if (accts.size() == 0) text("Nenhuma: rode cswap add no Mac", rx, ACC_LIST_Y() + u(6), gfx::SMALL, MUTED);
+  // sem título em cima da lista quando há orgs: a linha "Em uso" já diz o que é, e a altura vai para as linhas
+  const int rowsTop = accts.size() ? y + u(4) : y + gfx::lineHeight(gfx::LABEL) + u(4);
+  accRowH = max(TAP() + u(6), 2 * gfx::lineHeight(gfx::LABEL) + u(20));
+  const int listBottom = gfx::height() - u(8) - accNewH - u(6);
+  accRows = max(1, (listBottom - rowsTop) / accRowH);
+  accRowY = rowsTop;
+  if (accts.size() == 0) {
+    text("Orgs salvas no cswap", rx, rowsTop - gfx::lineHeight(gfx::LABEL) - u(2), gfx::LABEL, DIM);
+    text("Nenhuma: rode cswap add no computador", rx, rowsTop + u(6), gfx::LABEL, MUTED);
+  }
+  const gfx::Font NF = accRowH >= 2 * gfx::lineHeight(gfx::TITLE) + u(16) ? gfx::TITLE : gfx::LABEL;
   int i = 0;
   for (JsonArrayConst a : accts) {
-    const int y = ACC_LIST_Y() + i * ACC_ROW(), num = a[0];
+    if (i == accRows) break;
+    const int ry = rowsTop + i * accRowH, h = accRowH - u(8), num = a[0];
     const bool active = (int)a[2], relogin = (int)a[3], arm = armed(num);
-    const uint16_t rowBg = arm ? blend(BG, RED, 0.18f) : card;
-    fb().fillSmoothRoundRect(rx, y, rw, ACC_ROW() - u(6), u(12), rowBg);
-    const int nameW = min(u(150), rw - (active ? u(28) : u(120)));
-    const String name = fit(a[1], gfx::LABEL, nameW);
-    text(name.c_str(), rx + u(14), y + u(8), gfx::LABEL, TEXT, top_left, rowBg);
-    const char* tag = active ? "Em uso" : relogin ? "Login expirado" : "";
-    const int tagX = rx + u(20) + gfx::textWidth(name.c_str(), gfx::LABEL);
-    text(fit(tag, gfx::SMALL, rx + rw - (active ? u(14) : u(100)) - tagX).c_str(), tagX, y + u(10), gfx::SMALL, active ? GREEN : AMBER, top_left, rowBg);
-    // o último % conhecido dessa org (só a org em uso tem o número ao vivo)
-    if (arm) strcpy(buf, "Troca todas as sessões");
+    const uint16_t rowBg = arm ? blend(BG, RED, 0.18f) : active ? blend(BG, GREEN, 0.12f) : card;
+    fb().fillSmoothRoundRect(rx, ry, rw, h, u(12), rowBg);
+    const char* tag = active ? "Em uso" : arm ? "Confirmar ›" : relogin ? "Login expirado" : "Trocar ›";
+    const uint16_t tc = active ? GREEN : arm ? RED : relogin ? AMBER : ACCENT;
+    const int tw = gfx::textWidth(tag, gfx::LABEL);
+    // nome e detalhe empilhados no meio da linha, que é alta nas telas densas
+    const int mid = ry + h / 2;
+    text(tag, rx + rw - u(14), mid - u(2), gfx::LABEL, tc, bottom_right, rowBg);
+    text(fit(a[1], NF, rw - tw - u(40)).c_str(), rx + u(14), mid - u(2), NF, TEXT, bottom_left, rowBg);
+    if (arm) strcpy(buf, "Toque de novo: troca todas as sessões do computador");
     else if ((int)a[4] >= 0) snprintf(buf, sizeof buf, "5h %d%% · semana %d%% · %s", (int)a[4], (int)a[5], ago(a[6]).c_str());
     else strcpy(buf, active ? "Buscando o %…" : "Sem % recente");
-    text(fit(buf, gfx::SMALL, active ? rw - u(28) : rw - u(120)).c_str(), rx + u(14), y + u(8) + below(gfx::LABEL, 24), gfx::SMALL,
-         arm ? RED : DIM, top_left, rowBg);
-    if (!active) {
-      const uint16_t b = arm ? RED : ACCENT;
-      fb().fillSmoothRoundRect(rx + rw - u(92), y + u(12), u(80), u(30), u(15), b);
-      text(arm ? "Confirmar" : "Trocar", rx + rw - u(52), y + u(27), gfx::SMALL, BG, middle_center, b);
-    }
-    if (++i == 3) break;
+    text(fit(buf, gfx::LABEL, rw - u(28)).c_str(), rx + u(14), mid + u(4), gfx::LABEL, arm ? RED : DIM, top_left, rowBg);
+    i++;
   }
+  accNewY = min(listBottom, rowsTop + max(1, i) * accRowH) + u(4);
   const bool armNew = armed(0);
   const uint16_t nb = armNew ? blend(BG, RED, 0.18f) : card;
-  fb().fillSmoothRoundRect(M(), ACC_NEW_Y(), lw, u(40), u(12), nb);
-  const char* newTxt = armNew ? "Toque de novo: login troca todas as sessões" : "Entrar em outra org";
-  text(fit(newTxt, gfx::SMALL, lw - u(16)).c_str(), M() + lw / 2, ACC_NEW_Y() + u(20), gfx::SMALL, armNew ? RED : TEXT, middle_center, nb);
-  text("Toque fora para fechar", W() / 2, gfx::height() - u(18), gfx::SMALL, DIM, middle_center);
+  fb().fillSmoothRoundRect(M(), accNewY, lw, accNewH, min(accNewH / 2, u(26)), nb);
+  const char* newTxt = armNew ? "Toque de novo: o login troca todas as sessões" : "Entrar em outra org";
+  text(fit(newTxt, gfx::LABEL, lw - u(20)).c_str(), M() + lw / 2, accNewY + accNewH / 2, gfx::LABEL, armNew ? RED : TEXT, middle_center, nb);
 }
 
-// Toque na Conta: arma ou confirma uma troca (true) ou devolve false para fechar o painel.
+// Toque na Conta: arma ou confirma uma troca (true) ou devolve false para fechar o painel (o título "‹" fecha).
 bool accountTap(int x, int y) {
   auto confirm = [](int num, const char* action) {
     if (armed(num)) {
@@ -1912,16 +2000,15 @@ bool accountTap(int x, int y) {
       armedAcct = num, armedMs = millis();
     }
   };
+  if (y < SET_Y() - u(4)) return false;
   const AccCols ac = accCols();
-  if (y >= ACC_NEW_Y() && y < ACC_NEW_Y() + u(40) && x < M() + ac.lw) {
+  if (y >= accNewY && y < accNewY + accNewH && x >= M() && x < M() + ac.lw) {
     confirm(0, "ACTION login");
     return true;
   }
   JsonArrayConst accts = app::frame["accts"];
-  const int i = (y - ACC_LIST_Y()) / ACC_ROW();
-  const bool inList = x >= ac.rx && y >= ACC_LIST_Y() && i < min(3, (int)accts.size());
-  // fora da lista: na área do status fica; no resto fecha
-  if (!inList) return L() ? x < ac.rx && y >= u(56) : y >= u(56) && y < ACC_LIST_Y();
+  const int i = (y - accRowY) / max(1, accRowH);
+  if (x < ac.rx || y < accRowY || i >= min(accRows, (int)accts.size())) return true;  // fora de alvo: fica
   if ((int)accts[i][2]) return true;  // a org em uso
   char cmd[32];
   snprintf(cmd, sizeof cmd, "ACTION switch %d", (int)accts[i][0]);
@@ -1944,7 +2031,7 @@ int mcRowTop = 0, mcRowAll = 0;  // a primeira issue à mostra e quantas o proje
 int mcTapped = -1;   // a issue tocada: a borda pisca enquanto o Mac abre ela
 uint32_t mcTappedMs = 0;
 int mcProjTop = 0, mcProjH = 0, mcProjN = 0, mcProjFirst = 0, mcProjAll = 0;  // a lista de projetos rola como as outras
-int PROJ_H() { return max(u(58), gfx::lineHeight(gfx::LABEL) + u(26)); }
+int PROJ_H() { return max(max(u(58), gfx::lineHeight(gfx::LABEL) + u(26)), TAPPX()); }
 const char* const MC_TILES[] = {"Rodando", "Na fila", "Revisão", "Falhou"};
 const char* const MC_EMPTY[] = {"Nenhum agente rodando", "Nada na fila", "Nenhuma issue sua em revisão",
                                 "Nenhuma run sua falhou em 24 h"};
@@ -2006,7 +2093,7 @@ void mcProjects(bool live, JsonVariantConst mc) {
   const int x = M(), w = W() - 2 * M(), gap = u(10);
   mcProjTop = SET_Y();
   // altura fixa: com mais projetos que a tela, a lista rola em vez de espremer as linhas
-  const int h = max(u(76), gfx::lineHeight(gfx::LABEL) + gfx::lineHeight(gfx::SMALL) + u(34));
+  const int h = max(max(u(76), gfx::lineHeight(gfx::LABEL) + gfx::lineHeight(gfx::SMALL) + u(34)), TAPPX());
   const int fits = max(1, (gfx::height() - mcProjTop - u(30) + gap) / (h + gap));
   mcProjH = h + gap, mcProjAll = n, mcProjFirst = constrain(mcProjFirst, 0, max(0, n - fits));
   mcProjN = min(n - mcProjFirst, fits);
@@ -2021,17 +2108,20 @@ void mcProjects(bool live, JsonVariantConst mc) {
     fb().fillSmoothRoundRect(x, y, w, h, u(10), track);
     const char* st = p[1] | "";
     const uint16_t sc = !strcmp(st, "Em andamento") ? GREEN : !strcmp(st, "Concluído") ? MUTED : DIM;
-    const int sw = gfx::textWidth(st, gfx::SMALL);
-    text(st, x + w - u(14), y + u(10), gfx::SMALL, sc, top_right, track);
-    text(fit(p[0] | "", gfx::LABEL, w - u(42) - sw).c_str(), x + u(14), y + u(8), gfx::LABEL, TEXT, top_left, track);
-    const int by = y + h / 2 + u(2), bw = w - u(28), bh = max(4, u(6));
+    // nome, barra e contagem num bloco centrado na linha: em linha alta, nada fica grudado nas bordas
+    const int sw = gfx::textWidth(st, gfx::SMALL), bh = max(4, u(6)), gapv = u(6);
+    const int blockH = gfx::lineHeight(gfx::LABEL) + gapv + bh + gapv + gfx::lineHeight(gfx::SMALL), top = y + (h - blockH) / 2;
+    text(st, x + w - u(14), top, gfx::SMALL, sc, top_right, track);
+    text(fit(p[0] | "", gfx::LABEL, w - u(42) - sw).c_str(), x + u(14), top, gfx::LABEL, TEXT, top_left, track);
+    const int by = top + gfx::lineHeight(gfx::LABEL) + gapv, bw = w - u(28);
     fb().fillSmoothRoundRect(x + u(14), by, bw, bh, bh / 2, blend(track, TEXT, 0.12f));
     if (done) fb().fillSmoothRoundRect(x + u(14), by, max(bh, bw * done / total), bh, bh / 2, done >= total ? GREEN : ACCENT);
     snprintf(buf, sizeof buf, "%d de %d issues", done, (int)(p[3] | 0));
-    text(buf, x + u(14), y + h - u(8), gfx::SMALL, MUTED, bottom_left, track);
+    const int my = by + bh + gapv;
+    text(buf, x + u(14), my, gfx::SMALL, MUTED, top_left, track);
     if (review) {
       snprintf(buf, sizeof buf, review == 1 ? "1 em revisão" : "%d em revisão", review);
-      text(buf, x + w - u(14), y + h - u(8), gfx::SMALL, YELLOW, bottom_right, track);
+      text(buf, x + w - u(14), my, gfx::SMALL, YELLOW, top_right, track);
     }
   }
   if (n) text("Toque num projeto para ver as issues", W() / 2, gfx::height() - u(14), gfx::SMALL, DIM, middle_center);
@@ -2048,7 +2138,7 @@ void mcProjectIssues(bool live, JsonVariantConst mc, int proj) {
   if ((int)(pi[0] | -1) != proj) return text("Carregando…", W() / 2, gfx::height() / 2, gfx::LABEL, DIM, middle_center);
   const uint16_t track = blend(BG, TRACK, 0.6f);
   const int x = M(), w = W() - 2 * M(), gap = u(8), foot = gfx::height() - u(30);
-  mcRowY = SET_Y(), mcRowH = max(u(58), gfx::lineHeight(gfx::LABEL) + gfx::lineHeight(gfx::SMALL) + u(18)) + gap;
+  mcRowY = SET_Y(), mcRowH = max(max(u(58), gfx::lineHeight(gfx::LABEL) + gfx::lineHeight(gfx::SMALL) + u(18)), TAPPX()) + gap;
   JsonArrayConst rows = pi[1];
   const int fits = max(1, (foot - mcRowY + gap) / mcRowH);
   mcRowAll = rows.size(), mcRowTop = constrain(mcRowTop, 0, max(0, mcRowAll - fits));
@@ -2060,19 +2150,20 @@ void mcProjectIssues(bool live, JsonVariantConst mc, int proj) {
     const bool lit = idx == mcTapped && millis() - mcTappedMs < 900 && (millis() - mcTappedMs) / 150 % 2 == 0;
     card(x, y, w, h, u(10), track, lit);
     const int sw = gfx::textWidth(MC_STATUS[st], gfx::SMALL);
-    text(MC_STATUS[st], x + w - u(14), y + u(10), gfx::SMALL, mcStatusColor(st), top_right, track);
-    text(fit(l[1] | "", gfx::LABEL, w - u(40) - sw).c_str(), x + u(14), y + u(8), gfx::LABEL, TEXT, top_left, track);
+    const int mid = y + h / 2;  // título e detalhe empilhados no meio da linha
+    text(MC_STATUS[st], x + w - u(14), mid - u(2), gfx::SMALL, mcStatusColor(st), bottom_right, track);
+    text(fit(l[1] | "", gfx::LABEL, w - u(40) - sw).c_str(), x + u(14), mid - u(2), gfx::LABEL, TEXT, bottom_left, track);
     ago(when, sizeof when, l[4] | -1);
     const char* who = l[3] | "";
     snprintf(buf, sizeof buf, "%s%s%s%s%s", (const char*)(l[0] | ""), *who ? " · " : "", who, *when ? " · " : "", when);
-    text(fit(buf, gfx::SMALL, w - u(28)).c_str(), x + u(14), y + h - u(8), gfx::SMALL, MUTED, bottom_left, track);
+    text(fit(buf, gfx::SMALL, w - u(28)).c_str(), x + u(14), mid + u(4), gfx::SMALL, MUTED, top_left, track);
   }
   if (mcRowAll > fits) {  // barra de rolagem
     const int lh = fits * mcRowH - gap, bh = max(u(16), lh * fits / mcRowAll);
     fb().fillSmoothRoundRect(W() - u(5), mcRowY + (lh - bh) * mcRowTop / (mcRowAll - fits), u(3), bh, u(2), TRACK);
   }
   if (!mcRowN) text("Nenhuma issue aberta", W() / 2, gfx::height() / 2, gfx::LABEL, DIM, middle_center);
-  else text("Toque numa issue para abrir no Mac", W() / 2, gfx::height() - u(14), gfx::SMALL, DIM, middle_center);
+  else text("Toque numa issue para abrir no computador", W() / 2, gfx::height() - u(14), gfx::SMALL, DIM, middle_center);
 }
 
 void mcIssue(bool live, JsonVariantConst mc, const char* issue) {
@@ -2163,7 +2254,7 @@ void drawMulti(bool live, int view, const char* issue, int sel) {
   int ids[16];
   for (int i = 0; i < (int)cards.size() && mcFiltered < 16; i++)
     if ((int)(cards[i][4] | -1) == sel) ids[mcFiltered++] = i;
-  int ah = max(u(66), 2 * gfx::lineHeight(gfx::LABEL) + gfx::lineHeight(gfx::SMALL) + u(16));
+  int ah = max(max(u(66), 2 * gfx::lineHeight(gfx::LABEL) + gfx::lineHeight(gfx::SMALL) + u(16)), TAPPX());
   const int agap = u(8), room = mcProjY - u(8) - y;
   if (room < ah) ah = max(room, gfx::lineHeight(gfx::LABEL) + gfx::lineHeight(gfx::SMALL) + u(14));  // um cartão baixo
   mcAgentY = y, mcAgentH = ah + agap;
@@ -2184,7 +2275,7 @@ void drawMulti(bool live, int view, const char* issue, int sel) {
   fb().fillSmoothRoundRect(M(), mcProjY, w, ph, u(10), track);
   char buf[32];
   snprintf(buf, sizeof buf, "Projetos · %d", (int)mc["p"].size());
-  text(buf, M() + u(14), mcProjY + ph / 2, gfx::LABEL, TEXT, middle_left, track);
+  text(buf, M() + u(14), mcProjY + ph / 2, fontFor(ph) == gfx::SMALL ? gfx::LABEL : fontFor(ph), TEXT, middle_left, track);
   text("›", M() + w - u(12), mcProjY + ph / 2, gfx::TITLE, MUTED, middle_right, track);
   shownWs = -1;
   dots(1);
@@ -2232,6 +2323,104 @@ int mcListTap(int x, int y) {
   return mcTapped;
 }
 
+// Uma pergunta do primeiro uso: o título, a explicação e as opções em cartões altos (alvo de 9 mm ou mais).
+int choiceY(int k) { return u(110) + k * (max(u(70), TAP()) + u(12)); }
+void drawChoice(const char* title, const char* sub, const char* const* names, const char* const* hints, int n) {
+  gfx::clear();
+  const int cx = W() / 2, bw = W() - 2 * M(), bh = max(u(70), TAP());
+  text(title, cx, u(40), gfx::TITLE, TEXT, middle_center);
+  text(fit(sub, gfx::LABEL, bw).c_str(), cx, u(40) + below(gfx::TITLE, 32), gfx::LABEL, MUTED, middle_center);
+  for (int k = 0; k < n; k++) {
+    const uint16_t bg = blend(BG, TRACK, 0.6f);
+    fb().fillSmoothRoundRect(M(), choiceY(k), bw, bh, u(14), bg);
+    const bool two = hints[k] && *hints[k];
+    const int mid = choiceY(k) + bh / 2;
+    text(names[k], M() + u(18), two ? mid - gfx::lineHeight(gfx::LABEL) / 2 - u(2) : mid, gfx::TITLE, TEXT, middle_left, bg);
+    if (two) text(fit(hints[k], gfx::LABEL, bw - u(36)).c_str(), M() + u(18), mid + gfx::lineHeight(gfx::TITLE) / 2 + u(2), gfx::LABEL, DIM, middle_left, bg);
+  }
+  text("Dá para mudar depois em Ajustes", cx, gfx::height() - u(20), gfx::SMALL, DIM, middle_center);
+}
+int choiceTap(int x, int y, int n) {
+  const int bh = max(u(70), TAP());
+  for (int k = 0; k < n; k++)
+    if (y >= choiceY(k) && y < choiceY(k) + bh && x >= M() && x < W() - M()) return k + 1;
+  return 0;
+}
+void drawMcAsk() {
+  static const char* const N[] = {"Mostrar", "Agora não"};
+  static const char* const H[] = {"Seus agentes, issues e projetos", "Liga depois em Ajustes → Multica"};
+  drawChoice("Mostrar o Multica?", "Achei o Multica neste computador", N, H, 2);
+}
+int mcAskTap(int x, int y) { return choiceTap(x, y, 2); }
+
+void drawLoginAsk() {
+  gfx::clear();
+  const int cx = W() / 2, bw = W() - 2 * M(), bh = max(u(56), TAP());
+  text("Falta o login do Claude", cx, u(40), gfx::TITLE, TEXT, middle_center);
+  text(fit("Sem ele, a placa não mostra o % de uso", gfx::LABEL, bw).c_str(), cx, u(40) + below(gfx::TITLE, 32), gfx::LABEL, MUTED, middle_center);
+  const int by = u(110), boxH = below(gfx::LABEL, 26) * 3 + u(24);
+  const uint16_t bg = blend(BG, TRACK, 0.6f);
+  fb().fillSmoothRoundRect(M(), by, bw, boxH, u(14), bg);
+  text("No terminal, rode:", M() + u(16), by + u(14), gfx::LABEL, TEXT, top_left, bg);
+  text("claude", M() + u(16), by + u(14) + below(gfx::LABEL, 30), gfx::TITLE, GREEN, top_left, bg);
+  text(fit("e entre na sua conta. A placa segue sozinha.", gfx::SMALL, bw - u(32)).c_str(), M() + u(16), by + boxH - u(12), gfx::SMALL, DIM, bottom_left, bg);
+  const int sy = gfx::height() - u(24) - bh;
+  fb().fillSmoothRoundRect(M(), sy, bw, bh, min(bh / 2, u(26)), bg);
+  text("Pular: só tokens, sem %", cx, sy + bh / 2, gfx::LABEL, TEXT, middle_center, bg);
+}
+bool loginSkipAt(int x, int y) {
+  const int bh = max(u(56), TAP()), sy = gfx::height() - u(24) - bh;
+  return y >= sy && y < sy + bh && x >= M() && x < W() - M();
+}
+
+// Firmware novo a caminho: o daemon grava em poucos segundos. O toque adia uma hora.
+void drawFwUp() {
+  JsonArrayConst f = app::frame["fwup"];
+  // a placa conta sozinha a partir do primeiro aviso: com os segundos de cada frame, a tela lenta pulava números
+  static String seen;
+  static uint32_t fromMs = 0;
+  static int fromSecs = 0;
+  if (seen != (const char*)(f[0] | "")) seen = f[0] | "", fromMs = millis(), fromSecs = f[1] | 0;
+  const int left = max(0, fromSecs - (int)((millis() - fromMs) / 1000));
+  gfx::clear();
+  const int cx = W() / 2, h = gfx::height();
+  char buf[48];
+  text("Atualizando o firmware", cx, h * 30 / 100, gfx::TITLE, TEXT, middle_center);
+  snprintf(buf, sizeof buf, "%s → %s", hostlink::firmware(), (const char*)(f[0] | ""));
+  text(fit(buf, gfx::LABEL, W() - 2 * M()).c_str(), cx, h * 30 / 100 + below(gfx::TITLE, 34), gfx::LABEL, MUTED, middle_center);
+  snprintf(buf, sizeof buf, left ? "Começa em %d s" : "Começando…", left);
+  text(buf, cx, h / 2 + u(10), gfx::NUM, ACCENT, middle_center);
+  text("Não desligue a placa", cx, h * 72 / 100, gfx::LABEL, TEXT, middle_center);
+  text("Toque para adiar 1 h", cx, h * 72 / 100 + below(gfx::LABEL, 28), gfx::SMALL, DIM, middle_center);
+}
+
+// Versão nova no GitHub: atualiza o programa do Mac e, em seguida, o firmware das placas.
+int updBtnY(int k) { return gfx::height() - u(30) - (2 - k) * (max(u(52), TAP()) + u(12)); }
+void drawUpdate() {
+  gfx::clear();
+  const int cx = W() / 2, bh = max(u(52), TAP()), bw = W() - 2 * M();
+  char buf[48];
+  text("Versão nova", cx, u(40), gfx::TITLE, TEXT, middle_center);
+  snprintf(buf, sizeof buf, "%s → %s", hostlink::firmware(), (const char*)(app::frame["upd"] | ""));
+  text(fit(buf, gfx::LABEL, bw).c_str(), cx, u(40) + below(gfx::TITLE, 34), gfx::LABEL, ACCENT, middle_center);
+  String l2, l1 = wrap2("Atualiza o programa do computador e depois o firmware das placas, em cerca de 1 min.", gfx::LABEL, bw, l2);
+  const int ty = u(40) + below(gfx::TITLE, 34) + below(gfx::LABEL, 40);
+  text(l1.c_str(), cx, ty, gfx::LABEL, MUTED, middle_center);
+  if (l2.length()) text(fit(l2.c_str(), gfx::LABEL, bw).c_str(), cx, ty + below(gfx::LABEL, 24), gfx::LABEL, MUTED, middle_center);
+  const char* labels[] = {"Atualizar agora", "Depois"};
+  for (int k = 0; k < 2; k++) {
+    const uint16_t c = k ? blend(BG, TRACK, 0.7f) : ACCENT;
+    fb().fillSmoothRoundRect(M(), updBtnY(k), bw, bh, min(bh / 2, u(26)), c);
+    text(labels[k], cx, updBtnY(k) + bh / 2, fontFor(bh) == gfx::SMALL ? gfx::LABEL : fontFor(bh), k ? TEXT : BG, middle_center, c);
+  }
+}
+int updateTap(int x, int y) {
+  const int bh = max(u(52), TAP());
+  for (int k = 0; k < 2; k++)
+    if (y >= updBtnY(k) && y < updBtnY(k) + bh && x >= M() && x < W() - M()) return k + 1;
+  return 0;
+}
+
 // O aviso do Multica em tela cheia, como o de uma sessão: issue que foi para revisão (amarelo) ou run que falhou
 // (vermelho). O botão abre a issue no navegador do Mac; tocar fora fecha.
 void drawMcAlert(uint32_t ageMs) {
@@ -2252,9 +2441,9 @@ void drawMcAlert(uint32_t ageMs) {
   text(fit(a["m"] | "", gfx::SMALL, maxW).c_str(), cx, y, gfx::SMALL, MUTED, top_center, bg);
   y += gfx::lineHeight(gfx::SMALL) + u(12);
   if (*(a["x"] | "")) text(fit(a["x"] | "", gfx::LABEL, maxW).c_str(), cx, y, gfx::LABEL, TEXT, top_center, bg);
-  const int by = ATTN_BTN_Y(), bh = ATTN_BTN_H(), bw2 = min(maxW, u(260));
-  fb().fillSmoothRoundRect(cx - bw2 / 2, by, bw2, bh, bh / 2, c);
-  text("Abrir no Multica", cx, by + bh / 2, gfx::LABEL, BG, middle_center, c);
+  const int by = ATTN_BTN_Y(), bh = ATTN_BTN_H(), bw2 = maxW;
+  fb().fillSmoothRoundRect(cx - bw2 / 2, by, bw2, bh, min(bh / 2, u(26)), c);
+  text("Abrir no Multica", cx, by + bh / 2, fontFor(bh) == gfx::SMALL ? gfx::LABEL : fontFor(bh), BG, middle_center, c);
   const int left = maxW * (60000 - min<uint32_t>(ageMs, 60000)) / 60000;
   fb().fillRoundRect(M(), h - u(22), maxW, u(4), u(2), blend(bg, c, 0.25f));
   if (left > 0) fb().fillRoundRect(M(), h - u(22), left, u(4), u(2), c);

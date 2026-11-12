@@ -38,6 +38,7 @@ void begin() {
     if (web.sound >= sound::COUNT) web.sound = d.sound;
     if (web.volume < 1 || web.volume > 3) web.volume = d.volume;
     if (web.restSecs > 1) web.restSecs = d.restSecs;
+    if (web.batBright > 3) web.batBright = d.batBright;
     if (!web.restPages || web.restPages > 31) web.restPages = d.restPages;
     if (web.soundOut > sound::COUNT) web.soundOut = d.soundOut;
     if (web.soundNew > sound::COUNT) web.soundNew = d.soundNew;
@@ -84,6 +85,7 @@ bool validHost(const String& h) {
 }
 
 uint8_t brightness() { return 64 * (min<int>(v.bright, 3) + 1) - 1; }
+uint8_t batteryBrightness() { return (const uint8_t[]){63, 127, 179, 255}[min<int>(web.batBright, 3)]; }
 
 uint8_t volumePct() {
   // o ES8311 lê o % como uma escala em dB (0,5 dB por passo): ~-27,5, ~-19 e ~-11,5 dB, uns 8 dB entre níveis

@@ -13,32 +13,49 @@ static const char LOGO[] PROGMEM = R"SVG(<svg xmlns="http://www.w3.org/2000/svg"
             stroke-width="26" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>)SVG";
 
-static const char STYLE[] PROGMEM = R"CSS(*{box-sizing:border-box}:root{--bg:#FAF9F5;--fg:#1F1E1D;--mut:#6B6A66;--card:#FFF;--line:#E6E3DA;--acc:#C2603F}
-@media(prefers-color-scheme:dark){:root{--bg:#1F1E1D;--fg:#F5F4EE;--mut:#A3A29C;--card:#2A2927;--line:#3A3935;--acc:#D97757}}
-body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.4 system-ui,sans-serif}
-main{max-width:30em;margin:auto;padding:16px}
-h1{font-size:20px;margin:8px 0 2px}.sub{color:var(--mut);margin:0 0 8px}
-section{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin:12px 0}
-h2{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--mut);margin:0 0 6px}
-label{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:6px 0}
-select,input[type=text],input[type=password]{font:inherit;padding:4px 6px;border-radius:6px;border:1px solid var(--line);background:var(--bg);color:var(--fg);min-width:0}
-input[type=range]{width:50%;accent-color:var(--acc)}input[type=checkbox]{accent-color:var(--acc);width:18px;height:18px}
-dl{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;margin:0}dt{color:var(--mut)}dd{margin:0;text-align:right;overflow-wrap:anywhere}
-button,.btn{font:inherit;padding:6px 12px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--fg);cursor:pointer;text-decoration:none}
-.row{display:flex;gap:8px;flex-wrap:wrap}#msg{color:var(--acc);min-height:1.4em;margin:0}[hidden]{display:none}
-.steps{counter-reset:s;list-style:none;padding:0;margin:0}.steps>li{counter-increment:s;position:relative;padding:2px 0 14px 40px}
-.steps>li::before{content:counter(s);position:absolute;left:0;top:0;width:26px;height:26px;border-radius:50%;display:grid;place-items:center;font-size:13px;font-weight:600;background:var(--line);color:var(--fg)}
-.steps>li.ok::before{content:"✓";background:#3C8A4E;color:#fff}.steps>li.bad::before{content:"!";background:#B9472F;color:#fff}
-.steps h3{font-size:15px;margin:2px 0 4px}.steps p{margin:4px 0;color:var(--mut)}
-.drop{border:2px dashed var(--line);border-radius:10px;padding:18px;text-align:center;color:var(--mut);cursor:pointer}.drop.on{border-color:var(--acc);color:var(--fg)}
-progress{width:100%;height:10px;accent-color:var(--acc)}code{font:13px ui-monospace,monospace;background:var(--bg);padding:1px 5px;border-radius:5px}
-.good{color:#3C8A4E}.warn{color:#C28A1E}.err{color:#B9472F}a{color:var(--acc)}
-.nets{display:grid;gap:6px;margin:8px 0}.net{display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--fg);font:inherit;cursor:pointer}
+static const char STYLE[] PROGMEM = R"CSS(*{box-sizing:border-box}
+:root{--bg:#F4F2EC;--fg:#1F1E1D;--mut:#6B6A66;--card:#FFF;--line:#E6E3DA;--acc:#C2603F;--soft:#F8F6F1;--ok:#3C8A4E;--sh:0 1px 2px #0000000d,0 4px 16px #0000000a;color-scheme:light}
+@media(prefers-color-scheme:dark){:root{--bg:#171615;--fg:#F5F4EE;--mut:#A3A29C;--card:#232220;--line:#363532;--acc:#D97757;--soft:#2C2B28;--sh:0 1px 2px #0000004d;color-scheme:dark}}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
+main{max-width:34rem;margin:auto;padding:0 16px 56px}main:has(#f){max-width:none;padding:0 clamp(16px,3vw,40px) 56px}
+.brand{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:10px;font-weight:700;font-size:17px;color:var(--fg);text-decoration:none;margin:0 -16px;padding:14px 16px;background:color-mix(in srgb,var(--bg) 82%,transparent);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
+.brand img{width:30px;height:30px;border-radius:8px}
+h1{font-size:28px;line-height:1.15;letter-spacing:-.02em;margin:12px 0 4px}.sub{color:var(--mut);margin:0 0 20px;overflow-wrap:anywhere}
+section{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:18px 20px;margin:0 0 16px;box-shadow:var(--sh)}
+#f{columns:22rem;column-gap:16px}#f section{break-inside:avoid;margin:0 0 16px}
+h2{font-size:13px;font-weight:650;text-transform:uppercase;letter-spacing:.07em;color:var(--mut);margin:0 0 8px}
+p{margin:8px 0}
+label{display:flex;justify-content:space-between;align-items:center;gap:16px;min-height:52px;padding:8px 0}label+label{border-top:1px solid var(--line)}
+select,input[type=text],input[type=password]{font:inherit;font-size:15px;padding:10px 12px;border-radius:12px;border:1px solid var(--line);background:var(--soft);color:var(--fg);min-width:0;max-width:62%}
+select{appearance:none;-webkit-appearance:none;padding-right:34px;cursor:pointer;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%23888' stroke-width='2'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;text-overflow:ellipsis}
+select:focus,input:focus,button:focus-visible,.btn:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+label>span{display:flex;align-items:center;gap:6px;color:var(--mut)}label:has(>span){flex-wrap:wrap}label>span{flex:1 1 15rem;justify-content:flex-end}label>span>input[type=text]{flex:1;width:auto;max-width:none}
+input[type=range]{width:55%;accent-color:var(--acc);height:28px}
+input[type=checkbox]{appearance:none;-webkit-appearance:none;flex:none;position:relative;width:48px;height:28px;margin:0;border-radius:14px;background:var(--line);cursor:pointer;transition:background .2s}
+input[type=checkbox]::before{content:"";position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:#fff;box-shadow:0 1px 3px #0004;transition:transform .2s}
+input[type=checkbox]:checked{background:var(--acc)}input[type=checkbox]:checked::before{transform:translateX(20px)}
+dl{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,10rem),1fr));grid-auto-flow:dense;gap:10px;margin:4px 0 0}dl>.w{grid-column:span 2}
+dl>div{background:var(--soft);border-radius:12px;padding:10px 12px;min-width:0}dt{color:var(--mut);font-size:13px}dd{margin:2px 0 0;font-weight:600;white-space:nowrap;overflow-x:auto;scrollbar-width:none}
+button,.btn{font:inherit;font-weight:600;font-size:15px;min-height:44px;padding:10px 18px;border-radius:12px;border:1px solid var(--line);background:var(--soft);color:var(--fg);cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;transition:filter .15s}
+button:hover,.btn:hover{filter:brightness(.96)}button:disabled{opacity:.5;cursor:default}
+.pri{background:var(--acc);border-color:var(--acc);color:#fff}
+.row{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0 4px}
+#msg{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);z-index:3;max-width:calc(100% - 32px);margin:0;padding:12px 18px;border-radius:14px;background:var(--fg);color:var(--bg);font-weight:600;box-shadow:0 8px 24px #0003}#msg:empty{display:none}
+.now{border:2px solid var(--acc);box-shadow:0 0 0 5px color-mix(in srgb,var(--acc) 16%,transparent)}
+[hidden]{display:none!important}
+.steps{counter-reset:s;list-style:none;padding:0;margin:0}.steps>li{counter-increment:s;position:relative;padding:2px 0 16px 42px}
+.steps>li::before{content:counter(s);position:absolute;left:0;top:0;width:28px;height:28px;border-radius:50%;display:grid;place-items:center;font-size:13px;font-weight:700;background:var(--line);color:var(--fg)}
+.steps>li.ok::before{content:"✓";background:var(--ok);color:#fff}.steps>li.bad::before{content:"!";background:#B9472F;color:#fff}
+.steps h3{font-size:16px;margin:3px 0 4px}.steps p{margin:4px 0;color:var(--mut)}
+.drop{border:2px dashed var(--line);border-radius:14px;padding:24px;text-align:center;color:var(--mut);cursor:pointer}.drop.on{border-color:var(--acc);color:var(--fg)}
+progress{width:100%;height:10px;accent-color:var(--acc)}code{font:14px ui-monospace,monospace;background:var(--soft);padding:2px 6px;border-radius:6px}
+.good{color:var(--ok)}.warn{color:#C28A1E}.err{color:#B9472F}a{color:var(--acc)}
+.nets{display:grid;gap:8px;margin:10px 0}.net{display:flex;align-items:center;gap:12px;width:100%;text-align:left;min-height:52px;padding:12px 14px;border-radius:14px;border:1px solid var(--line);background:var(--soft);color:var(--fg);font:inherit;font-weight:500;cursor:pointer}
 .net.on{border-color:var(--acc);box-shadow:0 0 0 1px var(--acc)}.net .n{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .bars{display:inline-flex;align-items:flex-end;gap:2px;height:14px}.bars i{width:4px;background:var(--line);border-radius:1px}.bars i.f{background:var(--fg)}
 .spin{display:inline-block;width:14px;height:14px;border:2px solid var(--line);border-top-color:var(--acc);border-radius:50%;animation:r .8s linear infinite;vertical-align:-2px;margin-right:6px}@keyframes r{to{transform:rotate(1turn)}}
-.brand{display:flex;align-items:center;gap:8px;font-weight:700;color:var(--fg);text-decoration:none;margin:4px 0 14px}.brand img{width:28px;height:28px}
-.big{font-size:17px}.hint{font-size:14px;color:var(--mut)}input.full{width:100%;padding:10px 12px;font-size:16px}
+.big{font-size:18px}.hint{font-size:14px;color:var(--mut)}input.full{width:100%;max-width:none;padding:12px 14px;font-size:16px}
+@media(max-width:30rem){h1{font-size:24px}section{padding:16px;border-radius:16px}label:has(select,input[type=range]){flex-wrap:wrap}label>select{max-width:100%}input[type=range]{width:100%}}
 )CSS";
 
 static const char WIFI_PAGE[] PROGMEM = R"HTML(<!doctype html>
@@ -47,7 +64,7 @@ static const char WIFI_PAGE[] PROGMEM = R"HTML(<!doctype html>
 <main>
 <a class=brand href=/wifi><img src=/logo.svg alt="">tokenpulse</a>
 <h1>Conectar a placa ao seu WiFi</h1><p class=sub id=sub></p>
-<p>Escolha a <b>mesma rede do Mac</b> em que você usa o Claude Code ou o Codex: é por ela que o Mac manda os dados para a placa.</p>
+<p>Escolha a <b>mesma rede do computador</b> em que você usa o Claude Code ou o Codex: é por ela que o computador manda os dados para a placa.</p>
 <section><ol class=steps>
 <li id=s1><h3>Escolha a rede</h3>
 <div id=list class=nets><p class=hint><span class=spin></span>procurando redes…</p></div>
@@ -59,13 +76,13 @@ static const char WIFI_PAGE[] PROGMEM = R"HTML(<!doctype html>
 <input class=full id=pass type=password placeholder="senha do WiFi" autocapitalize=off autocorrect=off spellcheck=false>
 <label class=hint><span>Mostrar a senha</span><input type=checkbox id=show></label><p id=open class=hint hidden>Essa rede é aberta: não precisa de senha.</p></li>
 <li id=s3><h3>Conecte</h3>
-<div class=row><button id=go type=button disabled>Conectar</button></div>
+<div class=row><button id=go class=pri type=button disabled>Conectar</button></div>
 <p id=msg class=big></p><p id=tip class=hint></p></li>
 </ol></section>
 <section id=done hidden><h2>Pronto</h2><p class=big>A placa está na rede <b id=dssid></b>.</p>
 <dl><dt>Endereço</dt><dd><a id=dhost></a></dd><dt>IP</dt><dd id=dip></dd></dl>
 <ol class=steps><li><h3>Volte o celular para a sua rede de sempre</h3><p>O WiFi <b class=apn></b> some em 1 minuto.</p></li>
-<li><h3>Instale o tokenpulse no Mac</h3><p>Um comando no Terminal: o passo a passo está em <a href="https://gilsondev.github.io/tokenpulse/comecar/">gilsondev.github.io/tokenpulse/comecar</a>. A tela da placa mostra um QR code para essa página.</p></li></ol></section>
+<li><h3>Instale o tokenpulse no computador</h3><p>Um comando no Terminal: o passo a passo está em <a href="https://gilsondev.github.io/tokenpulse/comecar/">gilsondev.github.io/tokenpulse/comecar</a>. A tela da placa mostra um QR code para essa página.</p></li></ol></section>
 <p class=hint><a href=/config>Ajustes da placa</a></p>
 </main>
 <script>
@@ -130,14 +147,14 @@ static const char UPDATE_PAGE[] PROGMEM = R"HTML(<!doctype html>
 <label class=drop id=drop><input type=file id=file accept=".bin,.gz" hidden><span id=fileMsg>Toque para escolher ou arraste o .bin aqui</span></label></li>
 <li id=s3><h3>Envie para a placa</h3>
 <p>Leva uns 10 s. Não feche a página e não desligue a placa.</p>
-<div class=row><button id=send disabled>Enviar firmware</button></div>
+<div class=row><button id=send class=pri disabled>Enviar firmware</button></div>
 <p><progress id=bar max=100 value=0 hidden></progress></p><p id=sendMsg></p></li>
 <li id=s4><h3>Confira se deu certo</h3>
 <p id=doneMsg>A placa reinicia sozinha. Esta página espera ela voltar e confere a versão.</p></li>
 </ol>
 <p>Se algo falhar no meio, a placa continua na versão atual: ela só troca depois de gravar e conferir o arquivo inteiro.<span id=guard hidden> Se o firmware novo travar 3 vezes seguidas, ela volta só com WiFi e esta página, para você mandar outro.</span></p>
 </section>
-<section><h2>Pelo Mac</h2><p>Com o daemon rodando, dá para atualizar sem o navegador: <code>./update.sh</code> manda o último release, e <code id=flash>firmware/flash.sh &lt;placa&gt;</code> compila e manda.</p></section>
+<section><h2>Pelo computador</h2><p>Com o daemon rodando, dá para atualizar sem o navegador: <code>./update.sh</code> manda o último release, e <code id=flash>firmware/flash.sh &lt;placa&gt;</code> compila e manda.</p></section>
 </main>
 <script>
 const $=id=>document.getElementById(id),mark=(id,c)=>{$(id).className=c};

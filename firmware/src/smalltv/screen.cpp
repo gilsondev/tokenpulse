@@ -121,7 +121,9 @@ void drawMain(bool codex = false) {
   snprintf(buf, sizeof buf, p5 < 0 ? "--" : "%d%%", (int)lroundf(shown));
   Vlw& pf = textWidth(buf, HERO) <= 2 * (r - 9) - 12 ? HERO : NUM;  // "42%" na fonte grande não cabe no anel
   text(buf, cx, cy - (&pf == &HERO ? 18 : 12), pf, p5 < 0 ? TEXT : ring, top_center);
-  text("Sessão 5h", cx, 162, LABEL, MUTED, top_center);
+  const char* s5 = f["s5"] | "";
+  const char* warn = stale || p5 < 80 ? nullptr : p5 >= 100 ? "Esgotado" : p5 >= 90 ? "No limite" : "Perto do limite";
+  text(warn ? warn : *s5 ? s5 : "Sessão 5h", cx, 162, LABEL, warn ? levelColor(p5) : *s5 ? ACCENT : MUTED, top_center);
   if (stale) {
     snprintf(buf, sizeof buf, "Há %d min", (int)(f["age"] | 0) / 60);
     text(buf, cx, 178, LABEL, AMBER, top_center);
@@ -141,7 +143,7 @@ void drawMain(bool codex = false) {
   text("Tokens hoje", x, 104, LABEL, MUTED);
   const uint32_t glow = since(ui.tokMs);  // subiu: o número acende em branco e volta à cor em 0,9 s
   text(f["tot"] | "0", x, 120, NUM, glow < 900 ? blend(TEXT, ACCENT, glow / 900.f) : ACCENT);
-  text("Ritmo/min", x, 150, LABEL, MUTED);
+  text("Por minuto", x, 150, LABEL, MUTED);
   text(f["rate"] | "0", x, 166, NUM, TEXT);
 
   // última hora
@@ -152,7 +154,7 @@ void drawMain(bool codex = false) {
   auto yAt = [&](int i) { return base - (int)((uint32_t)sp[i] * sh / peak) - oy; };
   for (int i = 1; i < n; i++) band.drawLine(sx + (i - 1) * sw / (n - 1), yAt(i - 1), sx + i * sw / (n - 1), yAt(i), ACCENT);
   band.drawFastHLine(sx, base + 1 - oy, sw, TRACK);
-  text("-60 min", sx, 216, LABEL, DIM);
+  text("Última hora", sx, 216, LABEL, DIM);
   text("Agora", sx + sw, 216, LABEL, DIM, top_right);
 }
 
@@ -249,7 +251,7 @@ void drawSessions() {
   for (JsonArrayConst s : app::frame["ses"].as<JsonArrayConst>()) blocks += !strcmp(s[1] | "", "block");
   const int act = n[0] | 0, idle = n[2] | 0, turns = max(0, (int)(n[1] | 0) - blocks);
   struct { int count; const char *one, *many; uint16_t c; } parts[] = {
-      {act, "Ativa", "Ativas", GREEN}, {blocks, "Aprovar", "Aprovar", RED},
+      {act, "Trabalhando", "Trabalhando", GREEN}, {blocks, "Aprovar", "Aprovar", RED},
       {turns, "Sua vez", "Sua vez", YELLOW}, {idle, "Parada", "Paradas", DIM}};
   char seg[4][24];
   int shown = 0;
@@ -279,7 +281,7 @@ void drawSessions() {
     const uint16_t c = work ? GREEN : block ? RED : turn ? YELLOW : DIM;
     ago(when, sizeof when, s[2] | -1);
     // à direita só o essencial, para sobrar nome: a cor e o contador do topo dizem o resto
-    snprintf(buf, sizeof buf, "%s", work ? "Ativa" : block ? "Aprovar" : when);
+    snprintf(buf, sizeof buf, "%s", work ? "Trabalhando" : block ? "Aprovar" : when);
     band.fillCircle(12, y + 7 - oy, 4, c);
     const int rw = textWidth(buf, LABEL);
     text(fit(s[0] | "?", W - 8 - 22 - rw - 8, LABEL).c_str(), 22, y, LABEL, work || block || turn ? TEXT : MUTED);
@@ -418,8 +420,8 @@ void drawOrgs() {
     const bool active = a[2] | 0, relogin = a[3] | 0;
     const int p5 = a[4] | -1, pw = a[5] | -1;
     text(fit(a[1] | "?", 150, LABEL).c_str(), 8, y, LABEL, active ? TEXT : MUTED);
-    if (active) text("Ativa", W - 8, y, LABEL, ACCENT, top_right);
-    else if (relogin) text("Precisa de login", W - 8, y, LABEL, AMBER, top_right);
+    if (active) text("Em uso", W - 8, y, LABEL, ACCENT, top_right);
+    else if (relogin) text("Login expirado", W - 8, y, LABEL, AMBER, top_right);
     band.fillRoundRect(8, y + 20 - oy, 96, 6, 3, TRACK);
     if (p5 > 0) band.fillRoundRect(8, y + 20 - oy, max(6, 96 * min(p5, 100) / 100), 6, 3, levelColor(p5));
     snprintf(buf, sizeof buf, p5 < 0 ? "5h --" : "5h %d%%", p5);
@@ -445,7 +447,8 @@ int slots(Slot* out) {
   int n = 0;
   out[n++] = {MAIN, 0};
   if (!f["cx"].isNull()) out[n++] = {MAIN, 1};  // a principal do Codex, logo depois
-  if (!f["pask"].isNull()) out[n++] = {ASK, 0};  // primeiro uso com o Codex: onde escolher os provedores
+  // primeiro uso: provedores, Multica, login do Claude e versão nova, na ordem; a resposta é na página da placa
+  if (!f["pask"].isNull() || !f["mask"].isNull() || !f["lask"].isNull() || !f["upd"].isNull()) out[n++] = {ASK, 0};
   if ((on & 4) && f["ses"].size()) out[n++] = {SESSIONS, 0};
   if (!f["mc"].isNull()) out[n++] = {MULTI, 0};  // o Multica, depois das sessões (o ajuste dele mora no Mac)
   if ((on & 1) && f["mods"].size()) out[n++] = {MODELS, 0};
@@ -479,16 +482,27 @@ Slot pageNow() {
   return cur;
 }
 
-// Primeiro uso com o Codex no Mac: sem toque, o aviso diz onde escolher. Sai da volta quando alguém escolhe.
+// Primeiro uso, sem toque: a tela diz o que falta e onde responder. Sai da volta quando não falta nada.
 void drawAsk() {
-  const bool both = !strcmp(app::frame["pask"] | "", "both");
+  const auto& f = app::frame;
+  const char *l1, *l2 = nullptr, *until;
+  if (!f["pask"].isNull()) {
+    const bool both = !strcmp(f["pask"] | "", "both");
+    l1 = both ? "Este computador usa o Claude" : "Este computador usa o Codex", l2 = both ? "e o Codex" : nullptr, until = "Até lá: automático";
+  } else if (!f["mask"].isNull()) {
+    l1 = "Achei o Multica aqui", l2 = "Mostrar nesta placa?", until = "Até lá: oculto";
+  } else if (!f["lask"].isNull()) {
+    l1 = "Falta o login do Claude", l2 = "No terminal: claude", until = "Até lá: só tokens, sem %";
+  } else {
+    l1 = "Versão nova do tokenpulse", l2 = f["upd"] | "", until = "Atualiza o daemon e as placas";
+  }
   band.fillScreen(BG);
-  text(both ? "Este Mac usa o Claude" : "Este Mac usa o Codex", W / 2, 60, LABEL, TEXT, top_center);
-  if (both) text("e o Codex", W / 2, 78, LABEL, TEXT, top_center);
-  text(both ? "Para escolher o que mostrar," : "Para mostrar o Codex,", W / 2, 116, LABEL, MUTED, top_center);
-  text("escolha na página da placa:", W / 2, 134, LABEL, MUTED, top_center);
+  text(l1, W / 2, 60, LABEL, TEXT, top_center);
+  if (l2) text(l2, W / 2, 78, LABEL, TEXT, top_center);
+  text("Responda na página", W / 2, 116, LABEL, MUTED, top_center);
+  text("da placa:", W / 2, 134, LABEL, MUTED, top_center);
   text(net::address().c_str(), W / 2, 164, LABEL, ACCENT, top_center);
-  text("Até lá: automático", W / 2, 204, LABEL, DIM, top_center);
+  text(until, W / 2, 204, LABEL, DIM, top_center);
 }
 
 void draw(Slot slot) {
@@ -525,10 +539,10 @@ void drawOta() {
 // ensina a instalar o daemon no Mac, por QR code e pelo endereço escrito.
 void drawInstall() {
   band.fillScreen(BG);
-  text("Falta o tokenpulse no Mac", W / 2, 4, LABEL, TEXT, top_center);
+  text("Falta o tokenpulse no computador", W / 2, 4, LABEL, TEXT, top_center);
   band.qrcode("https://gilsondev.github.io/tokenpulse/comecar/", (W - 148) / 2, 22 - oy, 148);
   // o QR leva ao github.io, que não depende do encurtador; o endereço escrito é o curto, para digitar no Mac
-  text("Escaneie, ou abra no Mac:", W / 2, 178, LABEL, MUTED, top_center);
+  text("Escaneie, ou abra no computador:", W / 2, 178, LABEL, MUTED, top_center);
   text("tokenpulse.s.gy/comecar", W / 2, 198, LABEL, ACCENT, top_center);  // na fonte de 22 px não cabe em 240
 }
 
@@ -550,18 +564,18 @@ void drawWaiting() {
   char buf[64];
   if (net::apOn() && !net::online()) return drawAp();
   band.fillScreen(BG);
-  text("Sem dados do Mac", W / 2, 40, NUM, TEXT, top_center);
-  if (app::lastFrameMs) {
-    snprintf(buf, sizeof buf, "Último dado há %lu min", (millis() - app::lastFrameMs) / 60000);
-    text(buf, W / 2, 70, LABEL, MUTED, top_center);
-  }
+  // o título curto cabe em 240 px na fonte grande; de onde falta o dado vai na linha de baixo
+  text("Sem dados", W / 2, 40, NUM, TEXT, top_center);
+  if (app::lastFrameMs) snprintf(buf, sizeof buf, "do computador há %lu min", (millis() - app::lastFrameMs) / 60000);
+  else strcpy(buf, "do computador");
+  text(buf, W / 2, 70, LABEL, MUTED, top_center);
   const bool wifi = net::online();
   const bool daemon = wifi && net::lastDaemonMs() && millis() - net::lastDaemonMs() < 15000;
   // sem nenhum dado nunca e há 20 s no WiFi sem daemon: a tela de instalação no lugar das etapas
   if (wifi && !daemon && !app::lastFrameMs && millis() > 20000) return drawInstall();
   String hint = net::apOn() ? String("Conecte em ") + net::apName() : String("Procurando a rede salva…");
   step(100, wifi, "WiFi", hint.c_str());
-  step(140, daemon, "Daemon tokend", "Rode host/install.sh no Mac");
+  step(140, daemon, "Daemon tokend", "Instale no computador");
   step(180, false, "Dados", nullptr);
   text(net::address().c_str(), W / 2, 208, LABEL, DIM, top_center);
 }

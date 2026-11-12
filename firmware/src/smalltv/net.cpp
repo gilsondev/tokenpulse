@@ -43,6 +43,7 @@ String pendingAct;  // a ação para o daemon ("prov both", "mc 0"...), na respo
 void handleState() {
   JsonDocument d;
   d["board"] = app::BOARD;
+  d["nick"] = app::NICK;
   d["fw"] = app::FIRMWARE;
   d["agent"] = app::frame["agv"] | "";  // versão do tokend, vinda no frame
   d["host"] = hostName();
@@ -61,6 +62,10 @@ void handleState() {
   d["prov"] = provPending ? pendingAct.substring(5) : String((const char*)(app::frame["prov"] | "auto"));
   if (!provPending && !app::frame["pask"].isNull()) d["pask"] = app::frame["pask"];  // primeiro uso: destaque
   if (!app::frame["mcs"].isNull()) d["mcs"] = app::frame["mcs"];  // o Mac tem o Multica: a página mostra o ajuste
+  if (!app::frame["upd"].isNull()) d["upd"] = app::frame["upd"];  // versão nova no GitHub: a página oferece atualizar
+  // primeiro uso: a pergunta some da página assim que a resposta sai, sem esperar o próximo frame
+  if (!app::frame["mask"].isNull() && !pendingAct.startsWith("mc")) d["mask"] = 1;
+  if (!app::frame["lask"].isNull() && pendingAct != "lskip") d["lask"] = 1;
   JsonObject c = d["cfg"].to<JsonObject>();
   const auto& v = config::v;
   c["bright"] = v.bright, c["night"] = v.night, c["theme"] = v.theme, c["rotation"] = v.rotation;
@@ -81,6 +86,8 @@ void handleConfig() {
     if (m != "auto" && m != "claude" && m != "codex" && m != "both") return server.send(400, "text/plain", "Provedor inválido.");
     pendingAct = "prov " + m;
   }
+  if (server.hasArg("update")) pendingAct = "update";
+  if (server.hasArg("lskip")) pendingAct = "lskip";
   for (const char* k : {"mc", "mcws"})
     if (server.hasArg(k)) pendingAct = String(k) + " " + constrain(server.arg(k).toInt(), 0, 4);
   if (server.hasArg("host")) {
@@ -193,7 +200,7 @@ void handleFrame() {
 }  // namespace
 
 void begin() {
-  snprintf(ap, sizeof ap, "tokenpulse-%06x", ESP.getChipId());
+  snprintf(ap, sizeof ap, "tokenpulse-%s", app::CODE);
   WiFi.persistent(true);
   WiFi.hostname(hostName());
   WiFi.setAutoReconnect(true);
@@ -252,7 +259,7 @@ void begin() {
     server.send_P(200, "image/svg+xml", LOGO);
   });
   server.on("/style.css", HTTP_GET, [] {
-    server.sendHeader("Cache-Control", "max-age=3600");
+    server.sendHeader("Cache-Control", "no-cache");  // o CSS muda com o firmware: o navegador confere a cada visita
     server.send_P(200, "text/css", STYLE);
   });
   // a página guiada vem antes do updater: o ESP8266WebServer usa a primeira rota que bate, e o POST
@@ -265,11 +272,38 @@ void begin() {
   server.begin();
 }
 
+// Outro SmallTV já responde por tokenpulse-caixeta.local: este grava o nome com uma cor, fácil de digitar e
+// sempre a mesma para este chip (tokenpulse-caixeta-azul). Só na primeira vez, com o nome padrão.
+void pickHost() {
+  static const char* const COLORS[] = {"azul", "verde", "rosa", "roxo", "cinza", "ouro", "prata", "coral"};
+  char tmp[32], name[32];
+  snprintf(tmp, sizeof tmp, "tokenpulse-%06x", ESP.getChipId());
+  if (!MDNS.begin(tmp)) return;
+  const int n = MDNS.queryService("tokenpulse", "tcp");
+  auto used = [&](const char* h) {
+    for (int i = 0; i < n; i++)
+      if (MDNS.IP(i) != WiFi.localIP() && MDNS.hostname(i).startsWith(h) &&
+          (MDNS.hostname(i).length() == strlen(h) || MDNS.hostname(i)[strlen(h)] == '.'))
+        return true;
+    return false;
+  };
+  for (int k = 0; used(k ? name : ap) && k < 8; k++) {
+    snprintf(name, sizeof name, "%s-%s", ap, COLORS[(ESP.getChipId() + k) % 8]);
+    if (!used(name)) {
+      strlcpy(config::v.host, name, sizeof config::v.host);
+      config::save();
+      break;
+    }
+  }
+  MDNS.end();
+}
+
 void loop() {
   server.handleClient();
   if (online()) {
     if (!onlineSinceMs) onlineSinceMs = millis();
     if (mdns_on && mdnsHost != hostName()) MDNS.end(), mdns_on = false;  // renomeada na página
+    if (!mdns_on && !config::v.host[0]) pickHost();
     if (!mdns_on) {
       mdns_on = MDNS.begin(hostName());
       if (mdns_on) {

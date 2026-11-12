@@ -162,8 +162,8 @@ void setup() {
   if (board::PROFILE.calibrate && !settings::cal.ok) screens::calibrateTouch();
   webui::begin();
 #ifdef TOKENPULSE_BLE
-  // o nome que o Mac lista no Bluetooth: o produto, a placa e o mesmo final do WiFi dela (tokenpulse-XXXXXX)
-  static const String bleName = String("TokenPulse ") + board::BLE_LABEL + " " + (webui::apName() + 11);
+  // o nome que o Mac lista no Bluetooth: o produto, a placa e um final do chip, que separa duas placas iguais
+  static const String bleName = String("TokenPulse ") + board::BLE_LABEL + " " + String((uint32_t)(ESP.getEfuseMac() >> 24) & 0xFFFFFF, HEX);
   ble::begin(bleName.c_str());
 #endif
 }
@@ -177,8 +177,18 @@ void loop() {
   if (board::PROFILE.touch) checkTouch();
   hostlink::poll();
   webui::loop();
-  if (millis() - lastRenderMs >= 33) {  // ~30 fps; o envio do quadro anterior corre no outro núcleo
+  // na bateria: WiFi parado (só serve para a página; volta no USB ou ao abrir a Página web), 5 quadros/s quando
+  // ninguém toca há 3 s e uma pausa no loop
+  static int battery = -1;
+  const bool bat = power::onBattery();
+  if (bat != battery) {
+    battery = bat;
+    bat ? webui::pause() : webui::resume();
+  }
+  const uint32_t every = bat && millis() - power::lastActiveMs() > 3000 ? 200 : 33;
+  if (millis() - lastRenderMs >= every) {  // o envio do quadro anterior corre no outro núcleo
     lastRenderMs = millis();
     screens::render();
   }
+  if (bat) delay(5);  // a CPU dorme entre as voltas em vez de girar o loop vazio
 }

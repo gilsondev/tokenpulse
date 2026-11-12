@@ -355,8 +355,11 @@ bool powerState(PowerState& s) {
   static PowerState last;
   static uint32_t lastMs = 0;
   if (!pmuOk) return false;
-  if (!lastMs || millis() - lastMs > 2000) {
-    lastMs = millis();
+  // o cabo saiu ou entrou (a USB nativa sabe na hora): relê já, para o modo bateria não esperar os 2 s
+  static bool plugged = HWCDC::isPlugged();
+  const bool plugNow = HWCDC::isPlugged();
+  if (!lastMs || millis() - lastMs > 2000 || plugNow != plugged) {
+    lastMs = millis(), plugged = plugNow;
     last.battery = pmu.isBatteryConnect();
     last.usb = pmu.isVbusIn();
     last.charging = last.battery && pmu.isCharging();

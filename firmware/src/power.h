@@ -11,5 +11,7 @@ bool idle();     // ninguém mexe há idleMs, sem alerta nem aprovação pendent
 void wake();     // toque ou botão: brilho cheio e o relógio de inatividade recomeça
 void rest();     // entra no descanso agora, como se ninguém mexesse há idleMs
 uint32_t lastActiveMs();  // último toque ou botão
+bool onBattery();
+int batteryLeftMin();       // previsão de quanto a bateria ainda dura, em minutos; -1 enquanto mede          // na bateria, sem USB: a placa economiza (menos quadros, CPU mais lenta, WiFi parado)
 
 }  // namespace power

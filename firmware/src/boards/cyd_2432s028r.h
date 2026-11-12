@@ -14,10 +14,12 @@
 namespace board {
 
 constexpr const char* NAME = "cyd-2432s028r";
+constexpr const char* NICK = "Ipê";  // o codinome: uma árvore que lembra a placa
+constexpr const char* CODE = "ipe";  // o codinome no endereço: tokenpulse-ipe.local
 constexpr uint8_t DEFAULT_ROTATION = 0;  // retrato
 constexpr uint8_t ROTATIONS = 4;  // o cabo USB pode sair por qualquer lado: em pé e deitada, nos dois sentidos
 constexpr uint8_t ROT_FOR[4] = {0, 0, 0, 0};
-constexpr Profile PROFILE{.touch = true, .calibrate = true, .imu = false, .led = true, .button = true};
+constexpr Profile PROFILE{.touch = true, .calibrate = true, .imu = false, .led = true, .button = true, .pxPerMm = 5.6f};
 constexpr uint8_t GRID_ROWS[2] = {3, 2};  // 6 cartões em pé e 4 deitada, no layout compacto
 constexpr uint32_t SERIAL_BAUD = 460800;  // o CH340 desta placa perde bytes acima disso
 

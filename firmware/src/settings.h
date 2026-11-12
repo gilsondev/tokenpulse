@@ -21,7 +21,7 @@ struct Web {
   uint8_t pages = 7;     // telas na volta automática: 1 sessões, 2 modelos, 4 histórico (a principal sempre)
   uint8_t alerts = 3;    // sessão nova pedindo aprovação: 1 abre as sessões e pulsa o brilho, 2 toca um som
   uint8_t wifi = 0;      // 1: a pessoa configurou o WiFi pela placa; ela entra na rede ao ligar
-  char host[32] = "";    // nome na rede (<host>.local); vazio: tokenpulse-<id do chip>
+  char host[32] = "";    // nome na rede (<host>.local); vazio: tokenpulse-<codinome>
   uint8_t sound = 6;     // som da sessão esperando você, tocado 2 vezes (sound.h; o Vidro)
   uint8_t volume = 2;    // 1 baixo, 2 médio, 3 alto
   uint8_t restSecs = 1;  // relógio do descanso (OLED): 0 HH:MM, 1 HH:MM:SS
@@ -32,6 +32,8 @@ struct Web {
   uint8_t soundBat = 7;   // bateria abaixo de 15% fora do USB (o Gongo)
   uint8_t soundMac = 3;   // 1 min sem dados do Mac (a Pergunta 4)
   uint8_t soundBle = 5;   // Bluetooth conectou (uma vez) ou caiu (duas) (a Confirmação 2)
+  uint8_t paired = 0;     // 1: um daemon já falou com a placa. Sem isso, a primeira tela é o QR da instalação
+  uint8_t batBright = 2;  // brilho na bateria: 25/50/70/100% (só placa com bateria; o bright vale no USB)
   // campo novo entra sempre no fim: o gravado por um firmware antigo é menor e o resto fica no padrão
 };
 extern Web web;
@@ -51,7 +53,8 @@ void saveCal();
 void begin();  // lê da NVS
 void save();   // grava na NVS
 
-uint8_t brightness();       // 0-255 a partir do ajuste
+uint8_t brightness();       // 0-255 a partir do ajuste (no USB)
+uint8_t batteryBrightness(); // 0-255 na bateria: 25/50/70/100%
 uint32_t idleMs();          // 0: nunca escurece
 uint8_t volumePct();        // volume do alto-falante, 0-100
 

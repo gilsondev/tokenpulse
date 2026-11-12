@@ -7,7 +7,7 @@
 
 namespace ble {
 
-void begin(const char* name);   // anuncia com este nome (o mesmo do WiFi da placa: tokenpulse-XXXXXX)
+void begin(const char* name);   // anuncia com este nome (TokenPulse <placa> <final do chip>)
 bool poll(String& line);        // próxima linha completa que chegou pelo BLE
 void send(const char* line);    // manda uma linha (com '\n') ao Mac, se houver alguém conectado
 bool connected();

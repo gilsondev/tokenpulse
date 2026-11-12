@@ -109,15 +109,15 @@ void drawInstall() {
     const int side = h - s(16), cx = (side + s(8) + w) / 2;
     fb().qrcode(app::START_URL, s(8), s(8), side);
     label("Falta o tokenpulse", cx, h / 2 - s(30), TEXT, middle_center);
-    label("no Mac. Escaneie, ou", cx, h / 2 - s(12), MUTED, middle_center);
-    label("abra no Mac:", cx, h / 2 + s(4), MUTED, middle_center);
+    label("no computador.", cx, h / 2 - s(12), MUTED, middle_center);
+    label("Escaneie ou abra:", cx, h / 2 + s(4), MUTED, middle_center);
     label(app::START_SHORT, cx, h / 2 + s(24), ACCENT, middle_center);
     return;
   }
   const int side = w - s(16);
-  label("Falta o tokenpulse no Mac", w / 2, s(14), TEXT, middle_center);
+  label("Falta o tokenpulse", w / 2, s(14), TEXT, middle_center);
   fb().qrcode(app::START_URL, s(8), s(30), side);
-  label("Escaneie, ou abra no Mac:", w / 2, s(30) + side + s(16), MUTED, middle_center);
+  label("Escaneie ou abra no computador:", w / 2, s(30) + side + s(16), MUTED, middle_center);
   label(app::START_SHORT, w / 2, s(30) + side + s(34), ACCENT, middle_center);
 }
 
@@ -142,8 +142,8 @@ void drawAsk() {
   const int cx = gfx::width() / 2, cy = gfx::height() / 2;
   const bool both = !strcmp(app::frame["pask"] | "", "both");
   fb().fillScreen(BG);
-  label(both ? "Este Mac usa o" : "Este Mac usa", cx, cy - s(52), TEXT, middle_center);
-  label(both ? "Claude e o Codex" : "o Codex", cx, cy - s(38), TEXT, middle_center);
+  label(both ? "Este computador usa" : "Este computador usa", cx, cy - s(52), TEXT, middle_center);
+  label(both ? "o Claude e o Codex" : "o Codex", cx, cy - s(38), TEXT, middle_center);
   label("Escolha o que mostrar", cx, cy - s(12), MUTED, middle_center);
   label(webui::online() ? "na página da placa:" : "em outra placa", cx, cy + s(2), MUTED, middle_center);
   if (webui::online()) label((String(webui::host()) + ".local").c_str(), cx, cy + s(16), ACCENT, middle_center);
@@ -157,7 +157,7 @@ void drawWaiting() {
   fb().fillScreen(BG);
   fb().fillArc(cx, cy - s(20), s(12), s(16), 0, 360, TRACK);
   fb().fillArc(cx, cy - s(20), s(12), s(16), start, start + 90, ACCENT);
-  label("Aguardando o Mac…", cx, cy + s(14), MUTED, middle_center);
+  label("Aguardando o computador", cx, cy + s(14), MUTED, middle_center);
   label("O daemon tokend.py abre a porta USB", cx, cy + s(30), DIM, middle_center);
 }
 
@@ -203,7 +203,9 @@ void drawMain(bool live) {
   if (anim::p5 >= 0.5f) fb().fillArc(L.ringX, L.ringY, L.ringR - s(9), L.ringR, 270, 270 + 3.6f * min(anim::p5, 100.f), ringColor);
   snprintf(buf, sizeof buf, p5 < 0 ? "--" : "%d%%", (int)lroundf(anim::p5));
   big(buf, L.ringX, L.ringY, stale ? DIM : p5 < 0 ? TEXT : levelColor(p5), middle_center);
-  label("Sessão 5h", L.ringX, L.ringLabelY, MUTED, middle_center);
+  const char* s5 = f["s5"] | "";
+  const char* warn = stale || p5 < 80 ? nullptr : p5 >= 100 ? "Esgotado" : p5 >= 90 ? "No limite" : "Perto do limite";
+  label(warn ? warn : *s5 ? s5 : "Sessão 5h", L.ringX, L.ringLabelY, warn ? levelColor(p5) : *s5 ? ACCENT : MUTED, middle_center);
   if (stale) {
     snprintf(buf, sizeof buf, "Atualizado há %d min", app::dataAge() / 60);
     label(buf, L.ringX, L.resetY, AMBER, middle_center);
@@ -220,7 +222,7 @@ void drawMain(bool live) {
   float glow = anim::since(anim::tokensMs, 900);
   label("Tokens hoje", L.tokX, L.tokY, MUTED);
   big(f["tot"] | "0", L.tokX, L.tokY + s(16), blend(ACCENT, TEXT, glow));
-  label("Ritmo/min", L.rateX, L.tokY, MUTED);
+  label("Por minuto", L.rateX, L.tokY, MUTED);
   big(f["rate"] | "0", L.rateX, L.tokY + s(16));
   label(f["sub"] | "", L.tokX, L.subY, DIM);
 
@@ -232,7 +234,7 @@ void drawMain(bool live) {
   for (int i = 1; i < n; i++) fb().drawLine(L.spX + (i - 1) * L.spW / (n - 1), yAt(i - 1), L.spX + i * L.spW / (n - 1), yAt(i), ACCENT);
   if (glow < 1 && n) fb().fillCircle(L.spX + L.spW, yAt(n - 1), s(2) + (1 - glow) * s(3), ACCENT);
   fb().drawFastHLine(L.spX, L.spY + 1, L.spW, TRACK);
-  label("-60 min", L.spX, L.spY + s(4), DIM);
+  label("Última hora", L.spX, L.spY + s(4), DIM);
   label("Agora", L.spX + L.spW, L.spY + s(4), DIM, top_right);
 
 }
@@ -514,6 +516,24 @@ bool mcAlertOpen() {
   return mcaOpen;
 }
 
+// Perguntas do primeiro uso depois dos provedores: o Multica (só com ele no Mac) e o login do Claude (só sem
+// ele). Respondida aqui, some na hora; o daemon para de mandar quando a resposta chega.
+bool mcAskDone = false, loginDone = false;
+bool mcAskOpen() { return !app::frame["mask"].isNull() && !mcAskDone; }
+bool loginOpen() { return !app::frame["lask"].isNull() && !loginDone; }
+
+// Versão nova: a placa pergunta uma vez por versão; "Depois" esconde até a próxima.
+bool onboarding() { return askOpen() || mcAskOpen() || loginOpen(); }
+bool updShown();
+// "Depois" pergunta de novo em 24 h.
+String updSeen;
+uint32_t updLaterMs = 0;
+bool updOpen() {
+  const char* v = app::frame["upd"] | "";
+  return *v && (updSeen != v || millis() - updLaterMs > 24UL * 3600 * 1000);
+}
+bool updShown() { return updOpen() && !onboarding(); }
+
 void checkAttention() {
   static uint32_t seenFrame = 0;
   static String waiting;  // "id,id," de quem já esperava no frame anterior
@@ -644,8 +664,13 @@ void render() {
   }
   if (const int r = attentionRow(); r >= 0 && gfx::full() && !settingsOpen && app::hasData())
     return gfx::frame([r] { tall::drawAttention(r, millis() - attnMs); });
+  if (gfx::full() && !app::frame["fwup"].isNull()) return gfx::frame(tall::drawFwUp);
   if (mcAlertOpen() && !settingsOpen) return gfx::frame([] { tall::drawMcAlert(millis() - mcaMs); });
   if (askOpen() && !settingsOpen && app::hasData()) return gfx::frame([] { gfx::full() ? tall::drawProvAsk() : drawAsk(); });
+  if (gfx::full() && mcAskOpen() && !settingsOpen && app::hasData()) return gfx::frame(tall::drawMcAsk);
+  if (gfx::full() && loginOpen() && !settingsOpen && app::hasData()) return gfx::frame(tall::drawLoginAsk);
+  // a versão nova só depois das perguntas do primeiro uso: atualizar no meio delas não faz sentido
+  if (gfx::full() && updShown() && !settingsOpen && app::hasData()) return gfx::frame(tall::drawUpdate);
   if (board::PROFILE.oled && power::idle()) return gfx::frame(tall::drawSaver);
   const bool dark = settings::v.theme == 0 ? (bool)(app::frame["dark"] | true) : settings::v.theme == 2;
   if (dark != color::dark) color::apply(dark);
@@ -729,6 +754,22 @@ void tap(int x, int y) {
     if (tall::attentionCenter(x, y)) tall::focusRow(r);
     return dismissAttention();
   }
+  if (gfx::full() && !app::frame["fwup"].isNull()) return void(hostlink::action("ACTION fwlater"));
+  if (gfx::full() && updShown() && app::hasData()) {
+    const int b = tall::updateTap(x, y);
+    if (b == 1) hostlink::action("ACTION update");
+    if (b) updSeen = app::frame["upd"] | "", updLaterMs = millis();
+    return;
+  }
+  if (gfx::full() && !askOpen() && mcAskOpen() && app::hasData()) {
+    const int b = tall::mcAskTap(x, y);
+    if (b) hostlink::action(b == 1 ? "ACTION mc 1" : "ACTION mc 0"), mcAskDone = true, gfx::slide(-1), anim::reset();
+    return;
+  }
+  if (gfx::full() && !askOpen() && !mcAskOpen() && loginOpen() && app::hasData()) {
+    if (tall::loginSkipAt(x, y)) hostlink::action("ACTION lskip"), loginDone = true, gfx::slide(-1), anim::reset();
+    return;
+  }
   if (mcaOpen) {  // aviso do Multica: o botão abre a issue no navegador do Mac, o resto fecha
     if (tall::attentionCenter(x, y)) {
       char cmd[40];
@@ -763,11 +804,17 @@ void tap(int x, int y) {
       }
       return;
     }
-    if (about == 4) return void(about = 1);  // a página web volta para o Sobre
+    if (about == 4) {  // a página web: o título volta para o Sobre; sem rede, o resto pede o WiFi ao computador de novo
+      if (webui::online() || tall::backAt(x, y)) return void(about = 1);
+      return hostlink::action("ACTION wifi");
+    }
     if (about) {
       const int b = tall::aboutButtonAt(x, y);
       if (b == 3) {  // página web: sem rede, abre o WiFi da placa para configurá-la
-        if (!webui::online()) webui::openAp();
+        if (!webui::online()) {
+          webui::openAp();
+          hostlink::action("ACTION wifi");  // o daemon pede a senha do WiFi do computador e manda pelo cabo
+        }
         return void(about = 4);
       }
       if (b == 0) return void(about = 0);
@@ -815,7 +862,7 @@ void tap(int x, int y) {
     }
     if (mcView == 2) return open(0, 1);  // o detalhe de um cartão: o toque volta
     const int t = tall::multiTap(x, y);
-    if (t == -1) return next();
+    if (t == -1) return;  // toque fora de um alvo não troca de página: isso é do arrasto
     if (t <= -10) {  // um número: filtra os cartões na mesma tela
       mcFilter = -10 - t;
       tall::multiFilter();
@@ -844,7 +891,11 @@ void tap(int x, int y) {
   if (page == 3) {
     const int d = tall::historyBarAt(x, y);
     if (d >= 0) return void(histSel = d);
+    // fora das barras, a metade esquerda volta um dia e a direita avança: a barra tem 2 a 4 mm de largura
+    const int n = app::frame["hist"].size();
+    if (n) histSel = constrain((histSel < 0 ? n - 1 : histSel) + (x < gfx::width() / 2 ? -1 : 1), 0, n - 1);
   }
+  if (page == 1 || page == 3) return;  // telas com alvos: o toque que erra não troca de página
 
   next();
 }

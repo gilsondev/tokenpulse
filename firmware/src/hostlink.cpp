@@ -86,11 +86,12 @@ const char* resetReason() {
 void handle(const String& line) {
   if (line == "id") {
     idMs = millis();
+    if (!settings::web.paired) settings::web.paired = 1, settings::saveWeb();
 #ifdef TOKENPULSE_BLE  // o nome no BLE: com a placa na USB, o daemon não a usa também sem fio
-    Serial.printf("hello {\"board\":\"%s\",\"fw\":\"%s\",\"ble\":\"%s\",\"reset\":\"%s\"}\n", board::NAME, firmware(),
+    Serial.printf("hello {\"board\":\"%s\",\"fw\":\"%s\",\"ble\":\"%s\",\"reset\":\"%s\",\"caps\":[\"wifi\"]}\n", board::NAME, firmware(),
                   ble::name(), resetReason());
 #else
-    Serial.printf("hello {\"board\":\"%s\",\"fw\":\"%s\",\"reset\":\"%s\"}\n", board::NAME, firmware(), resetReason());
+    Serial.printf("hello {\"board\":\"%s\",\"fw\":\"%s\",\"reset\":\"%s\",\"caps\":[\"wifi\"]}\n", board::NAME, firmware(), resetReason());
 #endif
   } else if (line == "imu") {
     int16_t x, y;
@@ -118,6 +119,9 @@ void handle(const String& line) {
     uint32_t t;
     if (!board::rtcRead(t)) return (void)Serial.println("rtc: sem hora");
     Serial.printf("rtc: %02lu:%02lu:%02lu\n", t / 3600 % 24, t / 60 % 60, t % 60);
+  } else if (line == "unpair") {  // volta ao primeiro uso (o QR da instalação no boot), para testar a jornada
+    settings::web.paired = 0;
+    settings::saveWeb();
   } else if (line == "rest") {  // descanso na hora, para testar e capturar
     power::rest();
   } else if (line.startsWith("play ")) {  // prévia de um som do alerta (sound.h)
@@ -143,6 +147,11 @@ void handle(const String& line) {
     screens::next();
   } else if (line == "swipe R") {
     screens::prev();
+  } else if (line.startsWith("{\"wifi\"")) {  // o WiFi do computador; "caps" no hello diz ao daemon que a placa entende
+    JsonDocument cmd;
+    if (deserializeJson(cmd, line) || !(cmd["wifi"]["ssid"] | "")[0]) return (void)Serial.println("wifi: pedido inválido");
+    webui::join(cmd["wifi"]["ssid"], cmd["wifi"]["pass"] | "");
+    Serial.printf("wifi: conectando em %s\n", (const char*)cmd["wifi"]["ssid"]);
   } else if (line.startsWith("{\"ota\"")) {
     JsonDocument cmd;
     if (!deserializeJson(cmd, line)) runOta(cmd["ota"], cmd["md5"]);
@@ -188,7 +197,9 @@ void action(const char* line) {
 }
 
 uint32_t lastIdMs() { return idMs; }
-bool needsInstall() { return usbPlugged() && !idMs && !app::hasData() && millis() > 20000; }
+// placa que nunca viu um daemon mostra o QR da instalação já no boot; as outras esperam 20 s, porque o daemon
+// costuma se apresentar logo depois de a placa ligar
+bool needsInstall() { return usbPlugged() && !idMs && !app::hasData() && (!settings::web.paired || millis() > 20000); }
 
 #if ARDUINO_USB_CDC_ON_BOOT
 bool usbPlugged() { return HWCDC::isPlugged(); }

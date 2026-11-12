@@ -44,6 +44,9 @@ def log(msg):
     print(f"{datetime.now():%d/%m %H:%M:%S} {msg}", file=sys.stderr, flush=True)
 
 HOME = os.path.expanduser("~")
+MAC = sys.platform == "darwin"  # no Linux: xdg-open, gsettings, avahi e o token num arquivo, sem trazer app à frente
+OPEN = "open" if MAC else "xdg-open"
+LOG_DIR = os.path.join(HOME, "Library/Logs" if MAC else ".local/state/tokenpulse")
 PROJECTS = os.path.join(HOME, ".claude/projects/**/*.jsonl")  # ** inclui <sessão>/subagents/
 STATUS = os.path.join(HOME, ".claude/esp-tokens-status.json")
 ACCOUNT = os.path.join(HOME, ".claude.json")
@@ -901,10 +904,10 @@ def focus_session(sid8):
         return
     if target["pane"]:
         subprocess.run([HERDR, "agent", "focus", target["pane"]], capture_output=True, timeout=5)
-        app = terminal_app()
+        app = MAC and terminal_app()
         if app:
             subprocess.run(["open", "-a", app], capture_output=True, timeout=5)
-    elif target["desk"]:
+    elif target["desk"] and MAC:
         subprocess.run(["open", "-a", "Claude"], capture_output=True, timeout=5)
 
 
@@ -921,7 +924,18 @@ def run_action(cmd):
         log(f"provedores: {parts[1]}")
         return _wake.set()
     if len(parts) == 2 and parts[0] == "mcopen" and re.fullmatch(r"[A-Z]+\d*-\d+", parts[1]) and _mc["url"]:
-        return subprocess.Popen(["open", multica_link(_mc["url"] + parts[1])])
+        return subprocess.Popen([OPEN, multica_link(_mc["url"] + parts[1])])
+    if parts == ["lskip"]:  # a pessoa pulou o login do Claude: só tokens, sem %; não pergunta mais
+        with open(ONBOARD, "w") as f:
+            json.dump({"login": True}, f)
+        return _wake.set()
+    if parts == ["update"]:
+        return run_update()
+    if parts == ["fwlater"]:  # a pessoa adiou a gravação na placa: uma hora sem perguntar
+        for state in _fw.values():
+            state.update(later=time.time() + 3600)
+            state.pop("start", None)
+        return
     if len(parts) == 2 and parts[0] == "mcproj" and parts[1].isdigit():
         _mc["open"] = (int(parts[1]), time.time())
         return _wake.set()
@@ -973,10 +987,21 @@ _theme = {"at": 0.0, "dark": True}
 
 
 def dark_mode():
-    """Modo escuro do macOS, relido a cada 10 s (a chave não existe no modo claro)."""
+    """Modo escuro do sistema, relido a cada 10 s. No macOS a chave não existe no modo claro; no Linux vale o
+    color-scheme do GNOME, e sem gsettings fica o último valor (escuro de início)."""
     if time.time() - _theme["at"] > 10:
-        r = subprocess.run(["defaults", "read", "-g", "AppleInterfaceStyle"], capture_output=True, text=True)
-        _theme.update(at=time.time(), dark=r.stdout.strip() == "Dark")
+        _theme["at"] = time.time()
+        try:
+            if MAC:
+                r = subprocess.run(["defaults", "read", "-g", "AppleInterfaceStyle"], capture_output=True, text=True)
+                _theme["dark"] = r.stdout.strip() == "Dark"
+            else:
+                r = subprocess.run(["gsettings", "get", "org.gnome.desktop.interface", "color-scheme"],
+                                   capture_output=True, text=True, timeout=2)
+                if r.returncode == 0:
+                    _theme["dark"] = "dark" in r.stdout
+        except (OSError, subprocess.TimeoutExpired):
+            pass
     return _theme["dark"]
 
 
@@ -1004,7 +1029,8 @@ def org():
     return _org["name"]
 
 
-# % de 5h e da semana direto da Anthropic, com o token OAuth que o Claude Code guarda no Keychain.
+# % de 5h e da semana direto da Anthropic, com o token OAuth que o Claude Code guarda no Keychain (no Linux, no
+# ~/.claude/.credentials.json).
 # É o mesmo endpoint que o Claude Code usa. Não é documentado: se falhar, vale a statusline.
 USAGE_URL = "https://api.anthropic.com/api/oauth/usage"
 _api = {"five": None, "week": None, "at": 0.0, "err": "", "org": ""}
@@ -1013,8 +1039,11 @@ _per_org = {}  # org -> último % visto quando ela estava logada: {"p5", "pw", "
 
 def fetch_usage():
     # o token é relido a cada busca e nunca renovado aqui: renovar invalidaria o do Claude Code
-    raw = subprocess.run(["security", "find-generic-password", "-s", "Claude Code-credentials", "-w"],
-                         capture_output=True, text=True, timeout=30, check=True).stdout
+    if MAC:
+        raw = subprocess.run(["security", "find-generic-password", "-s", "Claude Code-credentials", "-w"],
+                             capture_output=True, text=True, timeout=30, check=True).stdout
+    else:
+        raw = open(os.path.join(os.environ.get("CLAUDE_CONFIG_DIR", os.path.join(HOME, ".claude")), ".credentials.json")).read()
     token = json.loads(raw)["claudeAiOauth"]["accessToken"]
     req = urllib.request.Request(USAGE_URL, headers={
         "Authorization": f"Bearer {token}", "anthropic-beta": "oauth-2025-04-20", "User-Agent": "esp-ia-tokens/1.0"})
@@ -1386,6 +1415,8 @@ def multica_frame():
     if not _mc["mcs"]:
         return {}
     f = {"mcs": _mc["mcs"]}
+    if not os.path.exists(MULTICA_CFG):  # primeiro uso com o Multica no Mac: a placa pergunta se mostra
+        f["mask"] = 1
     if _mc["mc"]:
         f["mc"] = _mc["mc"]
         k, at = _mc["open"]  # o projeto aberto na placa nos últimos 10 min: as issues dele vão junto
@@ -1462,9 +1493,11 @@ class Board:
         self.buf = b""  # linha da placa ainda sem o \n
         self.busy = False  # OTA ou screenshot rodando numa thread: o laço principal não mexe na porta
         self.gone = False  # a thread acabou com a porta (OTA reiniciou a placa, ou deu erro): reconectar
+        self.caps = []  # o que o firmware entende além dos frames ("wifi"), vindo do hello
+        self.out = None  # linha para mandar antes do próximo frame (o WiFi do computador): nunca vai para o log
 
     def log(self, msg):
-        log(f"[{self.name}] {msg}")
+        log(f"[{NICKS.get(self.name, self.name)}] {msg}")
 
 
 BAUD = 460800  # placas com ponte USB-serial (CH340, CP210x) usam esta; a USB nativa do ESP ignora
@@ -1519,7 +1552,7 @@ async def ble_main():
         if not dev:
             await asyncio.sleep(10)
             continue
-        name, buf = found.get("name", dev.name), b""
+        name, buf, client_mtu = found.get("name", dev.name), b"", [0]
 
         def on_tx(_, data):
             nonlocal buf
@@ -1528,6 +1561,9 @@ async def ble_main():
                 line = raw.decode(errors="replace").strip()
                 if line.startswith("ACTION "):
                     print(f"action {line[7:].strip()}", flush=True)
+                    print(f"log [{name}] {line}", flush=True)
+            if buf:
+                print(f"log [{name}] bluetooth: pedaço sem fim de linha ({len(buf)} B, mtu {client_mtu[0]})", flush=True)
         try:
             async with BleakClient(dev) as client:
                 print(f"log [{name}] conectada por bluetooth", flush=True)
@@ -1536,11 +1572,12 @@ async def ble_main():
                 await client.write_gatt_char(BLE_RX, b"\n", response=True)
                 await client.start_notify(BLE_TX, on_tx)
                 chunk = max(20, client.mtu_size - 3)
+                client_mtu[0] = client.mtu_size
                 while client.is_connected and name not in usb:
                     line = _ble_frame["line"]
                     for i in range(0, len(line), chunk):
                         await client.write_gatt_char(BLE_RX, line[i:i + chunk], response=False)
-                    await asyncio.sleep(1)
+                    await asyncio.sleep(3)  # pelo ar a cada 3 s: a placa no Bluetooth quase sempre está na bateria
                     usb = set() if os.environ.get("TOKENPULSE_BLE_TEST") else _usb_ble
                 print(f"log [{name}] " + ("voltou para a USB" if name in usb else "bluetooth desconectado"), flush=True)
         except Exception as e:
@@ -1602,6 +1639,15 @@ def ble_loop():
     log("bluetooth: indisponível neste Mac (sem permissão ou sem o bleak); só USB e WiFi")
 
 
+def serial_group(path):
+    """O grupo dono da porta serial no Linux: dialout no Debian/Ubuntu/Fedora, uucp no Arch."""
+    import grp
+    try:
+        return grp.getgrgid(os.stat(path).st_gid).gr_name
+    except (OSError, KeyError):
+        return "dialout"
+
+
 def connect(path, vid):
     """Abre a porta e pergunta quem é. Devolve None se nada responder como placa do monitor."""
     ser = serial.Serial()
@@ -1626,6 +1672,7 @@ def connect(path, vid):
                     hello = json.loads(line[6:])
                     board = Board(path, ser, hello["board"], hello.get("fw", ""), hello.get("ble", ""),
                                   hello.get("reset", ""))
+                    board.caps = hello.get("caps", [])
                     if board.ble:
                         remember_ble(board.ble)
                     return board
@@ -1662,6 +1709,105 @@ def settle(port):
             log(f"placa: {line.strip()}")
 
 
+def wifi_networks():
+    """O WiFi do computador e as redes de 2,4 GHz que ele enxerga: (atual, banda da atual, {redes 2,4 GHz}).
+    No macOS 15.6+ os nomes podem vir ocultos sem permissão de localização: aí volta (None, None, set())."""
+    try:
+        if MAC:
+            out = subprocess.run(["system_profiler", "SPAirPortDataType"], capture_output=True, text=True, timeout=30).stdout
+            # nome da rede numa linha "Nome:", o canal algumas linhas abaixo: "Channel: 44 (5GHz, 80MHz)"
+            cur, band, low, section, name = None, None, set(), "", None
+            for ln in out.splitlines():
+                t = ln.strip()
+                if t in ("Current Network Information:", "Other Local Wi-Fi Networks:"):
+                    section, name = t, None
+                elif section and t.endswith(":") and not t.startswith(("PHY", "Channel", "Network", "Security", "Signal")):
+                    name = t[:-1]
+                elif section and name and t.startswith("Channel:"):
+                    g = "2" if "(2GHz" in t else "5"
+                    if section.startswith("Current"):
+                        cur, band = name, g
+                    elif g == "2":
+                        low.add(name)
+                    name = None
+                elif section and t and not ln.startswith(" " * 10):
+                    section = ""  # saiu da lista de redes (outra interface ou outra seção)
+            if cur and "redacted" in cur.lower():
+                cur = None
+            return cur, band, low
+        out = subprocess.run(["nmcli", "-t", "-f", "active,ssid,chan", "dev", "wifi", "list"], capture_output=True, text=True, timeout=15).stdout
+        cur, band, low = None, None, set()
+        for ln in out.splitlines():
+            parts = re.split(r"(?<!\\):", ln)
+            if len(parts) < 3 or not parts[2].isdigit():
+                continue
+            name, g = parts[1].replace("\\:", ":"), "2" if int(parts[2]) <= 14 else "5"
+            if g == "2":
+                low.add(name)
+            if parts[0] == "yes":
+                cur, band = name, g
+        return cur, band, low
+    except (OSError, subprocess.TimeoutExpired):
+        return None, None, set()
+
+
+def wifi_for_board():
+    """O nome de rede que a placa (só 2,4 GHz) consegue usar, a partir do WiFi do computador. Devolve (nome, certeza):
+    com certeza False, o nome é um palpite para a pessoa confirmar na janela."""
+    cur, band, low = wifi_networks()
+    if cur and (band == "2" or cur in low):  # já em 2,4 GHz, ou o roteador usa o mesmo nome nas duas bandas
+        return cur, True
+    base = re.sub(r"[\s_-]*5\s*g(hz)?$", "", cur or "", flags=re.I)
+    if base and base in low:  # o roteador separa: "Casa_5G" no computador, "Casa" em 2,4 GHz
+        return base, True
+    return base or None, False
+
+
+def ask(prompt, hidden=False, default=""):
+    """Pergunta numa janela do computador. None se a pessoa cancelar ou se não houver como perguntar (sem GUI)."""
+    try:
+        if MAC:
+            q = lambda t: '"' + t.replace("\\", "\\\\").replace('"', '\\"') + '"'  # string do AppleScript: sem \\uXXXX
+            dialog = f'display dialog {q(prompt)} default answer {q(default)} with title "tokenpulse"'
+            cmd = ["osascript", "-e", f"text returned of ({dialog}{' with hidden answer' if hidden else ''})"]
+        elif shutil.which("zenity"):
+            cmd = ["zenity", "--entry", "--title=tokenpulse", f"--text={prompt}"] + (["--hide-text"] if hidden else [f"--entry-text={default}"])
+        elif shutil.which("kdialog"):
+            cmd = ["kdialog", "--title", "tokenpulse"] + (["--password", prompt] if hidden else ["--inputbox", prompt, default])
+        else:
+            return None
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+        if r.returncode and "-128" not in r.stderr:  # -128: a pessoa cancelou; o resto é erro de verdade
+            log(f"janela: {cmd[0]} falhou: {r.stderr.strip()[:200]}")
+        return r.stdout.rstrip("\n") if r.returncode == 0 else None
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+
+
+_wifi_lock = threading.Lock()
+
+
+def wifi_setup(board):
+    """O WiFi deste computador para uma placa USB que pediu: o nome vem do sistema, a senha a pessoa digita numa janela
+    (não lemos o Keychain nem o NetworkManager). A senha vai só pelo cabo, na próxima linha para a placa."""
+    if not _wifi_lock.acquire(blocking=False):
+        return  # uma janela por vez: dois toques não abrem duas
+    try:
+        nick = NICKS.get(board.name, board.name)
+        ssid, sure = wifi_for_board()
+        if not sure:  # a placa só enxerga 2,4 GHz: sem achar essa rede, a pessoa confirma ou digita o nome
+            ssid = ask(f"Nome do WiFi de 2,4 GHz para a placa {nick} (ela não enxerga redes de 5 GHz):", default=ssid or "")
+        if not ssid:
+            return board.log("wifi: sem nome de rede (não detectado ou cancelado)")
+        pw = ask(f"Senha do WiFi \u201c{ssid}\u201d para a placa {nick}.\nDeixe vazio se a rede não tem senha.", hidden=True)
+        if pw is None:
+            return board.log("wifi: cancelado")
+        board.out = json.dumps({"wifi": {"ssid": ssid, "pass": pw}}, ensure_ascii=False)
+        board.log(f"wifi: mandando {ssid}")  # a senha fica fora do log
+    finally:
+        _wifi_lock.release()
+
+
 def board_action(line):
     """Ação pedida pela placa. Na demonstração nada troca a sua conta; o ajuste Provedores pode, para as capturas."""
     parts = line.split()
@@ -1686,6 +1832,136 @@ def ota(port, path):
         if err := wait_for(port, "OK", 10):  # apagar um setor da flash às vezes passa de 5 s
             return f"{err} no byte {i}"
     return wait_for(port, "DONE", 15)
+
+
+# Versões: o daemon instalado pelo install.sh procura release novo no GitHub e, quando a placa roda um
+# firmware mais velho que o dele, grava o firmware do mesmo release sozinho (5 s de aviso na tela; o toque adia).
+# Rodando do clone (versão "v0.20.3-1-g…-dirty") nada disso acontece: firmware de desenvolvimento fica como está.
+RELEASE_RE = re.compile(r"^v(\d+)\.(\d+)\.(\d+)$")
+REPO = "gilsondev/tokenpulse"
+FW_CACHE = os.path.join(HOME, ".cache/tokenpulse")
+RELEASE_EVERY = 6 * 3600
+FW_WARN = 5  # s de aviso antes de gravar
+_rel = {"latest": ""}
+_fw = {}  # placa -> {"start": quando grava, "later": adiado até}
+
+
+def vtuple(v):
+    m = RELEASE_RE.match(v or "")
+    return tuple(int(x) for x in m.groups()) if m else None
+
+
+def installed():
+    """Instalado pelo install.sh: há um VERSION ao lado do código (o clone de desenvolvimento não tem)."""
+    return os.path.exists(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "VERSION"))
+
+
+def release_loop():
+    """De 6 em 6 h, o último release do GitHub (o redirect de /releases/latest diz a tag, sem API)."""
+    while True:
+        try:
+            req = urllib.request.Request(f"https://github.com/{REPO}/releases/latest", method="HEAD")
+            with urllib.request.urlopen(req, timeout=20) as r:
+                tag = r.geturl().rstrip("/").rsplit("/", 1)[-1]
+            if vtuple(tag):
+                _rel["latest"] = tag
+        except Exception as e:  # sem rede: tenta na próxima volta
+            log(f"release: {type(e).__name__}")
+        time.sleep(RELEASE_EVERY)
+
+
+ONBOARD = os.path.join(HOME, ".claude/esp-tokens-onboard.json")  # perguntas do primeiro uso que a pessoa pulou
+_login = {"ok": True}
+
+
+def login_loop():
+    """De 5 em 5 min: o Claude Code está logado? Sem login, a placa não tem o % de uso e pede o login."""
+    while True:
+        if os.path.exists(CLAUDE):
+            try:
+                _login["ok"] = subprocess.run([CLAUDE, "auth", "status"], capture_output=True, timeout=30).returncode == 0
+            except (OSError, subprocess.TimeoutExpired):
+                pass
+        time.sleep(300)
+
+
+def login_frame():
+    try:
+        skipped = json.load(open(ONBOARD)).get("login")
+    except (OSError, ValueError):
+        skipped = False
+    return {} if _login["ok"] or skipped else {"lask": 1}
+
+
+def update_frame():
+    """"upd": a versão nova, quando o release do GitHub passa a deste daemon. A placa pergunta se atualiza."""
+    latest = os.environ.get("TOKENPULSE_LATEST") or _rel["latest"]
+    mine = vtuple(RELEASE)
+    return {"upd": latest} if mine and vtuple(latest) and vtuple(latest) > mine else {}
+
+
+def run_update():
+    """Atualiza o daemon e, com ele, o firmware das placas: o mesmo install.sh do primeiro uso. Roda numa sessão
+    própria, porque o install.sh reinicia o daemon que o chamou."""
+    if not installed():
+        return log("atualizar: daemon rodando do clone, use git pull")
+    log("atualizar: rodando o install.sh")
+    os.makedirs(LOG_DIR, exist_ok=True)
+    with open(os.path.join(LOG_DIR, "tokenpulse-update.log"), "a") as out:
+        subprocess.Popen(["/bin/bash", "-c", "curl -fsSL --retry 3 --retry-all-errors "
+                          "https://gilsondev.github.io/tokenpulse/install.sh | bash"],
+                         stdout=out, stderr=out, start_new_session=True)
+
+
+def firmware_bin(board_name, tag):
+    """O .bin de OTA do release, baixado uma vez para o cache; None enquanto não chegou."""
+    path = os.path.join(FW_CACHE, tag, f"tokenpulse-{board_name}-ota.bin")
+    if os.path.exists(path):
+        return path
+    state = _fw.setdefault(board_name, {})
+    if state.get("downloading"):
+        return None
+    state["downloading"] = True
+
+    def get():
+        try:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            url = f"https://github.com/{REPO}/releases/download/{tag}/tokenpulse-{board_name}-ota.bin"
+            with urllib.request.urlopen(url, timeout=120) as r, open(path + ".tmp", "wb") as f:
+                shutil.copyfileobj(r, f)
+            os.replace(path + ".tmp", path)
+        except Exception as e:
+            log(f"[{board_name}] firmware {tag}: download falhou ({type(e).__name__})")
+            state["later"] = time.time() + 600
+        state["downloading"] = False
+    threading.Thread(target=get, daemon=True).start()
+    return None
+
+
+def auto_ota(board, warn=True):
+    """O firmware do release deste daemon, quando a placa roda um release mais velho e o aviso já passou."""
+    mine, theirs = vtuple(RELEASE), vtuple(board.fw)
+    state = _fw.setdefault(board.name, {})
+    if not mine or not theirs or theirs >= mine or time.time() < state.get("later", 0):
+        state.pop("start", None)
+        return None
+    path = firmware_bin(board.name, RELEASE)
+    if not path:
+        return None
+    if warn and "start" not in state:
+        state["start"] = time.time() + FW_WARN
+        board.log(f"firmware {board.fw} → {RELEASE} em {FW_WARN} s")
+    if warn and time.time() < state["start"]:
+        return None
+    state.pop("start", None)
+    state["later"] = time.time() + 600  # se a gravação falhar, tenta de novo em 10 min, não em loop
+    return path
+
+
+def fw_frame(board):
+    """O aviso na tela da placa antes de gravar: a versão nova e os segundos que faltam."""
+    start = _fw.get(board.name, {}).get("start")
+    return {"fwup": [RELEASE, max(0, round(start - time.time()))]} if start else {}
 
 
 def pending_ota(board_name):
@@ -1953,7 +2229,7 @@ def serve(board, frame):
     if board.busy:
         return True
     try:
-        if path := pending_ota(board.name):
+        if path := pending_ota(board.name) or auto_ota(board):
             def ota_job():
                 t0 = time.time()
                 err = ota(board.ser, path)
@@ -1968,11 +2244,16 @@ def serve(board, frame):
                 in_background(board, lambda: board.log(f"shot: {screenshot(board.ser, req, frame) or 'ok'} ({req.get('out')})"))
                 return True
             board.log(f"shot: recusado: daemon sem --demo; rode com REAL=1 para capturar dados reais ({req.get('out')})")
-        board.ser.write(encode_frame(frame))
+        if board.out:
+            board.ser.write(board.out.encode() + b"\n")
+            board.out = None
+        board.ser.write(encode_frame(frame | fw_frame(board)))
         board.buf += board.ser.read(4096)  # lê sempre para não encher o buffer
         *lines, board.buf = board.buf.split(b"\n")  # só linhas completas: "ACTION switch 12" não vira "1"
         for raw in lines:
             line = raw.decode(errors="replace").strip()
+            if line == "ACTION wifi" and "wifi" in board.caps:  # a placa sem rede pediu o WiFi deste computador
+                threading.Thread(target=wifi_setup, args=(board,), daemon=True).start()
             board_action(line)
             if line:
                 board.log(line)
@@ -1986,7 +2267,10 @@ def serve(board, frame):
 # Placas pelo WiFi (o SmallTV-Ultra, que só tem USB de energia). Elas se anunciam por mDNS como
 # _tokenpulse._tcp e recebem um frame enxuto por HTTP, com só o que a tela principal delas mostra.
 NET_KEYS = ("p5", "r5", "pw", "rw", "tot", "rate", "sp", "m", "org", "clk", "dark", "age", "mods", "projs", "hist", "accts", "cx",
-            "prov", "cxok", "st", "pask", "cxo", "mc", "mcs", "mca")
+            "prov", "cxok", "st", "pask", "cxo", "mc", "mcs", "mca", "upd", "mask", "lask")
+# o codinome de cada placa (uma árvore que lembra ela), o mesmo do firmware; nos logs no lugar do modelo
+NICKS = {"smalltv-ultra": "Caixeta", "waveshare-amoled-216": "Jabuticaba", "guition-jc3248w535": "Sumaúma",
+         "cyd-2432s028r": "Ipê", "waveshare-s3-lcd-147b": "Açaí"}
 NET_EVERY = 2  # s entre frames: pelo WiFi, 1 por segundo só gastaria a placa
 net_boards = {}  # host -> NetBoard
 _latest = {}     # o último frame montado pelo laço principal
@@ -1999,7 +2283,7 @@ class NetBoard:
         self.fails = 0
 
     def log(self, msg):
-        log(f"[{self.name}] {msg}")
+        log(f"[{NICKS.get(self.name, self.name)}] {msg}")
 
 
 def http(url, data=None, headers=None, timeout=4):
@@ -2008,7 +2292,14 @@ def http(url, data=None, headers=None, timeout=4):
 
 
 def browse_mdns(seconds=3):
-    """Nomes das placas anunciadas na rede, pelo dns-sd do macOS (ele não termina sozinho)."""
+    """Nomes das placas anunciadas na rede, pelo dns-sd do macOS (ele não termina sozinho) ou pelo avahi-browse."""
+    if not MAC:
+        try:
+            out = subprocess.run(["avahi-browse", "-ptk", "_tokenpulse._tcp"], capture_output=True, text=True,
+                                 timeout=seconds + 5).stdout
+        except (OSError, subprocess.TimeoutExpired):
+            return set()
+        return {f[3] for f in (line.split(";") for line in out.splitlines()) if f[0] == "+" and len(f) > 3}
     try:
         p = subprocess.Popen(["dns-sd", "-B", "_tokenpulse._tcp", "local."], stdout=subprocess.PIPE,
                              stderr=subprocess.DEVNULL, text=True)
@@ -2103,7 +2394,7 @@ def net_loop():
             slim["agv"] = AGENT  # a página da placa mostra a versão do agente ao lado da do firmware
             body = json.dumps(slim, ensure_ascii=False).encode()
         for host, board in list(net_boards.items()):
-            if path := pending_ota(board.name):
+            if path := pending_ota(board.name) or auto_ota(board, warn=False):
                 t0 = time.time()
                 err = net_ota(board, path)
                 board.log(f"ota: {err or 'ok'} ({path}, {time.time() - t0:.0f} s)")
@@ -2130,6 +2421,7 @@ def net_loop():
 
 DEMO = "--demo" in sys.argv
 AGENT = agent_version()
+RELEASE = os.environ.get("TOKENPULSE_RELEASE") or AGENT  # o release deste daemon; o env simula um, para testar
 DEMO_P5 = int(os.environ.get("TOKENPULSE_DEMO_P5", "42"))  # para mostrar as faixas: 42, 74, 86, 95
 DEMO_ST = int(os.environ.get("TOKENPULSE_DEMO_ST", "0"))
 DEMO_MULTICA = os.environ.get("TOKENPULSE_DEMO_MULTICA") == "1"
@@ -2149,6 +2441,8 @@ def main():
         threading.Thread(target=herdr_events, daemon=True).start()
         threading.Thread(target=status_loop, daemon=True).start()
         threading.Thread(target=multica_loop, daemon=True).start()
+        threading.Thread(target=release_loop, daemon=True).start()
+        threading.Thread(target=login_loop, daemon=True).start()
     if "--once" not in sys.argv:
         threading.Thread(target=net_loop, daemon=True).start()
         threading.Thread(target=ble_loop, daemon=True).start()
@@ -2170,7 +2464,7 @@ def main():
                      | {"clk": datetime.now().strftime("%H:%M"), "t": local_time(), "org": org_name, "dark": dark_mode(), "agv": AGENT})
             if cx or os.path.exists(PROVIDERS):  # depois de escolhido, o ajuste continua nos ajustes da placa
                 frame = with_codex(frame, cx, usage.events, codex, usage.recent)
-            frame |= multica_frame()
+            frame |= multica_frame() | update_frame() | login_frame()
         _latest["frame"] = frame
         if "--once" in sys.argv:
             print(json.dumps(frame, ensure_ascii=False))
@@ -2184,8 +2478,10 @@ def main():
                 continue
             try:
                 board = connect(path, info.vid)
-            except (OSError, serial.SerialException):
+            except (OSError, serial.SerialException) as e:
                 board = None
+                if not MAC and "Errno 13" in str(e) and path not in first_fail:
+                    log(f"{path}: sem permissão; rode: sudo usermod -aG {serial_group(path)} $USER e entre de novo na sessão")
             if board:
                 first_fail.pop(path, None)
                 boards[path] = board

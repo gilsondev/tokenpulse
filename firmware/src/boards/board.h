@@ -5,6 +5,7 @@
 // Contrato que cada header de placa cumpre, dentro de `namespace board`:
 //
 //   constexpr const char* NAME           nome do env no platformio.ini; o daemon usa para achar o .bin do OTA
+//   constexpr const char* NICK, CODE     o codinome (uma árvore que lembra a placa) e ele sem acento, no endereço
 //   constexpr uint8_t DEFAULT_ROTATION
 //   constexpr uint8_t ROTATIONS          2: em pé e deitada; 4: também as duas viradas de 180° (Ajustes → Tela)
 //   constexpr uint8_t ROT_FOR[4]         rotação quando a gravidade aponta para +X, -X, +Y, -Y

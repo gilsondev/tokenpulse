@@ -10,10 +10,12 @@
 namespace board {
 
 constexpr const char* NAME = "guition-jc3248w535";
+constexpr const char* NICK = "Sumaúma";  // o codinome: uma árvore que lembra a placa
+constexpr const char* CODE = "sumauma";  // o codinome no endereço: tokenpulse-sumauma.local
 constexpr uint8_t DEFAULT_ROTATION = 0;  // retrato, a orientação nativa do painel
 constexpr uint8_t ROTATIONS = 2;  // o quadro deitado é girado no envio; as viradas de 180° não foram feitas
 constexpr uint8_t ROT_FOR[4] = {0, 0, 0, 0};
-constexpr Profile PROFILE{.touch = true, .calibrate = false, .imu = false, .led = false, .button = true};
+constexpr Profile PROFILE{.touch = true, .calibrate = false, .imu = false, .led = false, .button = true, .pxPerMm = 6.5f};
 constexpr uint8_t GRID_ROWS[2] = {0, 0};
 constexpr uint32_t SERIAL_BAUD = 115200;
 

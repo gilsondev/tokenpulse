@@ -44,6 +44,8 @@ void startAp() {
 void handleState() {
   JsonDocument d;
   d["board"] = board::NAME;
+  d["battery"] = board::PROFILE.battery;
+  d["nick"] = board::NICK;
   d["fw"] = hostlink::firmware();
   d["agent"] = app::frame["agv"] | "";
   d["host"] = host();
@@ -64,11 +66,12 @@ void handleState() {
   d["cxok"] = app::frame["cxok"] | 0;  // o Mac tem o Codex: a página mostra o ajuste Provedores
   d["prov"] = app::frame["prov"] | "auto";
   if (!app::frame["pask"].isNull()) d["pask"] = app::frame["pask"];  // primeiro uso: a página destaca a escolha
-  if (!app::frame["mcs"].isNull()) d["mcs"] = app::frame["mcs"];    // o Mac tem o Multica: a página mostra o ajuste
+  if (!app::frame["mcs"].isNull()) d["mcs"] = app::frame["mcs"];
+  if (!app::frame["upd"].isNull()) d["upd"] = app::frame["upd"];  // versão nova no GitHub: a página oferece atualizar
   JsonObject c = d["cfg"].to<JsonObject>();
   const auto& v = settings::v;
   const auto& w = settings::web;
-  c["bright"] = v.bright, c["idle"] = v.idle, c["theme"] = v.theme, c["orient"] = v.orient, c["hideCost"] = v.hideCost;
+  c["bright"] = v.bright, c["batBright"] = w.batBright, c["idle"] = v.idle, c["theme"] = v.theme, c["orient"] = v.orient, c["hideCost"] = v.hideCost;
   c["interval"] = w.interval, c["pages"] = w.pages, c["alerts"] = w.alerts, c["sound"] = w.sound, c["volume"] = w.volume, c["restSecs"] = w.restSecs, c["restPages"] = w.restPages, c["soundOut"] = w.soundOut, c["soundNew"] = w.soundNew, c["soundWeek"] = w.soundWeek, c["soundBat"] = w.soundBat, c["soundMac"] = w.soundMac, c["soundBle"] = w.soundBle, c["host"] = host();
   String out;
   serializeJson(d, out);
@@ -88,6 +91,7 @@ void handleConfig() {
     if (m != "auto" && m != "claude" && m != "codex" && m != "both") return server.send(400, "text/plain", "Provedor inválido.");
     hostlink::action(("ACTION prov " + m).c_str());
   }
+  if (server.hasArg("update")) hostlink::action("ACTION update");
   for (const char* k : {"mc", "mcws"})  // o ajuste Multica também mora no daemon
     if (server.hasArg(k)) hostlink::action((String("ACTION ") + k + " " + constrain(server.arg(k).toInt(), 0, 4)).c_str());
   if (server.hasArg("host")) {
@@ -101,6 +105,7 @@ void handleConfig() {
   }
   const uint8_t orient = v.orient;
   num("bright", 0, 3, v.bright);
+  num("batBright", 0, 3, w.batBright);
   num("idle", 0, 3, v.idle);
   num("theme", 0, 2, v.theme);
   num("orient", 0, board::ROTATIONS - 1, v.orient);
@@ -197,7 +202,7 @@ void startServer() {
   server.on("/config", HTTP_GET, [] { server.send_P(200, "text/html", USB_PAGE); });
   server.on("/wifi", HTTP_GET, [] { server.send_P(200, "text/html", WIFI_PAGE); });
   server.on("/style.css", HTTP_GET, [] {
-    server.sendHeader("Cache-Control", "max-age=3600");
+    server.sendHeader("Cache-Control", "no-cache");  // o CSS muda com o firmware: o navegador confere a cada visita
     server.send_P(200, "text/css", STYLE);
   });
   server.on("/favicon.ico", HTTP_GET, [] {  // pedido pelos navegadores por conta própria
@@ -261,7 +266,7 @@ void startServer() {
 }  // namespace
 
 void begin() {
-  snprintf(ap, sizeof ap, "tokenpulse-%06x", (uint32_t)(ESP.getEfuseMac() >> 24) & 0xFFFFFF);
+  snprintf(ap, sizeof ap, "tokenpulse-%s", board::CODE);
   WiFi.onEvent([](WiFiEvent_t, WiFiEventInfo_t info) { lastReason = info.wifi_sta_disconnected.reason; },
                ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
   if (!settings::web.wifi) return;  // nunca configurado: o WiFi fica desligado
@@ -269,6 +274,29 @@ void begin() {
   WiFi.mode(WIFI_STA);
   WiFi.begin();  // a rede que a página gravou
   startServer();
+}
+
+// Outra placa do mesmo modelo já responde por tokenpulse-<codinome>.local: esta grava o nome com uma cor, fácil
+// de digitar e sempre a mesma para este chip (tokenpulse-sumauma-azul). Só na primeira vez, com o nome padrão.
+void pickHost() {
+  static const char* const COLORS[] = {"azul", "verde", "rosa", "roxo", "cinza", "ouro", "prata", "coral"};
+  char tmp[32], name[32];
+  snprintf(tmp, sizeof tmp, "tokenpulse-%06x", (uint32_t)(ESP.getEfuseMac() >> 24) & 0xFFFFFF);
+  if (!MDNS.begin(tmp)) return;
+  const uint32_t seed = (uint32_t)(ESP.getEfuseMac() >> 24);
+  const IPAddress me = WiFi.localIP();
+  const IPAddress owner = MDNS.queryHost(ap, 1500);
+  bool taken = (uint32_t)owner && owner != me;
+  for (int k = 0; taken && k < 8; k++) {
+    snprintf(name, sizeof name, "%s-%s", ap, COLORS[(seed + k) % 8]);
+    const IPAddress ip = MDNS.queryHost(name, 1500);
+    if (!(uint32_t)ip || ip == me) {
+      strlcpy(settings::web.host, name, sizeof settings::web.host);
+      settings::saveWeb();
+      taken = false;
+    }
+  }
+  MDNS.end();
 }
 
 void loop() {
@@ -279,6 +307,7 @@ void loop() {
     if (!onlineSinceMs) onlineSinceMs = millis();
     if (!settings::web.wifi) settings::web.wifi = 1, settings::saveWeb();  // conectou pela página: liga ao ligar
     if (mdns_on && mdnsHost != host()) MDNS.end(), mdns_on = false;   // renomeada na página
+    if (!mdns_on && !settings::web.host[0]) pickHost();
     if (!mdns_on && (mdns_on = MDNS.begin(host()))) {
       mdnsHost = host();
       MDNS.addService("http", "tcp", 80);  // _tokenpulse._tcp não: o daemon acharia que os dados vão pelo WiFi
@@ -295,8 +324,48 @@ void loop() {
   if (rebootAtMs && millis() > rebootAtMs) ESP.restart();
 }
 
+// O WiFi que o daemon mandou pelo cabo (o do computador): entra como a página de configuração faria. A senha não
+// volta para a serial nem para o log.
+void join(const char* ssid, const char* pass) {
+  joinSsid = ssid;
+  lastReason = 0;
+  if (!ap_on) WiFi.mode(WIFI_STA);
+  WiFi.setHostname(host());
+  WiFi.begin(ssid, pass);  // o ESP32 grava a rede na NVS; ao conectar, o loop liga o WiFi no boot
+  joinMs = millis();
+  startServer();
+}
+
+// Como vai a conexão pedida (pelo cabo ou pela página), numa linha para a tela; vazio se nada foi pedido.
+String joinStatus() {
+  if (!joinMs) return "";
+  if (online()) return "Conectada em " + joinSsid;
+  if (lastReason == WIFI_REASON_AUTH_FAIL || lastReason == WIFI_REASON_4WAY_HANDSHAKE_TIMEOUT) return "Senha errada para " + joinSsid;
+  const uint32_t t = millis() - joinMs;
+  if (lastReason == WIFI_REASON_NO_AP_FOUND && t > 8000) return joinSsid + " não aparece: use uma rede 2,4 GHz";
+  if (t > 25000) return "Não conectou em " + joinSsid;
+  return "Conectando em " + joinSsid;
+}
+
 void openAp() {
+  resume();
   if (!ap_on) startAp();
+}
+
+bool paused = false;
+
+void pause() {
+  if (!started || ap_on || (joinMs && !online() && millis() - joinMs < 30000)) return;  // entrando numa rede: não corta no meio
+  if (mdns_on) MDNS.end(), mdns_on = false;
+  WiFi.mode(WIFI_OFF);
+  paused = true;
+}
+
+void resume() {
+  if (!paused) return;
+  paused = false;
+  WiFi.mode(WIFI_STA);
+  WiFi.begin();  // a rede salva
 }
 
 bool online() { return started && WiFi.status() == WL_CONNECTED; }

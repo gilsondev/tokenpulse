@@ -107,7 +107,12 @@ void beginBand(int b) {
   canvas[cur].setClipRect(0, rowLo, fullW, rowHi - rowLo);
 }
 
+// Tela densa (AMOLED, o dobro de pixels por mm): SMALL e LABEL sobem um tamanho, para o texto ter o mesmo
+// tamanho físico das outras placas. As medidas (lineHeight, textWidth) passam pela mesma troca.
+Font sized(Font f) { return board::PROFILE.dense && f < TITLE ? Font(f + 1) : f; }
+
 void setFont(Font f) {
+  f = sized(f);
   if (full() && vlwOk) return S().setFont(&(uiClass == MEDIUM ? vlwM : vlw)[f].font);
   static const lgfx::IFont* SMALL_SCREEN[] = {&fonts::efontJA_10, &fonts::efontJA_12, &fonts::efontJA_12,
                                               &fonts::FreeSansBold12pt7b, &fonts::FreeSansBold12pt7b};
@@ -359,7 +364,7 @@ void text(const char* s, int x, int y, Font f, uint16_t c, uint8_t datum, uint16
     hit->ax = hz == 1 ? w / 2 : hz == 2 ? w - padX : padX;
     hit->ay = vt == middle_left ? h / 2 : vt == bottom_left ? h - PAD - fh / 2 : PAD + fh / 2;
     hit->spr.fillScreen(bg);
-    hit->spr.setFont(&(uiClass == MEDIUM ? vlwM : vlw)[f].font);
+    hit->spr.setFont(&(uiClass == MEDIUM ? vlwM : vlw)[sized(f)].font);
     hit->spr.setTextDatum(datum);
     hit->spr.setTextColor(c);
     hit->spr.drawString(s, hit->ax, hit->ay);
@@ -370,7 +375,7 @@ void text(const char* s, int x, int y, Font f, uint16_t c, uint8_t datum, uint16
 }
 
 void fontOn(LGFX_Sprite& s, Font f) {
-  if (full() && vlwOk) s.setFont(&(uiClass == MEDIUM ? vlwM : vlw)[f].font);
+  if (full() && vlwOk) s.setFont(&(uiClass == MEDIUM ? vlwM : vlw)[sized(f)].font);
 }
 
 int textWidth(const char* s, Font f) {
