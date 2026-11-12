@@ -1,0 +1,13 @@
+[Unit]
+Description=tokenpulse: alimenta as placas com o uso do Claude Code e do Codex
+
+[Service]
+ExecStart=__UV__ run -q __REPO__/host/tokend.py
+Environment=PATH=__HOME__/.local/bin:/home/linuxbrew/.linuxbrew/bin:/usr/local/bin:/usr/bin:/bin
+Restart=always
+RestartSec=10
+StandardOutput=append:__HOME__/.local/state/tokenpulse/tokenpulse.log
+StandardError=append:__HOME__/.local/state/tokenpulse/tokenpulse.log
+
+[Install]
+WantedBy=default.target

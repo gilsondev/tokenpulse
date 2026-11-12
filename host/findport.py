@@ -13,9 +13,9 @@ import serial
 
 want, fresh = sys.argv[1], []
 paths = glob.glob("/dev/cu.usbmodem*") + glob.glob("/dev/cu.usbserial*") + glob.glob("/dev/cu.wchusbserial*")
-paths += glob.glob("/dev/cu.SLAB_USBtoUART*")
+paths += glob.glob("/dev/cu.SLAB_USBtoUART*") + glob.glob("/dev/ttyACM*") + glob.glob("/dev/ttyUSB*")  # Linux
 for path in sorted(set(paths)):
-    native = "usbmodem" in path  # USB nativa do ESP32-S3; o resto é ponte USB-serial
+    native = "usbmodem" in path or "ttyACM" in path  # USB nativa do ESP32-S3; o resto é ponte USB-serial
     try:
         s = serial.Serial()
         s.port, s.baudrate, s.timeout = path, 460800, 0
