@@ -61,11 +61,11 @@ struct Vlw {
 };
 Vlw LABEL{inter_label_m}, NUM{inter_num_m}, HERO{inter_hero_s};
 
-void text(const char* s, int x, int y, Vlw& f, uint16_t c, uint8_t datum = top_left) {
+void text(const char* s, int x, int y, Vlw& f, uint16_t c, uint8_t datum = top_left, uint16_t bg = BG) {
   if (y > oy + BAND || y + 48 < oy) return;  // fora da faixa: nem passa pela fonte
   band.setFont(&f.font);
   band.setTextDatum(datum);
-  band.setTextColor(c, BG);
+  band.setTextColor(c, bg);
   band.drawString(s, x, y - oy);
 }
 
@@ -288,27 +288,29 @@ void drawSessions() {
   }
 }
 
-// Multica: agentes rodando no número grande, os blocos de fazendo, revisão e fila, e o primeiro agente rodando.
+// Multica: agentes rodando no número grande, os blocos de fila, revisão (suas) e falhas (suas, 24 h), e o primeiro
+// agente rodando.
 void drawMulti() {
   char buf[64];
   JsonVariantConst mc = app::frame["mc"];
   header("Multica");
-  const int run = mc["r"] | 0;
+  const int run = mc["c"][0] | 0;
   snprintf(buf, sizeof buf, "%d", run);
   text(buf, W / 2, 40, HERO, run ? GREEN : DIM, top_center);
   text(run == 1 ? "agente rodando" : "agentes rodando", W / 2, 106, LABEL, MUTED, top_center);
-  const int counts[] = {mc["c"][1] | 0, mc["c"][2] | 0, mc["q"] | 0};
-  static const char* NAMES[] = {"Fazendo", "Revisão", "Fila"};
-  const uint16_t COLORS[] = {GREEN, YELLOW, MUTED};
+  const int counts[] = {mc["c"][1] | 0, mc["c"][2] | 0, mc["c"][3] | 0};
+  static const char* NAMES[] = {"Na fila", "Revisão", "Falhou"};
+  const uint16_t COLORS[] = {MUTED, YELLOW, RED};
   for (int k = 0; k < 3; k++) {
-    const int x = 8 + k * 76, hot = k == 1 && counts[k];
-    band.fillRoundRect(x, 132 - oy, 72, 50, 8, hot ? blend(BG, YELLOW, 0.2f) : TRACK);
+    const int x = 8 + k * 76;
+    const uint16_t bg = k && counts[k] ? blend(BG, COLORS[k], 0.2f) : TRACK;
+    band.fillRoundRect(x, 128 - oy, 72, 58, 8, bg);
     snprintf(buf, sizeof buf, "%d", counts[k]);
-    text(buf, x + 36, 136, NUM, COLORS[k], top_center);
-    text(NAMES[k], x + 36, 164, LABEL, MUTED, top_center);
+    text(buf, x + 36, 132, NUM, COLORS[k], top_center, bg);
+    text(NAMES[k], x + 36, 164, LABEL, MUTED, top_center, bg);
   }
   JsonArrayConst a = mc["a"][0];
-  if (a.isNull() || !(int)(a[4] | 0)) return;
+  if (a.isNull() || (int)(a[4] | -1) != 0) return;  // o primeiro cartão, se for um agente rodando
   snprintf(buf, sizeof buf, "%s · %s · %d min", (const char*)(a[0] | ""), (const char*)(a[2] | ""), (int)(a[5] | 0));
   text(fit(buf, W - 16, LABEL).c_str(), 8, 200, LABEL, TEXT);
 }

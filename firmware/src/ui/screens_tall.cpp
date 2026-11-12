@@ -190,12 +190,19 @@ int muteIcon(int right, int cy, bool draw) {
   return 2 * r + u(8);
 }
 
-// sub: a linha do modelo e de CLI/Desk embaixo do título. Offline ela sempre aparece: é onde está o aviso.
+// sub: a linha do modelo e de CLI/Desk embaixo do título. SUB_WARN: só quando há aviso (offline ou a página de
+// status), nas telas em que modelo e sessões repetiriam o que já está nelas. Offline ela sempre aparece: é onde
+// está o aviso.
+constexpr int SUB_WARN = 2;
 bool subLine = true;  // o último cabeçalho desenhou a linha de baixo (modelo, CLI · Desk ou o aviso sem dados)
-const char* subText = nullptr;  // no lugar do modelo, na linha de baixo (a página do Multica)
-void header(bool live, const char* title, bool dropdown = false, bool sub = true) {
+// sem a linha de baixo, o conteúdo das telas de posição fixa sobe o espaço dela
+int lift() { return subLine ? 0 : u(L() ? 58 : 62) - u(46); }
+void header(bool live, const char* title, bool dropdown = false, int sub = 1) {
   const auto& f = app::frame;
-  subLine = sub || !live;
+  JsonVariantConst cx = f["cx"];
+  // a página de status do serviço mostrado: 1 instável, 2 fora do ar (na principal do Codex, a da OpenAI)
+  const int st = live ? (codexMain ? (cx["st"] | 0) : (f["st"] | 0)) : 0;
+  subLine = sub == 1 || !live || (sub == SUB_WARN && st);
   char clkBuf[8];  // a hora contínua (RTC + frames) anda entre os frames e sem o Mac; sem ela, a do frame
   const int32_t secs = app::secondsOfDay();
   if (secs >= 0) snprintf(clkBuf, sizeof clkBuf, "%02d:%02d", (int)(secs / 3600), (int)(secs / 60 % 60));
@@ -222,11 +229,8 @@ void header(bool live, const char* title, bool dropdown = false, bool sub = true
   }
   text(clk, W() - M() - u(30), u(8), gfx::TITLE, TEXT, top_right);
   gear(W() - M() - u(10), u(19), u(10), gearActive ? ACCENT : MUTED);
-  if (!sub && live) return;
+  if (!subLine) return;
   char buf[64];
-  JsonVariantConst cx = f["cx"];
-  // a página de status do serviço mostrado: 1 instável, 2 fora do ar (na principal do Codex, a da OpenAI)
-  const int st = live ? (codexMain ? (cx["st"] | 0) : (f["st"] | 0)) : 0;
   const char* svc = codexMain || codexOnly() ? "Codex" : "Claude";
   if (st) snprintf(buf, sizeof buf, st > 1 ? "%s fora do ar" : "%s instável", svc);
   else if (live && codexMain) snprintf(buf, sizeof buf, "Codex %d", (int)(cx["n"] | 0));
@@ -235,12 +239,12 @@ void header(bool live, const char* title, bool dropdown = false, bool sub = true
     snprintf(buf, sizeof buf, "CLI %d · Desk %d · Codex %d", (int)(f["cli"] | 0), (int)(f["desk"] | 0), (int)(cx["n"] | 0));
   else if (live) snprintf(buf, sizeof buf, "CLI %d · Desk %d", (int)(f["cli"] | 0), (int)(f["desk"] | 0));
   else snprintf(buf, sizeof buf, "Offline há %lu min", (millis() - app::lastFrameMs) / 60000);
-  if (live && !st && !f["mc"].isNull())
+  if (live && !st && (int)(f["mc"]["r"] | 0))  // só com agente rodando: "Multica 0" só tomaria o espaço do modelo
     snprintf(buf + strlen(buf), sizeof buf - strlen(buf), " · Multica %d", (int)(f["mc"]["r"] | 0));
   const uint16_t sc = !live || st > 1 ? RED : st ? AMBER : GREEN;
   const int sy = u(10) + below(HT, 22), w = gfx::textWidth(buf, HS);
   // o modelo divide a linha com o status: corta o modelo, nunca o status
-  text(fit(subText ? subText : codexMain ? (cx["m"] | "Codex") : (f["m"] | "Claude"), HS, W() - 2 * M() - w - u(24)).c_str(), M(), sy, HS, DIM);
+  text(fit(codexMain ? (cx["m"] | "Codex") : (f["m"] | "Claude"), HS, W() - 2 * M() - w - u(24)).c_str(), M(), sy, HS, DIM);
   text(buf, W() - M(), sy, HS, sc == GREEN ? DIM : sc, top_right);
   fb().fillSmoothCircle(W() - M() - w - u(8), sy + gfx::lineHeight(HS) / 2 - u(2), max(2, u(3)), sc);
 }
@@ -447,15 +451,15 @@ struct Cell {  // um bloco de layout: canto superior esquerdo e largura
 // Onde fica o modelo i: em pé, um por linha; deitada, em duas colunas (3 modelos em 124 px cada não
 // caberiam em 320 de altura).
 Cell modelCell(int i) {
-  if (!L()) return {M(), u(68) + i * u(124), W() - 2 * M()};
+  if (!L()) return {M(), u(68) - lift() + i * u(124), W() - 2 * M()};
   const int gap = u(16), w = (W() - 2 * M() - gap) / 2;
-  return {M() + (i % 2) * (w + gap), u(64) + (i / 2) * u(124), w};
+  return {M() + (i % 2) * (w + gap), u(64) - lift() + (i / 2) * u(124), w};
 }
 
 void drawModels(bool live, int page) {
   char buf[64];
   gfx::clear();
-  header(live, "Modelos hoje");
+  header(live, "Modelos hoje", false, SUB_WARN);
   JsonArrayConst mods = app::frame["mods"];
   if (mods.size() == 0) text("Sem uso hoje", W() / 2, gfx::height() / 2, gfx::LABEL, DIM, middle_center);
   int i = 0;
@@ -1130,24 +1134,25 @@ void drawModelDetail(bool live, int page, int idx) {
   if (m.isNull()) return drawModels(live, page);
   char buf[64];
   gfx::clear();
-  header(live, m[0]);
+  header(live, m[0], false, SUB_WARN);
+  const int up = lift();
   // em pé, tudo numa coluna; deitada, composição à esquerda e projetos à direita
   const bool land = L();
   const int gap = u(24), lw = land ? (W() - 2 * M() - gap) / 2 : W() - 2 * M(), rx = land ? M() + lw + gap : M();
-  text(m[1], M(), u(68), gfx::NUM, TEXT);
+  text(m[1], M(), (u(68) - up), gfx::NUM, TEXT);
   snprintf(buf, sizeof buf, "%d%%", (int)m[2]);
-  text(buf, M() + lw, u(72), gfx::TITLE, ACCENT, top_right);
+  text(buf, M() + lw, (u(72) - up), gfx::TITLE, ACCENT, top_right);
   if (settings::v.hideCost) strcpy(buf, "Tokens hoje");
   else if (*(m[7] | "")) snprintf(buf, sizeof buf, "Tokens hoje · %s na API", (const char*)m[7]);
   else strcpy(buf, "Tokens hoje");  // modelo sem preço na tabela (os do Codex)
-  text(fit(buf, gfx::SMALL, lw).c_str(), M(), u(68) + below(gfx::NUM, 38), gfx::SMALL, MUTED);
+  text(fit(buf, gfx::SMALL, lw).c_str(), M(), (u(68) - up) + below(gfx::NUM, 38), gfx::SMALL, MUTED);
 
   // composição numa barra empilhada
   const char* names[] = {"Entrada", "Saída", "Cache lido", "Cache escrito"};
   const uint16_t cols[] = {blend(ACCENT, TEXT, 0.5f), ACCENT, GREEN, AMBER};
   float v[4], sum = 0;
   for (int k = 0; k < 4; k++) sum += v[k] = parseTokens(m[3 + k]);
-  const int bx = M(), by = u(140), bw = lw, bh = u(14), r = bh / 2;
+  const int bx = M(), by = (u(140) - up), bw = lw, bh = u(14), r = bh / 2;
   const float grow = anim::entrance(0);
   fb().fillSmoothRoundRect(bx, by, bw, bh, r, TRACK);
   // segmentos retos entre as pontas; as pontas são meias-luas na cor do primeiro e do último segmento
@@ -1166,7 +1171,7 @@ void drawModelDetail(bool live, int page, int idx) {
     if (x >= bx + bw - r) fb().fillSmoothCircle(bx + bw - r - 1, by + r, r, cols[last]);
   }
   for (int k = 0; k < (*(m[6] | "") ? 4 : 3); k++) {  // sem "Cache escrito" nos modelos do Codex
-    const int y = u(168) + k * below(gfx::LABEL, 26), d = max(3, u(5));
+    const int y = (u(168) - up) + k * below(gfx::LABEL, 26), d = max(3, u(5));
     fb().fillSmoothCircle(M() + d, y + gfx::lineHeight(gfx::LABEL) / 2 - 1, d, cols[k]);
     text(names[k], M() + u(18), y, gfx::LABEL, MUTED);
     snprintf(buf, sizeof buf, "%s · %d%%", (const char*)m[3 + k], sum > 0 ? (int)lroundf(100 * v[k] / sum) : 0);
@@ -1175,7 +1180,7 @@ void drawModelDetail(bool live, int page, int idx) {
     text(buf, M() + lw, y, gfx::LABEL, TEXT, top_right);
   }
 
-  const int py0 = land ? u(68) : u(168) + 4 * below(gfx::LABEL, 26) + u(12), pw = W() - M() - rx;
+  const int py0 = land ? (u(68) - up) : (u(168) - up) + 4 * below(gfx::LABEL, 26) + u(12), pw = W() - M() - rx;
   text(gfx::textWidth("Projetos que mais usaram", gfx::SMALL) <= pw ? "Projetos que mais usaram" : "Projetos", rx, py0, gfx::SMALL, DIM);
   JsonArrayConst projs = m[8];
   float top = 1;
@@ -1195,8 +1200,8 @@ void drawModelDetail(bool live, int page, int idx) {
 
 // Histórico: tokens por dia nos últimos 14 dias, a barra tocada (ou hoje) em destaque.
 // deitada o gráfico fica mais largo e mais baixo, e o total e a média dividem uma linha
-int CH_Y() { return u(L() ? 128 : 150); }
-int CH_H() { return u(L() ? 112 : 200); }
+int CH_Y() { return u(L() ? 128 : 150) - lift(); }
+int CH_H() { return u(L() ? 112 : 200) + lift(); }  // o gráfico cresce para cima no espaço da linha que saiu
 int gap() { return max(3, u(5)); }  // entre as barras
 
 int historyBarAt(int x, int y) {
@@ -1209,7 +1214,7 @@ int historyBarAt(int x, int y) {
 void drawHistory(bool live, int page, int sel) {
   char buf[64];
   gfx::clear();
-  header(live, "Histórico · 14 dias");
+  header(live, "Histórico · 14 dias", false, SUB_WARN);
   JsonArrayConst hist = app::frame["hist"];
   const int n = hist.size();
   if (!n) return dots(page);
@@ -1221,11 +1226,11 @@ void drawHistory(bool live, int page, int sel) {
   JsonArrayConst s = hist[sel];
   snprintf(buf, sizeof buf, "%s %d%s", (const char*)s[0], (int)s[1], sel == n - 1 ? " · hoje" : "");
   buf[0] = toupper(buf[0]);  // o dia vem do Mac em minúsculas ("qua"), como nas barras
-  text(buf, M(), u(66), gfx::SMALL, MUTED);
+  text(buf, M(), (u(66) - lift()), gfx::SMALL, MUTED);
   snprintf(buf, sizeof buf, "%.1fM", (float)s[2]);
   String tok = buf;
   tok.replace('.', ',');
-  const int ny = u(66) + below(gfx::SMALL, 18);
+  const int ny = (u(66) - lift()) + below(gfx::SMALL, 18);
   text(tok.c_str(), M(), ny, gfx::NUM, TEXT);
   const bool cost = !settings::v.hideCost && !codexOnly();  // o Codex não tem preço na tabela
   snprintf(buf, sizeof buf, "US$ %d", (int)s[3]);
@@ -1235,7 +1240,7 @@ void drawHistory(bool live, int page, int sel) {
     String split = buf;
     split.replace('.', ',');
     // deitada não há espaço entre o número e as barras: a linha vai à direita do dia
-    if (L()) text(fit(split.c_str(), gfx::SMALL, W() / 2 - M()).c_str(), W() - M(), u(66), gfx::SMALL, DIM, top_right);
+    if (L()) text(fit(split.c_str(), gfx::SMALL, W() / 2 - M()).c_str(), W() - M(), (u(66) - lift()), gfx::SMALL, DIM, top_right);
     else text(fit(split.c_str(), gfx::SMALL, W() - 2 * M()).c_str(), M(), ny + gfx::lineHeight(gfx::NUM) + u(2), gfx::SMALL, DIM);
   }
 
@@ -1320,17 +1325,16 @@ uint8_t provSel = 0;
 const char* const PROV_MODES[] = {"auto", "claude", "codex", "both"};
 Row provRows[] = {{"O que a placa mostra", &provSel, {"Automático", "Só Claude", "Só Codex", "Claude + Codex"}, 4, RADIO}};
 // Multica: o ajuste também mora no daemon; os nomes dos workspaces vêm do frame ("mcs")
-uint8_t mcOn = 0, mcWs = 0, mcMe = 0;
+uint8_t mcOn = 0, mcWs = 0;
 uint32_t mcTapMs = 0;  // o toque vale até o frame com a mudança chegar do Mac
 Row mcRows[] = {
     {"Página do Multica", &mcOn, {"Mostrar", "Ocultar"}, 2},
     {"Workspace", &mcWs, {}, 1, RADIO},
-    {"Issues", &mcMe, {"Todas do workspace", "Só as minhas"}, 2, RADIO},
 };
 void syncMc() {
   JsonVariantConst m = app::frame["mcs"];
   JsonArrayConst w = m["w"];
-  if (!mcTapMs || millis() - mcTapMs > 3000) mcOn = (int)(m["on"] | 1) ? 0 : 1, mcWs = m["i"] | 0, mcMe = m["me"] | 0;
+  if (!mcTapMs || millis() - mcTapMs > 3000) mcOn = (int)(m["on"] | 0) ? 0 : 1, mcWs = m["i"] | 0;
   mcRows[1].count = constrain((int)w.size(), 1, 5);
   for (int k = 0; k < 5; k++) mcRows[1].opts[k] = k < (int)w.size() ? (const char*)(w[k] | "") : "";
 }
@@ -1349,7 +1353,7 @@ const Group GROUPS[] = {
     {"Descanso", restRows, 2},
     {"Cartão SD", nullptr, 0},  // tela própria: o estado do cartão e o botão de formatar
     {"Provedores", provRows, 1},
-    {"Multica", mcRows, 3},
+    {"Multica", mcRows, 2},
 };
 int group = -1;  // -1: a lista
 
@@ -1642,10 +1646,10 @@ int settingsTap(int x, int y) {
         char cmd[24];
         snprintf(cmd, sizeof cmd, "ACTION prov %s", PROV_MODES[k]);
         hostlink::action(cmd);
-      } else if (r.value == &mcOn || r.value == &mcWs || r.value == &mcMe) {
+      } else if (r.value == &mcOn || r.value == &mcWs) {
         *r.value = k, mcTapMs = millis();
         char cmd[24];
-        snprintf(cmd, sizeof cmd, "ACTION %s %d", r.value == &mcOn ? "mc" : r.value == &mcWs ? "mcws" : "mcme", r.value == &mcOn ? !k : k);
+        snprintf(cmd, sizeof cmd, "ACTION %s %d", r.value == &mcOn ? "mc" : "mcws", r.value == &mcOn ? !k : k);
         hostlink::action(cmd);
       } else if (r.value == &soundLevel) {
         web.alerts = k ? web.alerts | 2 : web.alerts & ~2;
@@ -1923,36 +1927,71 @@ bool accountTap(int x, int y) {
   return true;
 }
 
-// Multica: a página do workspace (issues por status, agentes rodando e na fila), os projetos e a issue de um
-// agente. O bloco "mc" do frame: w workspace, c [backlog, fazendo, revisão, feito na semana], r rodando,
-// q na fila, a [agente, provedor, issue, título, rodando, minutos, tokens, projeto, prioridade, tentativa, PRs,
-// modelo], p [projeto, estado, feitas, total, em revisão].
+// Multica: a página dos agentes do workspace, os projetos, as issues de um projeto e o detalhe de um cartão. O
+// bloco "mc" do frame: w workspace, r rodando, c [rodando, na fila, em revisão, falhou], a os cartões [agente,
+// provedor, issue, título, tipo (0 rodando, 1 na fila, 2 em revisão, 3 falhou), minutos, tokens, projeto,
+// prioridade, tentativa, PRs, modelo, erro], p [projeto, estado, feitas, total, em revisão] e, com um projeto
+// aberto, pi [índice, [[issue, título, status (0 revisão … 5 feita), quem, minutos]]].
 namespace {
-int mcAgentY = 0, mcAgentH = 0, mcAgentN = 0, mcProjY = 0;  // a geometria do último desenho, para o toque
+int mcAgentY = 0, mcAgentH = 0, mcAgentN = 0, mcProjY = 0, mcTileY = 0, mcTileH = 0;  // o último desenho, para o toque
+int mcShown[16];     // índices em mc.a dos cartões à mostra
+int mcAgentTop = 0;  // o primeiro cartão à mostra: com mais cartões que a altura, a lista rola na vertical
+int mcFiltered = 0;  // quantos cartões o filtro de agora tem
+int mcRowY = 0, mcRowH = 0, mcRowN = 0, mcRowIdx[10];
+int mcRowTop = 0, mcRowAll = 0;  // a primeira issue à mostra e quantas o projeto tem: a lista rola na vertical
+int mcTapped = -1;   // a issue tocada: a borda pisca enquanto o Mac abre ela
+uint32_t mcTappedMs = 0;
+int mcProjTop = 0, mcProjH = 0, mcProjN = 0, mcProjFirst = 0, mcProjAll = 0;  // a lista de projetos rola como as outras
+int PROJ_H() { return max(u(58), gfx::lineHeight(gfx::LABEL) + u(26)); }
+const char* const MC_TILES[] = {"Rodando", "Na fila", "Revisão", "Falhou"};
+const char* const MC_EMPTY[] = {"Nenhum agente rodando", "Nada na fila", "Nenhuma issue sua em revisão",
+                                "Nenhuma run sua falhou em 24 h"};
+// as cores do tema mudam com o claro e o escuro: lidas na hora, não guardadas
+uint16_t mcColor(int k) { return k == 0 ? GREEN : k == 2 ? YELLOW : k == 3 ? RED : MUTED; }
+// os status das issues de um projeto, na ordem do daemon
+const char* const MC_STATUS[] = {"Revisão", "Bloqueada", "Fazendo", "A fazer", "Backlog", "Feita"};
+uint16_t mcStatusColor(int st) { return st == 0 ? YELLOW : st == 1 ? RED : st == 2 ? GREEN : st == 3 ? MUTED : DIM; }
 
 uint16_t providerColor(const char* p) { return !strcmp(p, "Codex") ? 0x150F : !strcmp(p, "Claude") ? ACCENT : MUTED; }
 
-void mcAgent(JsonArrayConst a, int k, int y, int h) {
-  char buf[64];
-  const bool run = (int)(a[4] | 0);
-  const uint16_t bg = blend(BG, TRACK, run ? 0.6f : 0.35f);
+void ago(char* buf, size_t n, int mins) {
+  if (mins >= 1440) snprintf(buf, n, "há %d d", mins / 1440);
+  else if (mins >= 60) snprintf(buf, n, "há %d h", mins / 60);
+  else if (mins >= 0) snprintf(buf, n, "há %d min", mins);
+  else *buf = 0;
+}
+
+void mcCard(JsonArrayConst a, int k, int y, int h) {
+  char buf[72], when[16];
+  const int kind = a[4] | 0;
+  const uint16_t bg = kind == 3 ? blend(BG, RED, 0.14f) : blend(BG, TRACK, kind == 1 ? 0.35f : 0.6f);
   const int x = M(), w = W() - 2 * M(), pad = u(12), px = max(2, min(u(5), (h - u(16)) / 8));
   const float in = anim::entrance(k);
   card(x, y + (int)((1 - in) * u(16)), w, h, u(12), bg, false);
   if (in < 0.9f) return;
   const char* prov = a[1] | "";
-  mascot::draw(x + pad, y + (h - 8 * px) / 2, px, run ? mascot::WORK : mascot::IDLE, bg, k, !strcmp(prov, "Codex"));
+  const mascot::Mood mood = kind == 0 ? mascot::WORK : kind == 2 ? mascot::TURN : kind == 3 ? mascot::BLOCK : mascot::IDLE;
+  mascot::draw(x + pad, y + (h - 8 * px) / 2, px, mood, bg, k, !strcmp(prov, "Codex"));
   const int tx = x + pad + mascot::W * px + u(12), maxW = x + w - pad - tx;
   const int bw = *prov ? gfx::textWidth(prov, gfx::SMALL) + 2 * u(10) : 0;
   if (*prov) badge(prov, x + w - u(10), y + u(8), providerColor(prov), bg);
+  // baixo demais para três linhas (CYD deitada): a issue na primeira, ao lado do selo, e o estado embaixo
+  const bool slim = h < 2 * gfx::lineHeight(gfx::LABEL) + gfx::lineHeight(gfx::SMALL) + u(14);
   const int l1 = y + u(8), l3 = y + h - u(8) - gfx::lineHeight(gfx::SMALL);
   const int l2 = (l1 + gfx::lineHeight(gfx::LABEL) + l3) / 2 - gfx::lineHeight(gfx::LABEL) / 2;
-  text(fit(a[0] | "", gfx::LABEL, maxW - bw - u(8)).c_str(), tx, l1, gfx::LABEL, TEXT, top_left, bg);
   snprintf(buf, sizeof buf, "%s · %s", (const char*)(a[2] | ""), (const char*)(a[3] | ""));
-  text(fit(buf, gfx::LABEL, maxW).c_str(), tx, l2, gfx::LABEL, run ? TEXT : MUTED, top_left, bg);
-  if (run) snprintf(buf, sizeof buf, "Rodando há %d min · %s tokens", (int)(a[5] | 0), (const char*)(a[6] | "--"));
-  else strcpy(buf, "Na fila");
-  text(fit(buf, gfx::SMALL, maxW).c_str(), tx, l3, gfx::SMALL, run ? GREEN : DIM, top_left, bg);
+  if (slim) {
+    text(fit(buf, gfx::LABEL, maxW - bw - u(8)).c_str(), tx, l1, gfx::LABEL, kind == 1 ? MUTED : TEXT, top_left, bg);
+  } else {
+    text(fit(a[0] | "", gfx::LABEL, maxW - bw - u(8)).c_str(), tx, l1, gfx::LABEL, TEXT, top_left, bg);
+    text(fit(buf, gfx::LABEL, maxW).c_str(), tx, l2, gfx::LABEL, kind == 1 ? MUTED : TEXT, top_left, bg);
+  }
+  ago(when, sizeof when, a[5] | -1);
+  if (kind == 0) snprintf(buf, sizeof buf, "Rodando %s · %s tokens", when, (const char*)(a[6] | "--"));
+  else if (kind == 1) strcpy(buf, "Na fila");
+  else if (kind == 2) snprintf(buf, sizeof buf, "Em revisão %s", when);
+  else snprintf(buf, sizeof buf, *(a[12] | "") ? "Falhou %s · %s" : "Falhou %s", when, (const char*)(a[12] | ""));
+  text(fit(buf, gfx::SMALL, maxW).c_str(), tx, l3, gfx::SMALL, mcColor(kind), top_left, bg);
 }
 
 void mcProjects(bool live, JsonVariantConst mc) {
@@ -1962,12 +2001,21 @@ void mcProjects(bool live, JsonVariantConst mc) {
   snprintf(buf, sizeof buf, "‹ Projetos · %d", n);
   header(live, buf, false, false);
   const uint16_t track = blend(BG, TRACK, 0.6f);
-  const int x = M(), w = W() - 2 * M(), top = SET_Y(), gap = u(10);
-  const int h = n ? min(u(84), (gfx::height() - top - u(36) - (n - 1) * gap) / n) : 0;
+  const int x = M(), w = W() - 2 * M(), gap = u(10);
+  mcProjTop = SET_Y();
+  // altura fixa: com mais projetos que a tela, a lista rola em vez de espremer as linhas
+  const int h = max(u(76), gfx::lineHeight(gfx::LABEL) + gfx::lineHeight(gfx::SMALL) + u(34));
+  const int fits = max(1, (gfx::height() - mcProjTop - u(30) + gap) / (h + gap));
+  mcProjH = h + gap, mcProjAll = n, mcProjFirst = constrain(mcProjFirst, 0, max(0, n - fits));
+  mcProjN = min(n - mcProjFirst, fits);
   if (!n) text("Nenhum projeto com issues", W() / 2, gfx::height() / 2, gfx::LABEL, DIM, middle_center);
-  for (int i = 0; i < n; i++) {
-    JsonArrayConst p = ps[i];
-    const int y = top + i * (h + gap), done = p[2] | 0, total = max(1, (int)(p[3] | 1)), review = p[4] | 0;
+  if (n > fits) {
+    const int lh = fits * (h + gap) - gap, bh = max(u(16), lh * fits / n);
+    fb().fillSmoothRoundRect(W() - u(5), mcProjTop + (lh - bh) * mcProjFirst / (n - fits), u(3), bh, u(2), TRACK);
+  }
+  for (int k = 0; k < mcProjN; k++) {
+    JsonArrayConst p = ps[mcProjFirst + k];
+    const int y = mcProjTop + k * (h + gap), done = p[2] | 0, total = max(1, (int)(p[3] | 1)), review = p[4] | 0;
     fb().fillSmoothRoundRect(x, y, w, h, u(10), track);
     const char* st = p[1] | "";
     const uint16_t sc = !strcmp(st, "Em andamento") ? GREEN : !strcmp(st, "Concluído") ? MUTED : DIM;
@@ -1984,17 +2032,55 @@ void mcProjects(bool live, JsonVariantConst mc) {
       text(buf, x + w - u(14), y + h - u(8), gfx::SMALL, YELLOW, bottom_right, track);
     }
   }
-  text("Toque para voltar", W() / 2, gfx::height() - u(14), gfx::SMALL, DIM, middle_center);
+  if (n) text("Toque num projeto para ver as issues", W() / 2, gfx::height() - u(14), gfx::SMALL, DIM, middle_center);
+}
+
+// As issues de um projeto: as que pedem atenção primeiro (revisão, bloqueada, fazendo…). O daemon só manda as do
+// projeto aberto; até elas chegarem, a tela espera. Tocar numa abre ela no Mac.
+void mcProjectIssues(bool live, JsonVariantConst mc, int proj) {
+  char buf[72], when[16];
+  snprintf(buf, sizeof buf, "‹ %s", (const char*)(mc["p"][proj][0] | ""));
+  header(live, buf, false, false);
+  JsonArrayConst pi = mc["pi"];
+  mcRowN = 0;
+  if ((int)(pi[0] | -1) != proj) return text("Carregando…", W() / 2, gfx::height() / 2, gfx::LABEL, DIM, middle_center);
+  const uint16_t track = blend(BG, TRACK, 0.6f);
+  const int x = M(), w = W() - 2 * M(), gap = u(8), foot = gfx::height() - u(30);
+  mcRowY = SET_Y(), mcRowH = max(u(58), gfx::lineHeight(gfx::LABEL) + gfx::lineHeight(gfx::SMALL) + u(18)) + gap;
+  JsonArrayConst rows = pi[1];
+  const int fits = max(1, (foot - mcRowY + gap) / mcRowH);
+  mcRowAll = rows.size(), mcRowTop = constrain(mcRowTop, 0, max(0, mcRowAll - fits));
+  for (int idx = mcRowTop; idx < mcRowAll; idx++) {
+    JsonArrayConst l = rows[idx];
+    if (mcRowN == 10 || mcRowN == fits) break;
+    const int y = mcRowY + mcRowN * mcRowH, h = mcRowH - gap, st = constrain((int)(l[2] | 4), 0, 5);
+    mcRowIdx[mcRowN++] = idx;
+    const bool lit = idx == mcTapped && millis() - mcTappedMs < 900 && (millis() - mcTappedMs) / 150 % 2 == 0;
+    card(x, y, w, h, u(10), track, lit);
+    const int sw = gfx::textWidth(MC_STATUS[st], gfx::SMALL);
+    text(MC_STATUS[st], x + w - u(14), y + u(10), gfx::SMALL, mcStatusColor(st), top_right, track);
+    text(fit(l[1] | "", gfx::LABEL, w - u(40) - sw).c_str(), x + u(14), y + u(8), gfx::LABEL, TEXT, top_left, track);
+    ago(when, sizeof when, l[4] | -1);
+    const char* who = l[3] | "";
+    snprintf(buf, sizeof buf, "%s%s%s%s%s", (const char*)(l[0] | ""), *who ? " · " : "", who, *when ? " · " : "", when);
+    text(fit(buf, gfx::SMALL, w - u(28)).c_str(), x + u(14), y + h - u(8), gfx::SMALL, MUTED, bottom_left, track);
+  }
+  if (mcRowAll > fits) {  // barra de rolagem
+    const int lh = fits * mcRowH - gap, bh = max(u(16), lh * fits / mcRowAll);
+    fb().fillSmoothRoundRect(W() - u(5), mcRowY + (lh - bh) * mcRowTop / (mcRowAll - fits), u(3), bh, u(2), TRACK);
+  }
+  if (!mcRowN) text("Nenhuma issue aberta", W() / 2, gfx::height() / 2, gfx::LABEL, DIM, middle_center);
+  else text("Toque numa issue para abrir no Mac", W() / 2, gfx::height() - u(14), gfx::SMALL, DIM, middle_center);
 }
 
 void mcIssue(bool live, JsonVariantConst mc, const char* issue) {
   JsonArrayConst a;
   for (JsonArrayConst r : mc["a"].as<JsonArrayConst>())
     if (!strcmp(r[2] | "", issue)) a = r;
-  char buf[64];
+  char buf[64], when[16];
   snprintf(buf, sizeof buf, "‹ %s", issue);
   header(live, buf, false, false);
-  const int x = M(), maxW = W() - 2 * M();
+  const int x = M(), maxW = W() - 2 * M(), kind = a[4] | 0;
   int y = SET_Y() + u(8);
   String l2, l1 = wrap2(a[3] | "", gfx::TITLE, maxW, l2);
   text(fit(l1.c_str(), gfx::TITLE, maxW).c_str(), x, y, gfx::TITLE, TEXT);
@@ -2005,72 +2091,94 @@ void mcIssue(bool live, JsonVariantConst mc, const char* issue) {
   if (*prio) snprintf(buf, sizeof buf, *proj ? "%s · prioridade %s" : "%sprioridade %s", proj, prio);
   else strlcpy(buf, proj, sizeof buf);
   if (*buf) text(fit(buf, gfx::SMALL, maxW).c_str(), x, y + u(4), gfx::SMALL, MUTED), y += gfx::lineHeight(gfx::SMALL) + u(4);
-  const bool run = (int)(a[4] | 0);
-  const uint16_t pc = run ? GREEN : DIM, pbg = blend(BG, pc, 0.22f);
-  const char* pill = run ? "Rodando" : "Na fila";
+  static const char* PILLS[] = {"Rodando", "Na fila", "Em revisão", "Falhou"};
+  const uint16_t pc = mcColor(kind), pbg = blend(BG, pc, 0.22f);
+  const char* pill = PILLS[constrain(kind, 0, 3)];
   const int ph = u(24), pw = gfx::textWidth(pill, gfx::SMALL) + 2 * u(12);
   y += u(12);
   fb().fillSmoothRoundRect(x, y, pw, ph, ph / 2, pbg);
   text(pill, x + pw / 2, y + ph / 2, gfx::SMALL, pc, middle_center, pbg);
   y += ph + u(18);
-  char v[4][48];
-  snprintf(v[0], sizeof v[0], *(a[1] | "") ? "%s · %s" : "%s", (const char*)(a[0] | ""), (const char*)(a[1] | ""));
-  snprintf(v[1], sizeof v[1], run ? "Tentativa %d · rodando há %d min" : "Tentativa %d · na fila há %d min", (int)(a[9] | 1),
-           (int)(a[5] | 0));
-  snprintf(v[2], sizeof v[2], *(a[11] | "") ? "%s · %s" : "%s", (const char*)(a[6] | "--"), (const char*)(a[11] | ""));
-  const int prs = a[10] | 0;
-  if (prs) snprintf(v[3], sizeof v[3], prs == 1 ? "1 aberto" : "%d abertos", prs);
-  else strcpy(v[3], "Nenhum");
-  static const char* LABELS[] = {"Agente", "Run", "Tokens da run", "PRs ligados"};
+  ago(when, sizeof when, a[5] | -1);
+  const char* labels[4];
+  char v[4][56];
+  int n = 0;
+  labels[n] = kind == 2 ? "Com" : "Agente";
+  snprintf(v[n++], sizeof v[0], *(a[1] | "") ? "%s · %s" : "%s", (const char*)(a[0] | ""), (const char*)(a[1] | ""));
+  if (kind == 2) {
+    labels[n] = "Em revisão", snprintf(v[n++], sizeof v[0], "%s", when);
+  } else {
+    static const char* VERB[] = {"rodando", "na fila", "", "falhou"};
+    labels[n] = "Run", snprintf(v[n++], sizeof v[0], "Tentativa %d · %s %s", (int)(a[9] | 1), VERB[kind], when);
+  }
+  if (kind == 0) {
+    labels[n] = "Tokens da run";
+    snprintf(v[n++], sizeof v[0], *(a[11] | "") ? "%s · %s" : "%s", (const char*)(a[6] | "--"), (const char*)(a[11] | ""));
+    const int prs = a[10] | 0;
+    labels[n] = "PRs ligados";
+    if (prs) snprintf(v[n++], sizeof v[0], prs == 1 ? "1 aberto" : "%d abertos", prs);
+    else strcpy(v[n++], "Nenhum");
+  }
+  if (kind == 3 && *(a[12] | "")) labels[n] = "Erro", strlcpy(v[n++], a[12] | "", sizeof v[0]);
   const int step = gfx::lineHeight(gfx::SMALL) + gfx::lineHeight(gfx::LABEL) + u(10);
-  for (int i = 0; i < 4 && y + step < gfx::height() - u(30); i++, y += step) {
-    text(LABELS[i], x, y, gfx::SMALL, DIM);
-    text(fit(v[i], gfx::LABEL, maxW).c_str(), x, y + gfx::lineHeight(gfx::SMALL), gfx::LABEL, TEXT);
+  for (int i = 0; i < n && y + step < gfx::height() - u(30); i++, y += step) {
+    text(labels[i], x, y, gfx::SMALL, DIM);
+    text(fit(v[i], gfx::LABEL, maxW).c_str(), x, y + gfx::lineHeight(gfx::SMALL), gfx::LABEL, kind == 3 && i == n - 1 ? RED : TEXT);
   }
   text("Toque para voltar", W() / 2, gfx::height() - u(14), gfx::SMALL, DIM, middle_center);
 }
 }  // namespace
 
-void drawMulti(bool live, int view, const char* issue) {
+void drawMulti(bool live, int view, const char* issue, int sel) {
   gfx::clear();
   JsonVariantConst mc = app::frame["mc"];
   if (view == 1) return mcProjects(live, mc);
   if (view == 2) return mcIssue(live, mc, issue);
-  char title[48], sub[40];
+  if (view == 3) return mcProjectIssues(live, mc, sel);
+  char title[48];
   snprintf(title, sizeof title, "Multica · %s", (const char*)(mc["w"] | ""));
-  const int run = mc["r"] | 0, queued = mc["q"] | 0;
-  if (queued) snprintf(sub, sizeof sub, "%d rodando · %d na fila", run, queued);
-  else snprintf(sub, sizeof sub, run == 1 ? "1 rodando" : "%d rodando", run);
-  subText = sub;
-  header(live, title);
-  subText = nullptr;
-  static const char* NAMES[] = {"Backlog", "Fazendo", "Revisão", "Feito"};
-  const uint16_t COLORS[] = {MUTED, GREEN, YELLOW, DIM};
+  header(live, title, false, SUB_WARN);
+  // os números são filtros da lista de baixo: o escolhido fica com a borda na cor dele
   const int gap = u(8), tw = (W() - 2 * M() - 3 * gap) / 4;
   const int th = gfx::lineHeight(gfx::NUM) + gfx::lineHeight(gfx::SMALL) + u(16);
   int y = SET_Y();
+  mcTileY = y, mcTileH = th, sel = constrain(sel, 0, 3);
   for (int k = 0; k < 4; k++) {
     const int x = M() + k * (tw + gap), count = mc["c"][k] | 0;
-    const bool hot = k == 2 && count;  // issue esperando revisão: o bloco amarelo
-    const uint16_t bg = hot ? blend(BG, YELLOW, 0.16f) : blend(BG, TRACK, 0.6f);
-    if (hot) fb().fillSmoothRoundRect(x, y, tw, th, u(10), YELLOW);
-    fb().fillSmoothRoundRect(x + (hot ? 2 : 0), y + (hot ? 2 : 0), tw - (hot ? 4 : 0), th - (hot ? 4 : 0), u(10), bg);
+    const bool on = k == sel;
+    const uint16_t c = mcColor(k), bg = on ? blend(BG, c, 0.16f) : blend(BG, TRACK, 0.6f);
+    if (on) fb().fillSmoothRoundRect(x, y, tw, th, u(10), c);
+    fb().fillSmoothRoundRect(x + (on ? 2 : 0), y + (on ? 2 : 0), tw - (on ? 4 : 0), th - (on ? 4 : 0), u(10), bg);
     char n[8];
     snprintf(n, sizeof n, "%d", count);
-    text(n, x + tw / 2, y + u(8), gfx::NUM, COLORS[k], top_center, bg);
-    text(NAMES[k], x + tw / 2, y + th - u(8), gfx::SMALL, MUTED, bottom_center, bg);
+    text(n, x + tw / 2, y + u(8), gfx::NUM, count ? c : DIM, top_center, bg);
+    text(MC_TILES[k], x + tw / 2, y + th - u(8), gfx::SMALL, on ? TEXT : MUTED, bottom_center, bg);
   }
-  y += th + u(14);
-  JsonArrayConst agents = mc["a"];
-  mcProjY = gfx::height() - u(30) - u(40);
-  text(agents.size() ? "Agentes agora" : "Nenhum agente rodando", M(), y, gfx::SMALL, DIM);
-  y += gfx::lineHeight(gfx::SMALL) + u(6);
-  const int ah = max(u(66), 2 * gfx::lineHeight(gfx::LABEL) + gfx::lineHeight(gfx::SMALL) + u(16)), agap = u(8);
+  y += th + u(12);
+  mcProjY = gfx::height() - u(30) - PROJ_H();
+  JsonArrayConst cards = mc["a"];
+  mcFiltered = 0;
+  int ids[16];
+  for (int i = 0; i < (int)cards.size() && mcFiltered < 16; i++)
+    if ((int)(cards[i][4] | -1) == sel) ids[mcFiltered++] = i;
+  int ah = max(u(66), 2 * gfx::lineHeight(gfx::LABEL) + gfx::lineHeight(gfx::SMALL) + u(16));
+  const int agap = u(8), room = mcProjY - u(8) - y;
+  if (room < ah) ah = max(room, gfx::lineHeight(gfx::LABEL) + gfx::lineHeight(gfx::SMALL) + u(14));  // um cartão baixo
   mcAgentY = y, mcAgentH = ah + agap;
-  mcAgentN = min((int)agents.size(), max(0, (mcProjY - u(8) - y + agap) / (ah + agap)));
-  for (int k = 0; k < mcAgentN; k++) mcAgent(agents[k], k, y + k * (ah + agap), ah);
+  const int fits = max(1, (room + agap) / (ah + agap));
+  mcAgentTop = constrain(mcAgentTop, 0, max(0, mcFiltered - fits));
+  mcAgentN = min(mcFiltered - mcAgentTop, fits);
+  if (!mcFiltered) text(MC_EMPTY[sel], W() / 2, (y + mcProjY) / 2, gfx::LABEL, DIM, middle_center);
+  for (int k = 0; k < mcAgentN; k++) {
+    mcShown[k] = ids[mcAgentTop + k];
+    mcCard(cards[mcShown[k]], k, y + k * (ah + agap), ah);
+  }
+  if (mcFiltered > fits && fits) {  // barra de rolagem: há cartões acima ou abaixo
+    const int lh = fits * (ah + agap) - agap, bh = max(u(16), lh * fits / mcFiltered);
+    fb().fillSmoothRoundRect(W() - u(5), y + (lh - bh) * mcAgentTop / (mcFiltered - fits), u(3), bh, u(2), TRACK);
+  }
   const uint16_t track = blend(BG, TRACK, 0.6f);
-  const int ph = u(40), w = W() - 2 * M();
+  const int ph = PROJ_H(), w = W() - 2 * M();
   fb().fillSmoothRoundRect(M(), mcProjY, w, ph, u(10), track);
   char buf[32];
   snprintf(buf, sizeof buf, "Projetos · %d", (int)mc["p"].size());
@@ -2081,9 +2189,45 @@ void drawMulti(bool live, int view, const char* issue) {
 }
 
 int multiTap(int x, int y) {
-  if (y >= mcProjY && y < mcProjY + u(40) && x >= M() && x < W() - M()) return -2;
+  if (x < M() || x >= W() - M()) return -1;
+  if (y >= mcTileY && y < mcTileY + mcTileH) return -10 - min(3, (x - M()) * 4 / (W() - 2 * M()));
+  if (y >= mcProjY && y < mcProjY + PROJ_H()) return -2;
   const int k = (y - mcAgentY) / max(1, mcAgentH);
-  return y >= mcAgentY && k < mcAgentN && x >= M() && x < W() - M() ? k : -1;
+  return y >= mcAgentY && k < mcAgentN ? mcShown[k] : -1;
+}
+
+bool multiScroll(int dir, int view) {
+  if (view == 1) {
+    const int to = constrain(mcProjFirst + dir, 0, max(0, mcProjAll - mcProjN));
+    if (to == mcProjFirst) return false;
+    mcProjFirst = to;
+    return true;
+  }
+  if (view == 3) {
+    const int to = constrain(mcRowTop + dir, 0, max(0, mcRowAll - mcRowN));
+    if (to == mcRowTop) return false;
+    mcRowTop = to;
+    return true;
+  }
+  const int to = constrain(mcAgentTop + dir, 0, max(0, mcFiltered - mcAgentN));
+  if (to == mcAgentTop) return false;
+  mcAgentTop = to;
+  return true;
+}
+void multiFilter() { mcAgentTop = 0, mcRowTop = 0, mcProjFirst = 0; }
+
+int mcProjTap(int x, int y) {
+  if (y < SET_Y() - u(4)) return -2;
+  const int k = (y - mcProjTop) / max(1, mcProjH);
+  return y >= mcProjTop && k < mcProjN && x >= M() && x < W() - M() ? mcProjFirst + k : -1;
+}
+
+int mcListTap(int x, int y) {
+  if (y < SET_Y() - u(4)) return -2;
+  const int k = (y - mcRowY) / max(1, mcRowH);
+  if (y < mcRowY || k >= mcRowN || x < M() || x >= W() - M()) return -1;
+  mcTapped = mcRowIdx[k], mcTappedMs = millis();
+  return mcTapped;
 }
 
 // O aviso do Multica em tela cheia, como o de uma sessão: issue que foi para revisão (amarelo) ou run que falhou

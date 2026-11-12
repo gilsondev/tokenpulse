@@ -16,6 +16,7 @@ import subprocess
 import sys
 import threading
 import time
+import urllib.parse
 import urllib.request
 from collections import namedtuple
 from datetime import datetime, timedelta
@@ -913,9 +914,12 @@ def run_action(cmd):
         log(f"provedores: {parts[1]}")
         return _wake.set()
     if len(parts) == 2 and parts[0] == "mcopen" and re.fullmatch(r"[A-Z]+\d*-\d+", parts[1]) and _mc["url"]:
-        return subprocess.Popen(["open", _mc["url"] + parts[1]])
-    if len(parts) == 2 and parts[0] in ("mc", "mcme") and parts[1] in ("0", "1"):
-        return mc_save(**{"on" if parts[0] == "mc" else "mine": parts[1] == "1"})
+        return subprocess.Popen(["open", multica_link(_mc["url"] + parts[1])])
+    if len(parts) == 2 and parts[0] == "mcproj" and parts[1].isdigit():
+        _mc["open"] = (int(parts[1]), time.time())
+        return _wake.set()
+    if len(parts) == 2 and parts[0] == "mc" and parts[1] in ("0", "1"):
+        return mc_save(on=parts[1] == "1")
     if len(parts) == 2 and parts[0] == "mcws" and parts[1].isdigit():
         wss = [w for w in mc_list(mc_cli("workspace", "list"), "workspaces")]
         return mc_save(i=int(parts[1]), ws=wss[int(parts[1])]["id"]) if int(parts[1]) < len(wss) else None
@@ -1095,15 +1099,25 @@ def status_loop():
 
 MULTICA = shutil.which("multica") or "/opt/homebrew/bin/multica"  # o LaunchAgent roda sem o PATH do Homebrew
 MULTICA_CONFIG = os.path.join(HOME, ".multica/config.json")
+MULTICA_DESKTOP_CFG = os.path.join(HOME, ".multica/desktop.json")  # o servidor em que o app desktop está ligado
+MULTICA_APP = "/Applications/Multica.app"
 MULTICA_CFG = os.path.join(HOME, ".claude/esp-tokens-multica.json")  # o ajuste Multica, escolhido na placa
-MULTICA_EVERY = 60  # cada volta chama a CLI umas 10 vezes, e cada chamada vai ao servidor
-MC_BUCKET = {"backlog": 0, "todo": 0, "in_progress": 1, "blocked": 1, "in_review": 2, "done": 3}
+# Cada chamada da CLI vai ao servidor do Multica. Uma volta lê issues, agentes e projetos (3 chamadas) e as runs só
+# dos agentes trabalhando agora ou na volta anterior (a anterior pega a run que acabou ou falhou). De minuto em
+# minuto enquanto há agente trabalhando; parado, de 5 em 5 min. Runtimes e squads, de hora em hora; PRs, a cada 10 min.
+MULTICA_EVERY = 60
+MULTICA_IDLE_EVERY = 300
 MC_PROJECT = {"planned": "Planejado", "in_progress": "Em andamento", "completed": "Concluído", "paused": "Pausado",
               "cancelled": "Cancelado"}
 MC_PRIORITY = {"low": "baixa", "medium": "média", "high": "alta", "urgent": "urgente"}
 MC_ALERT_SECS = 60
+MC_LIST = 6  # cartões de cada número no frame (rodando, na fila, em revisão, falhou): 24 no máximo, ~3 KB
+MC_PROJECTS = 12  # projetos no frame
+MC_PROJECT_ISSUES = 15  # issues do projeto aberto na placa; só ele vai no frame
+# a ordem das issues de um projeto, que também é o código do status no frame (a placa escolhe nome e cor por ele)
+MC_ISSUE_ORDER = {"in_review": 0, "blocked": 1, "in_progress": 2, "todo": 3, "backlog": 4, "done": 5}
 _MC_DIR = re.compile(r"/multica_workspaces[^/]*/[^/]+/([a-z]+\d*-\d+)-[0-9a-f]{12}(?:/|$)")
-_mc = {"mc": None, "mcs": None, "alert": None, "titles": {}, "url": ""}
+_mc = {"mc": None, "mcs": None, "alert": None, "titles": {}, "url": "", "proj": [], "open": (-1, 0.0)}
 _mc_wake = threading.Event()
 
 
@@ -1117,7 +1131,7 @@ def mc_settings():
             s = json.load(f)
     except (OSError, ValueError):
         s = {}
-    return {"on": s.get("on", True), "ws": s.get("ws", ""), "mine": bool(s.get("mine"))}
+    return {"on": s.get("on", False), "ws": s.get("ws", "")}  # desligado até a pessoa ligar nos ajustes
 
 
 def mc_save(i=None, **kw):
@@ -1126,7 +1140,7 @@ def mc_save(i=None, **kw):
     with open(MULTICA_CFG, "w") as f:
         json.dump(s, f)
     if _mc["mcs"]:
-        _mc["mcs"] = _mc["mcs"] | {"on": int(s["on"]), "me": int(s["mine"])} | ({"i": i} if i is not None else {})
+        _mc["mcs"] = _mc["mcs"] | {"on": int(s["on"])} | ({"i": i} if i is not None else {})
     if not s["on"]:
         _mc["mc"] = None
     _mc_wake.set()
@@ -1173,6 +1187,26 @@ def mc_issues(ws):
     return issues
 
 
+def multica_link(url):
+    """O link da issue: no app desktop do Multica quando ele está instalado e ligado ao mesmo servidor, senão na web."""
+    try:
+        with open(MULTICA_DESKTOP_CFG) as f:
+            app = json.load(f).get("appUrl", "").rstrip("/")
+    except (OSError, ValueError):
+        app = ""
+    if app and url.startswith(app + "/") and os.path.isdir(MULTICA_APP):
+        return "multica://open/issue?url=" + urllib.parse.quote(url, safe="")
+    return url
+
+
+def mc_prs(state, wid, issue_id, now):
+    """Quantos PRs a issue tem, relido a cada 10 min."""
+    cache = state.setdefault("prs", {})
+    if issue_id not in cache or now - cache[issue_id][0] > 600:
+        cache[issue_id] = (now, len(mc_list(mc_cli("issue", "pull-requests", issue_id, ws=wid), "pull_requests")))
+    return cache[issue_id][1]
+
+
 def multica_issue(cwd):
     """A issue de uma sessão que o Multica abriu: a pasta da run é <workspace>/<issue>-<hash>/workdir."""
     m = _MC_DIR.search(cwd or "")
@@ -1203,58 +1237,70 @@ def multica_once(state):
     ids = [w.get("id") for w in wss]
     wid = s["ws"] if s["ws"] in ids else state.get("default") if state.get("default") in ids else ids[0] if ids else ""
     _mc["mcs"] = {"on": int(s["on"]), "w": [cut(w.get("name", ""), 32) for w in wss[:5]],
-                  "i": ids.index(wid) if wid in ids else 0, "me": int(s["mine"])}
+                  "i": ids.index(wid) if wid in ids else 0}
     if not s["on"] or not wid:
         _mc["mc"] = None
         return
-    if (wid, s["mine"]) != state.get("scope"):  # outro workspace ou filtro: começa sem avisos do que já existia
-        state.update(scope=(wid, s["mine"]), prev=None)
+    if wid != state.get("scope"):  # outro workspace: começa sem avisos do que já existia
+        state.update(scope=wid, prev=None, failed={}, working=set(), prs={})
     issues = mc_issues(wid)
     if issues is None:
         return  # servidor fora: fica a última leitura
     agents = mc_list(mc_cli("agent", "list", ws=wid), "agents")
     projects = mc_list(mc_cli("project", "list", ws=wid), "projects")
-    provider = {r.get("id"): r.get("provider", "") for r in mc_list(mc_cli("runtime", "list", ws=wid), "runtimes")}
     me, now = state.get("me"), time.time()
     my_agents = {a.get("id") for a in agents if a.get("owner_id") == me}
     # "suas" são as issues criadas por você ou atribuídas a você, a um agente seu ou a um squad de que você (ou um
     # agente seu) participa. Os squads mudam pouco: a lista de membros é relida de hora em hora
     if state.get("squads_of") != wid or now - state.get("squads_at", 0) > 3600:
         mine_ids = {me} | my_agents
-        state["squads"] = {sq.get("id") for sq in mc_list(mc_cli("squad", "list", ws=wid), "squads")
+        state["provider"] = {r.get("id"): r.get("provider", "") for r in mc_list(mc_cli("runtime", "list", ws=wid), "runtimes")}
+        squads = mc_list(mc_cli("squad", "list", ws=wid), "squads")
+        state["squad_names"] = {sq.get("id"): sq.get("name", "") for sq in squads}
+        state["squads"] = {sq.get("id") for sq in squads
                            if any(m.get("member_id") in mine_ids
                                   for m in mc_list(mc_cli("squad", "member", "list", sq.get("id", ""), ws=wid), "members"))}
         state.update(squads_of=wid, squads_at=now)
-    ours = {me} | my_agents | state["squads"]
+    ours, provider = {me} | my_agents | state["squads"], state["provider"]
     mine = lambda i: i.get("creator_id") in ours or i.get("assignee_id") in ours
-    if s["mine"]:
-        issues = [i for i in issues if mine(i)]
-        agents = [a for a in agents if a.get("id") in my_agents]
+    # a placa mostra só o seu trabalho: suas issues, as runs dos seus agentes ou nas suas issues, e os projetos
+    # que você lidera ou em que tem issue. As de todos ficam para achar a issue de uma run e nomear as sessões
     by_id = {i.get("id"): i for i in issues}
+    _mc["titles"] = {i.get("identifier", ""): i.get("title", "") for i in issues}
+    issues = [i for i in issues if mine(i)]
     names = {a.get("id"): a.get("name", "") for a in agents}
     pname = {p.get("id"): p.get("title", "") for p in projects}
-    week = now - 7 * 86400
     slug = next((w.get("slug", "") for w in wss if w.get("id") == wid), "")
     _mc["url"] = f"{state.get('app', '').rstrip('/')}/{slug}/issues/" if state.get("app") and slug else ""
-    _mc["titles"] = {i.get("identifier", ""): i.get("title", "") for i in issues}
 
-    counts = [0, 0, 0, 0]
-    for i in issues:
-        b = MC_BUCKET.get(i.get("status_category") or i.get("status"))
-        if b is not None and (b != 3 or mc_ts(i.get("updated_at")) >= week):  # Feito: só os da semana
-            counts[b] += 1
+    who_of = lambda i: "Você" if i.get("assignee_id") == me else names.get(i.get("assignee_id")) or \
+        state.get("squad_names", {}).get(i.get("assignee_id"), "")
+    mins = lambda ts: int((now - ts) // 60) if ts else -1
 
+    def row(kind, agent, prov, issue, ago, tok="--", attempt=1, prs=0, model="", err=""):
+        return [cut(agent, 24), prov, issue.get("identifier", ""), cut(plain(issue.get("title", "")), 60), kind, ago, tok,
+                cut(pname.get(issue.get("project_id"), ""), 32), MC_PRIORITY.get(issue.get("priority"), ""), attempt, prs,
+                model, err]
+
+    # as falhas das últimas 24 h ficam guardadas: o agente que falhou para de trabalhar e sai das próximas leituras
     runs, last = [], state.get("at", now)
+    failed = {k: f for k, f in state.get("failed", {}).items() if f[0] >= now - 86400}
+    working = {a.get("id") for a in agents if a.get("status") == "working"}
     for a in agents:
+        if a.get("id") not in working | state.get("working", set()):
+            continue
         for t in mc_list(mc_cli("agent", "tasks", a.get("id", ""), "--limit", "10", ws=wid), "tasks"):
             st, issue = t.get("status"), by_id.get(t.get("issue_id")) or {}
-            # os avisos são só das suas issues e dos seus agentes, com qualquer filtro: o do colega não pede nada a você
-            if (st == "failed" and state.get("prev") is not None and mc_ts(t.get("completed_at")) >= last - 5 and issue
-                    and (mine(issue) or a.get("id") in my_agents)):
-                tries = f"tentativa {t.get('attempt')} de {t.get('max_attempts')}" if t.get("max_attempts") else ""
-                mc_alert("fail", issue, " · ".join(x for x in (a.get("name", ""), tries) if x),
-                         cut(plain(str(t.get("error") or "")), 40))
-            if st in ("completed", "failed", "cancelled") or not issue:
+            ours_run = issue and (mine(issue) or a.get("id") in my_agents)
+            done_at = mc_ts(t.get("completed_at"))
+            tries = f"tentativa {t.get('attempt')} de {t.get('max_attempts')}" if t.get("max_attempts") else ""
+            err = cut(plain(str(t.get("error") or "")), 40)
+            if st == "failed" and ours_run and state.get("prev") is not None and done_at >= last - 5:
+                mc_alert("fail", issue, " · ".join(x for x in (a.get("name", ""), tries) if x), err)
+            if st == "failed" and ours_run and done_at >= now - 86400 and done_at > failed.get(issue.get("id"), (0,))[0]:
+                failed[issue.get("id")] = (done_at, row(3, a.get("name", ""), (provider.get(a.get("runtime_id")) or "").capitalize(),
+                                                         issue, mins(done_at), attempt=t.get("attempt") or 1, err=err))
+            if st in ("completed", "failed", "cancelled") or not ours_run:
                 continue
             usage = t.get("usage") if isinstance(t.get("usage"), list) else []
             tok = sum((u.get("input_tokens") or 0) + (u.get("output_tokens") or 0) + (u.get("cache_read_tokens") or 0)
@@ -1263,35 +1309,49 @@ def multica_once(state):
             start = mc_ts(t.get("started_at"))
             runs.append((0 if start else 1, -(start or mc_ts(t.get("created_at"))), a, t, issue, tok, model))
     runs.sort(key=lambda r: r[:2])
+    active = {r[4].get("id") for r in runs}
+    state.update(failed=failed, working=working)
+    failed = [f[1] for k, f in sorted(failed.items(), key=lambda kv: -kv[1][0]) if k not in active]  # já tentou de novo: sai
+    review = sorted((i for i in issues if i.get("status") == "in_review" and mine(i)), key=lambda i: -mc_ts(i.get("updated_at")))
     rows = []
-    for queued, neg_ts, a, t, issue, tok, model in runs[:4]:
-        prs = len(mc_list(mc_cli("issue", "pull-requests", issue.get("id", ""), ws=wid), "pull_requests")) if not queued else 0
-        rows.append([cut(a.get("name", ""), 24), (provider.get(a.get("runtime_id")) or "").capitalize(),
-                     issue.get("identifier", ""), cut(plain(issue.get("title", "")), 60), 0 if queued else 1,
-                     int((now + neg_ts) // 60), fmt_tokens(tok) if tok else "--", cut(pname.get(issue.get("project_id"), ""), 32),
-                     MC_PRIORITY.get(issue.get("priority"), ""), t.get("attempt") or 1, prs,
-                     model_label(model, None) if model else ""])
+    for queued, neg_ts, a, t, issue, tok, model in runs[:MC_LIST]:
+        prs = 0 if queued else mc_prs(state, wid, issue.get("id", ""), now)
+        rows.append(row(1 if queued else 0, a.get("name", ""), (provider.get(a.get("runtime_id")) or "").capitalize(), issue,
+                        int((now + neg_ts) // 60), fmt_tokens(tok) if tok else "--", t.get("attempt") or 1, prs,
+                        model_label(model, None) if model else ""))
+    rows += [row(2, who_of(i), "", i, mins(mc_ts(i.get("updated_at")))) for i in review[:MC_LIST]]
+    rows += failed[:MC_LIST]
+    running = sum(1 for r in runs if not r[0])
 
     prev = state.get("prev")
-    for i in issues:  # issue que chegou em revisão desde a última volta
+    for i in issues:  # issue sua que chegou em revisão desde a última volta
         if (prev is not None and i.get("status") == "in_review" and prev.get(i.get("id"), "in_review") != "in_review"
                 and mine(i)):
-            who = names.get(i.get("assignee_id"), "")
-            mc_alert("rev", i, who, "")
+            mc_alert("rev", i, who_of(i), "")
     state["prev"] = {i.get("id"): i.get("status") for i in issues}
     state["at"] = now
 
-    review = {}
+    # as issues de cada projeto, para quando a placa abrir um: as que pedem atenção primeiro, sem as canceladas
+    in_review = {}
     for i in issues:
         if i.get("status") == "in_review":
-            review[i.get("project_id")] = review.get(i.get("project_id"), 0) + 1
+            in_review[i.get("project_id")] = in_review.get(i.get("project_id"), 0) + 1
     order = {"in_progress": 0, "planned": 1, "paused": 2, "completed": 3}
-    pjs = sorted((p for p in projects if p.get("issue_count") and p.get("status") != "cancelled"),
-                 key=lambda p: (order.get(p.get("status"), 4), -(p.get("issue_count") or 0)))
-    _mc["mc"] = {"w": cut(next((w.get("name", "") for w in wss if w.get("id") == wid), ""), 32), "c": counts,
-                 "r": sum(1 for r in runs if not r[0]), "q": sum(1 for r in runs if r[0]), "a": rows,
+    my_projects = {i.get("project_id") for i in issues}
+    pjs = sorted((p for p in projects if p.get("issue_count") and p.get("status") != "cancelled"
+                  and (p.get("lead_id") in ours or p.get("id") in my_projects)),
+                 key=lambda p: (order.get(p.get("status"), 4), -(p.get("issue_count") or 0)))[:MC_PROJECTS]
+    by_project = {}
+    for i in sorted(issues, key=lambda i: (MC_ISSUE_ORDER.get(i.get("status"), 9), -mc_ts(i.get("updated_at")))):
+        if i.get("status") in MC_ISSUE_ORDER and len(by_project.setdefault(i.get("project_id"), [])) < MC_PROJECT_ISSUES:
+            by_project[i.get("project_id")].append(
+                [i.get("identifier", ""), cut(plain(i.get("title", "")), 48), MC_ISSUE_ORDER[i.get("status")], cut(who_of(i), 24),
+                 mins(mc_ts(i.get("updated_at")))])
+    _mc["proj"] = [by_project.get(p.get("id"), []) for p in pjs]
+    _mc["mc"] = {"w": cut(next((w.get("name", "") for w in wss if w.get("id") == wid), ""), 32), "r": running,
+                 "c": [running, len(runs) - running, len(review), len(failed)], "a": rows,
                  "p": [[cut(plain(p.get("title", "")), 32), MC_PROJECT.get(p.get("status"), p.get("status", "")),
-                        p.get("done_count") or 0, p.get("issue_count") or 0, review.get(p.get("id"), 0)] for p in pjs[:6]]}
+                        p.get("done_count") or 0, p.get("issue_count") or 0, in_review.get(p.get("id"), 0)] for p in pjs]}
 
 
 def multica_loop():
@@ -1305,7 +1365,7 @@ def multica_loop():
                 log(f"multica: {e!r}")
         else:
             _mc.update(mc=None, mcs=None)
-        _mc_wake.wait(MULTICA_EVERY)
+        _mc_wake.wait(MULTICA_EVERY if state.get("working") else MULTICA_IDLE_EVERY)
         _mc_wake.clear()
 
 
@@ -1315,6 +1375,9 @@ def multica_frame():
     f = {"mcs": _mc["mcs"]}
     if _mc["mc"]:
         f["mc"] = _mc["mc"]
+        k, at = _mc["open"]  # o projeto aberto na placa nos últimos 10 min: as issues dele vão junto
+        if 0 <= k < len(_mc["proj"]) and time.time() - at < 600:
+            f["mc"] = f["mc"] | {"pi": [k, _mc["proj"][k]]}
     a = _mc["alert"]
     if a and time.time() - a["at"] < MC_ALERT_SECS:
         f["mca"] = {k: v for k, v in a.items() if k != "at"}
@@ -1589,8 +1652,10 @@ def settle(port):
 def board_action(line):
     """Ação pedida pela placa. Na demonstração nada troca a sua conta; o ajuste Provedores pode, para as capturas."""
     parts = line.split()
-    if DEMO and len(parts) == 3 and parts[1] in ("mc", "mcme", "mcws") and parts[2].isdigit():  # o Multica do demo
-        _demo_mc[{"mc": "on", "mcme": "me", "mcws": "i"}[parts[1]]] = min(int(parts[2]), 1)
+    if DEMO and len(parts) == 3 and parts[1] == "mcproj" and parts[2].isdigit():  # o Multica do demo
+        _demo_mc["proj"] = int(parts[2])
+    elif DEMO and len(parts) == 3 and parts[1] in ("mc", "mcws") and parts[2].isdigit():
+        _demo_mc[{"mc": "on", "mcws": "i"}[parts[1]]] = min(int(parts[2]), 1)
     elif line.startswith("ACTION ") and (not DEMO or line.startswith("ACTION prov ")):
         run_action(line[7:].strip())
 
@@ -1735,7 +1800,8 @@ def demo_frame():
         f |= demo_multica(f)
     if not DEMO_CODEX:
         return f
-    mode = provider_mode()  # o ajuste Provedores vale também no demo, para as capturas de cada modo
+    # o ajuste Provedores vale também no demo; TOKENPULSE_DEMO_PROV escolhe um modo sem mexer no arquivo de verdade
+    mode = os.environ.get("TOKENPULSE_DEMO_PROV") or provider_mode()
     f |= {"prov": mode, "cxok": 1}
     if not os.path.exists(PROVIDERS):  # a pergunta do primeiro uso; TOKENPULSE_DEMO_ASK=codex simula um Mac sem Claude
         f["pask"] = os.environ.get("TOKENPULSE_DEMO_ASK", "both")
@@ -1765,7 +1831,7 @@ def demo_frame():
     return f
 
 
-_demo_mc = {"on": 1, "i": 0, "me": 0, "alert": 0}
+_demo_mc = {"on": 1, "i": 0}
 
 
 def demo_multica(f):
@@ -1775,15 +1841,28 @@ def demo_multica(f):
     f["sess"]["rows"] += [["TP-42 Refatorar o checkout", "Multica", "work", "3,4M", 0, i, "00000014", 0],
                           ["TP-47 Testes da API", "Multica", "work", "0,8M", 0, i, "00000015", 0]]
     f["sess"]["n"] += 2
-    out = {"mcs": {"on": _demo_mc["on"], "w": ["Acme Growth", "Pessoal"], "i": _demo_mc["i"], "me": _demo_mc["me"]}}
+    out = {"mcs": {"on": _demo_mc["on"], "w": ["Acme Growth", "Pessoal"], "i": _demo_mc["i"]}}
     if not _demo_mc["on"]:
         return out
-    out["mc"] = {"w": ["Acme Growth", "Pessoal"][_demo_mc["i"]], "c": [15, 3, 1, 5], "r": 2, "q": 1, "a": [
-        ["Opus Dev", "Claude", "TP-42", "Refatorar o checkout", 1, 12, "3,4M", "Checkout novo", "alta", 3, 1, "Opus 5.5"],
-        ["Codex Rev", "Codex", "TP-47", "Testes da API", 1, 3, "0,8M", "Checkout novo", "média", 1, 0, "gpt-6.1-sol"],
-        ["Sonnet Docs", "Claude", "TP-51", "Atualizar o README", 0, 1, "--", "Design system", "", 1, 0, ""]],
+    out["mc"] = {"w": ["Acme Growth", "Pessoal"][_demo_mc["i"]], "c": [2, 1, 2, 1], "r": 2, "a": [
+        ["Opus Dev", "Claude", "TP-42", "Refatorar o checkout", 0, 12, "3,4M", "Checkout novo", "alta", 3, 1, "Opus 5.5", ""],
+        ["Codex Rev", "Codex", "TP-47", "Testes da API", 0, 3, "0,8M", "Checkout novo", "média", 1, 0, "gpt-6.1-sol", ""],
+        ["Sonnet Docs", "Claude", "TP-53", "Gerar o changelog", 1, 1, "--", "Design system", "", 1, 0, "", ""],
+        ["Opus Dev", "", "TP-38", "Ajustar o webhook de pagamento", 2, 2, "--", "Checkout novo", "alta", 1, 0, "", ""],
+        ["Squad Front", "", "TP-44", "Cupom no carrinho", 2, 95, "--", "Checkout novo", "", 1, 0, "", ""],
+        ["Sonnet Docs", "Claude", "TP-51", "Atualizar o README", 3, 20, "--", "Design system", "", 2, 0, "", "exit 1 · npm test"]],
         "p": [["Checkout novo", "Em andamento", 12, 20, 1], ["Design system", "Em andamento", 5, 18, 0],
-              ["App mobile", "Planejado", 0, 9, 0], ["Infra 2027", "Concluído", 7, 7, 0]]}
+              ["Busca nova", "Em andamento", 3, 11, 1], ["Notificações", "Em andamento", 8, 10, 0],
+              ["App mobile", "Planejado", 0, 9, 0], ["Pagamentos v2", "Planejado", 0, 6, 0],
+              ["Infra 2027", "Concluído", 7, 7, 0]]}
+    if _demo_mc.get("proj", -1) >= 0:
+        out["mc"]["pi"] = [_demo_mc["proj"], [
+            ["TP-38", "Ajustar o webhook de pagamento", 0, "Opus Dev", 2], ["TP-49", "Taxa de entrega por CEP", 1, "Você", 300],
+            ["TP-42", "Refatorar o checkout", 2, "Opus Dev", 12], ["TP-47", "Testes da API", 2, "Codex Rev", 3],
+            ["TP-57", "Parcelamento no cartão", 3, "Squad Front", 60], ["TP-55", "Dark mode no painel", 4, "", 1440],
+            ["TP-58", "Frete grátis acima de R$ 200", 3, "", 2000], ["TP-59", "Resumo do pedido no e-mail", 4, "", 3000],
+            ["TP-60", "Cupom por categoria", 4, "Squad Front", 4000], ["TP-61", "Limite de itens no carrinho", 4, "", 5000],
+            ["TP-31", "Login com passkey", 5, "Você", 2880]]]
     kind = os.environ.get("TOKENPULSE_DEMO_MC_ALERT", "")
     if kind == "rev":
         out["mca"] = {"id": 1, "k": "rev", "i": "TP-38", "t": "Ajustar o webhook de pagamento", "m": "TP-38 · Opus Dev", "x": ""}
@@ -1844,6 +1923,13 @@ def in_background(board, job):
 
     board.busy = True
     threading.Thread(target=run, daemon=True).start()
+
+
+def waiting(board):
+    try:
+        return not board.busy and board.ser.in_waiting > 0
+    except (OSError, serial.SerialException):
+        return True  # a placa saiu: o serve() descobre e tira da lista
 
 
 def serve(board, frame):
@@ -1998,6 +2084,8 @@ def net_loop():
             slim = {k: frame[k] for k in NET_KEYS if k in frame}
             # o detalhe por modelo usa tudo: tokens, %, entrada, saída, cache lido e escrito, custo e projetos
             slim["mods"] = slim.get("mods", [])[:3]
+            if "mc" in slim:  # o SmallTV mostra só os números e o primeiro agente: o resto pesaria no heap dele
+                slim["mc"] = {k: v for k, v in slim["mc"].items() if k in ("c", "r")} | {"a": slim["mc"]["a"][:1]}
             slim["ses"], slim["sesn"] = session_list(frame)
             slim["agv"] = AGENT  # a página da placa mostra a versão do agente ao lado da do firmware
             body = json.dumps(slim, ensure_ascii=False).encode()
@@ -2106,8 +2194,14 @@ def main():
             if not serve(board, frame):
                 del boards[path]
                 save_boards(boards)
-        if _wake.wait(1):
-            time.sleep(0.1)  # junta uma rajada de eventos do herdr num frame só
+        # até 1 s de espera, mas acorda antes com evento do herdr ou com a placa mandando algo (um toque que pede
+        # para abrir a issue não espera o próximo frame)
+        for _ in range(10):
+            if _wake.wait(0.1):
+                time.sleep(0.1)  # junta uma rajada de eventos do herdr num frame só
+                break
+            if any(waiting(b) for b in boards.values()):
+                break
 
 
 if __name__ == "__main__":

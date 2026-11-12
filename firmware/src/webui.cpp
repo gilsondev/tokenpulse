@@ -88,7 +88,7 @@ void handleConfig() {
     if (m != "auto" && m != "claude" && m != "codex" && m != "both") return server.send(400, "text/plain", "Provedor inválido.");
     hostlink::action(("ACTION prov " + m).c_str());
   }
-  for (const char* k : {"mc", "mcws", "mcme"})  // o ajuste Multica também mora no daemon
+  for (const char* k : {"mc", "mcws"})  // o ajuste Multica também mora no daemon
     if (server.hasArg(k)) hostlink::action((String("ACTION ") + k + " " + constrain(server.arg(k).toInt(), 0, 4)).c_str());
   if (server.hasArg("host")) {
     String h = server.arg("host");

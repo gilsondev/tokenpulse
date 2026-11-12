@@ -67,7 +67,7 @@ bool mainStep(int dir) {
 
 // O Multica é uma face a mais da página de sessões, depois da última página da lista de workspaces: as outras
 // páginas mantêm os números de sempre. Dentro dele, a página, os projetos (view 1) ou a issue de um agente (view 2).
-int mcFace = 0, mcView = 0;
+int mcFace = 0, mcView = 0, mcFilter = 0, mcProj = 0;  // mcFilter: o número escolhido; mcProj: o projeto aberto
 String mcIssue;  // a issue aberta, pelo identificador: o daemon reordena os agentes a cada leitura
 bool hasMulti() { return !app::frame["mc"].isNull(); }
 bool mcIssueLive() {
@@ -78,7 +78,7 @@ bool mcIssueLive() {
 bool multiStep(int dir) {
   if (!gfx::full() || page != 1 || sessWs >= 0 || !hasMulti()) return false;
   if (dir > 0 && !mcFace && sessScroll >= tall::pagesOf(-1) - 1) mcFace = 1, mcView = 0;
-  else if (dir < 0 && mcFace && mcView) mcView = 0;
+  else if (dir < 0 && mcFace && mcView) mcView = mcView == 3 ? 1 : 0;  // as issues de um projeto voltam aos projetos
   else if (dir < 0 && mcFace) mcFace = 0;
   else return false;
   gfx::slide(-dir);
@@ -674,7 +674,7 @@ void render() {
       else if (about) tall::drawAbout(live, about == 2);
       else tall::drawSettings(live);
     } else if (gfx::full()) {
-      if (page == 1 && mcFace) tall::drawMulti(live, mcView, mcIssue.c_str());
+      if (page == 1 && mcFace) tall::drawMulti(live, mcView, mcIssue.c_str(), mcView == 3 ? mcProj : mcFilter);
       else if (page == 1) tall::drawSessions(live, page, sessWs, sessScroll);
       else if (page == 2 && detail >= 0) tall::drawModelDetail(live, page, detail);
       else if (page == 2) tall::drawModels(live, page);
@@ -720,6 +720,7 @@ void prev() {
 void scroll(int dir) {  // arrastar na vertical rola o Sobre ou passa as páginas de sessões
   if (settingsOpen && (about == 1 || about == 2)) return void(tall::aboutScroll(dir));
   if (settingsOpen && !about) return void(tall::settingsScroll(dir));
+  if (page == 1 && mcFace && mcView != 2) return void(tall::multiScroll(dir, mcView));
   sessionStep(dir);
 }
 
@@ -793,17 +794,36 @@ void tap(int x, int y) {
     return;
   }
   if (page == 1 && mcFace) {
-    if (mcView) {  // projetos ou issue: o toque volta para a página
-      mcView = 0, gfx::slide(1), anim::reset();
-      return;
+    auto open = [](int view, int dir) { mcView = view, gfx::slide(dir), anim::reset(); };
+    if (mcView == 3) {  // issues do projeto: a tocada abre no Mac; o título volta para os projetos
+      const int i = tall::mcListTap(x, y);
+      if (i == -2) return open(1, 1);
+      if (i < 0) return;
+      char cmd[40];
+      snprintf(cmd, sizeof cmd, "ACTION mcopen %s", (const char*)(app::frame["mc"]["pi"][1][i][0] | ""));
+      return void(hostlink::action(cmd));
     }
+    if (mcView == 1) {  // projetos: o tocado abre as issues dele (o daemon passa a mandá-las); o resto volta
+      const int p = tall::mcProjTap(x, y);
+      if (p < 0) return open(0, 1);
+      char cmd[24];
+      snprintf(cmd, sizeof cmd, "ACTION mcproj %d", p);
+      hostlink::action(cmd);
+      mcProj = p;
+      tall::multiFilter();
+      return open(3, -1);
+    }
+    if (mcView == 2) return open(0, 1);  // o detalhe de um cartão: o toque volta
     const int t = tall::multiTap(x, y);
     if (t == -1) return next();
-    mcView = t == -2 ? 1 : 2;
-    if (t >= 0) mcIssue = app::frame["mc"]["a"][t][2] | "";
-    gfx::slide(-1);
-    anim::reset();
-    return;
+    if (t <= -10) {  // um número: filtra os cartões na mesma tela
+      mcFilter = -10 - t;
+      tall::multiFilter();
+      return anim::reset();
+    }
+    if (t == -2) return tall::multiFilter(), open(1, -1);
+    mcIssue = app::frame["mc"]["a"][t][2] | "";
+    return open(2, -1);
   }
   if (page == 1 && sessWs >= 0) {
     if (tall::backAt(x, y)) return closeWs();  // o título: volta para a lista

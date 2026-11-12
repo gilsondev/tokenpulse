@@ -81,7 +81,7 @@ void handleConfig() {
     if (m != "auto" && m != "claude" && m != "codex" && m != "both") return server.send(400, "text/plain", "Provedor inválido.");
     pendingAct = "prov " + m;
   }
-  for (const char* k : {"mc", "mcws", "mcme"})
+  for (const char* k : {"mc", "mcws"})
     if (server.hasArg(k)) pendingAct = String(k) + " " + constrain(server.arg(k).toInt(), 0, 4);
   if (server.hasArg("host")) {
     String h = server.arg("host");

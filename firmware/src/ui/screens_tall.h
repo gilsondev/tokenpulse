@@ -17,8 +17,14 @@ void drawWaiting();
 void drawShutdown(float p);  // PWR segurado: p de 0 a 1 até a PMU desligar
 void drawAttention(int r, uint32_t ageMs);  // a sessão (índice em sess.rows) que passou a esperar você
 bool attentionCenter(int x, int y);           // o toque caiu no botão "abrir no Mac" do destaque
-void drawMulti(bool live, int view, const char* issue);  // view 0 a página, 1 os projetos, 2 a issue do agente
-int multiTap(int x, int y);  // na página: o agente tocado (índice em mc.a), -2 a linha dos projetos, -1 nada
+// view 0 a página (sel: o número que filtra os cartões), 1 os projetos, 2 o detalhe de um cartão, 3 as issues
+// do projeto sel
+void drawMulti(bool live, int view, const char* issue, int sel);
+int multiTap(int x, int y);    // na página: o cartão (índice em mc.a), -2 os projetos, -10 - k o número k, -1 nada
+bool multiScroll(int dir, int view);  // arrastar na vertical rola a lista da view (cartões, projetos, issues): +1 desce
+void multiFilter();            // trocou o filtro ou abriu outra lista: as listas voltam para o começo
+int mcProjTap(int x, int y);   // nos projetos: o projeto tocado, -2 o título, -1 nada
+int mcListTap(int x, int y);   // nas issues do projeto: a issue (índice em mc.pi[1]), -2 o título, -1 nada
 void drawMcAlert(uint32_t ageMs);  // o aviso do Multica (bloco "mca"): issue em revisão ou run que falhou
 void drawProvAsk();                          // primeiro uso com o Codex no Mac: quais provedores mostrar
 const char* provAskTap(int x, int y);        // o modo escolhido no toque ("both", "claude", "codex", "auto"), ou nullptr
