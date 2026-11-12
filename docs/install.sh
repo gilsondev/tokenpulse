@@ -73,7 +73,8 @@ main() {  # numa função: com curl | bash, nada roda antes de o script chegar i
   printf "Procurando a placa"
   local boards="$HOME/.claude/esp-tokens-boards.json" found=""
   for _ in $(seq 1 30); do
-    found=$("$(command -v /usr/bin/python3 python3 | head -1)" -c 'import json,sys; b=json.load(open(sys.argv[1])); print("\n".join(f"{k} {v.get(\"fw\",\"\")}" for k,v in b.items()))' "$boards" 2>/dev/null || true)
+    found=$("$(command -v /usr/bin/python3 python3 | head -1)" -c 'import json,sys
+for k, v in json.load(open(sys.argv[1])).items(): print(k, v.get("fw", ""))' "$boards" 2>/dev/null || true)
     [ -n "$found" ] && break
     printf "."
     sleep 2
