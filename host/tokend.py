@@ -904,8 +904,12 @@ async def ble_main():
             await asyncio.sleep(5)
             continue
         try:
-            dev = await BleakScanner.find_device_by_filter(
-                lambda d, ad: (ad.local_name or d.name) in targets, timeout=8, service_uuids=[BLE_SERVICE])
+            found = {}  # o nome anunciado agora: d.name pode ser o nome antigo que o macOS guardou
+
+            def match(d, ad):
+                found["name"] = ad.local_name or d.name
+                return found["name"] in targets
+            dev = await BleakScanner.find_device_by_filter(match, timeout=8, service_uuids=[BLE_SERVICE])
         except Exception as e:  # Bluetooth desligado
             print(f"log bluetooth: {e}", flush=True)
             await asyncio.sleep(60)
@@ -913,7 +917,7 @@ async def ble_main():
         if not dev:
             await asyncio.sleep(10)
             continue
-        name, buf = dev.name, b""
+        name, buf = found.get("name", dev.name), b""
 
         def on_tx(_, data):
             nonlocal buf
@@ -952,7 +956,7 @@ def ble_worker():
             if kind == "frame":
                 _ble_frame["line"] = (rest + "\n").encode()
             elif kind == "usb":
-                _usb_ble = set(rest.split()) if rest else set()
+                _usb_ble = set(rest.split("\t")) if rest else set()  # tab: o nome tem espaços
         os._exit(0)  # o daemon fechou o pipe: acabou
     threading.Thread(target=read_stdin, daemon=True).start()
     asyncio.run(ble_main())
@@ -982,7 +986,7 @@ def ble_loop():
         try:
             while proc.poll() is None:
                 if frame := _latest.get("frame"):
-                    proc.stdin.write("usb " + " ".join(sorted(_usb_ble)) + "\n")
+                    proc.stdin.write("usb " + "\t".join(sorted(_usb_ble)) + "\n")
                     proc.stdin.write("frame " + encode_frame(frame).decode().rstrip("\n") + "\n")
                     proc.stdin.flush()
                 time.sleep(1)
