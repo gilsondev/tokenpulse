@@ -53,6 +53,7 @@ PROJECTS = os.path.join(HOME, ".claude/projects/**/*.jsonl")  # ** inclui <sess�
 STATUS = os.path.join(HOME, ".claude/esp-tokens-status.json")
 ACCOUNT = os.path.join(HOME, ".claude.json")
 SHOT_DIR = os.path.join(HOME, ".claude/esp-tokens-shot")  # o shot.sh grava <placa> com {"cmds": [...], "out": "x.png"}
+OTA_CONFIRM = 25  # s: o firmware marca a imagem nova como boa aos 20 s (main.cpp)
 OTA_DIR = os.path.join(HOME, ".claude/esp-tokens-ota")  # o flash.sh grava <placa> com o caminho do .bin
 NET_ACTIONS = {"prov", "mc", "mcws", "lskip", "update"}  # o que a página do SmallTV pede; trocar de conta é só no cabo
 KEYS = os.path.join(HOME, ".claude/esp-tokens-keys.json")  # o token de cada placa de WiFi, entregue no /hello; só este usuário lê
@@ -1510,6 +1511,7 @@ class Board:
         self.buf = b""  # linha da placa ainda sem o \n
         self.busy = False  # OTA ou screenshot rodando numa thread: o laço principal não mexe na porta
         self.gone = False  # a thread acabou com a porta (OTA reiniciou a placa, ou deu erro): reconectar
+        self.bridge = False  # conversor USB-serial (CH340): abrir a porta reinicia o ESP32
         self.caps = []  # o que o firmware entende além dos frames ("wifi"), vindo do hello
         self.out = None  # linha para mandar antes do próximo frame (o WiFi do computador): nunca vai para o log
 
@@ -1690,6 +1692,7 @@ def connect(path, vid):
                     board = Board(path, ser, hello["board"], hello.get("fw", ""), hello.get("ble", ""),
                                   hello.get("reset", ""))
                     board.caps = hello.get("caps", [])
+                    board.bridge = vid != ESPRESSIF_VID
                     if board.ble:
                         remember_ble(board.ble)
                     return board
@@ -2255,6 +2258,10 @@ def serve(board, frame):
                 t0 = time.time()
                 err = ota(board.ser, path)
                 board.log(f"ota: {err or 'ok'} ({path}, {time.time() - t0:.0f} s)")
+                # o firmware novo só se confirma depois de 20 s rodando; reabrir a porta da ponte antes disso
+                # reinicia a placa, e o bootloader volta para a versão anterior
+                if not err and board.bridge:
+                    time.sleep(OTA_CONFIRM)
                 board.gone = True  # a placa reinicia; volta pelo handshake
             in_background(board, ota_job)
             return True
