@@ -524,6 +524,26 @@ bool loginOpen() { return !app::frame["lask"].isNull() && !loginDone; }
 
 // Versão nova: a placa pergunta uma vez por versão; "Depois" esconde até a próxima.
 bool onboarding() { return askOpen() || mcAskOpen() || loginOpen(); }
+
+// Qual lado fica embaixo: a primeira pergunta, antes do QR da instalação, nas placas com toque que não giram
+// sozinhas. Depois do toque, a tela já gira e pede confirmação; sem resposta em 20 s, fica como está.
+uint32_t orientConfirmMs = 0;
+bool orientOpen() {
+  return gfx::full() && board::PROFILE.touch && !board::PROFILE.imu && board::ROTATIONS > 1 && !settings::web.orientSet;
+}
+void orientTap(int x, int y) {
+  const bool confirm = orientConfirmMs;
+  const int r = tall::orientTap(x, y, confirm);
+  if (r < 0) return;
+  if (confirm && r == 2) return void(orientConfirmMs = 0);
+  if (confirm) return void((settings::web.orientSet = 1, settings::saveWeb()));
+  // a borda tocada vai para baixo: girar a tela um quarto no sentido horário leva a borda da esquerda para baixo
+  const uint8_t now = settings::v.orient;
+  settings::v.orient = board::ROTATIONS == 4 ? (now + (r == 3 ? 1 : r == 2 ? 2 : r == 1 ? 3 : 0)) % 4 : r;
+  settings::save();
+  gfx::setRotation(settings::v.orient);
+  orientConfirmMs = millis();
+}
 bool updShown();
 // "Depois" pergunta de novo em 24 h.
 String updSeen, updTarget;  // updTarget: a versão pedida no "Atualizar agora", até o firmware novo gravar
@@ -658,6 +678,11 @@ void render() {
   webDone();
   if (millis() < holdUntil) return;
   power::update();
+  if (orientOpen()) {
+    if (orientConfirmMs && millis() - orientConfirmMs > 20000) settings::web.orientSet = 1, settings::saveWeb();
+    const int left = 20 - (millis() - orientConfirmMs) / 1000;
+    return gfx::frame([left] { tall::drawOrient(orientConfirmMs, left); });
+  }
   if (shutHeldMs > 500 && gfx::full()) {  // o main desliga a placa aos 2 s
     const float p = min(1.f, (shutHeldMs - 500) / 1500.f);
     return gfx::frame([p] { tall::drawShutdown(p); });
@@ -752,6 +777,7 @@ void scroll(int dir) {  // arrastar na vertical rola o Sobre ou passa as página
 }
 
 void tap(int x, int y) {
+  if (orientOpen()) return orientTap(x, y);
   if (const int r = attentionRow(); r >= 0 && gfx::full()) {  // destaque: o botão traz a sessão, o resto fecha
     if (tall::attentionCenter(x, y)) tall::focusRow(r);
     return dismissAttention();

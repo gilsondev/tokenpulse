@@ -2414,6 +2414,74 @@ void drawUpdate() {
     text(labels[k], cx, updBtnY(k) + bh / 2, fontFor(bh) == gfx::SMALL ? gfx::LABEL : fontFor(bh), k ? TEXT : BG, middle_center, c);
   }
 }
+// Primeiro uso numa placa sem acelerômetro: qual lado fica embaixo. A placa não sabe para que lado a pessoa olha,
+// então cada borda tem uma faixa escrita para ser lida quando aquela borda está embaixo: só uma aparece em pé, e é
+// nela que se toca. Com duas posições (em pé ou deitada), dois desenhos da placa no lugar das faixas.
+int ORIENT_BAND() { return max(u(44), TAPPX()); }
+
+void drawOrient(bool confirm, int secsLeft) {
+  gfx::clear();
+  const int w = W(), h = gfx::height(), b = ORIENT_BAND(), cx = w / 2, cy = h / 2;
+  if (confirm) {
+    text("Ficou certo?", cx, cy - u(56), gfx::TITLE, TEXT, middle_center);
+    const int bh = max(u(44), TAPPX()), bw = min(w - 2 * M(), u(260));
+    fb().fillSmoothRoundRect(cx - bw / 2, cy - u(24), bw, bh, bh / 2, ACCENT);
+    text("Sim, está certo", cx, cy - u(24) + bh / 2, gfx::LABEL, BG, middle_center, ACCENT);
+    const uint16_t sec = blend(BG, TRACK, 0.7f);
+    fb().fillSmoothRoundRect(cx - bw / 2, cy - u(24) + bh + u(10), bw, bh, bh / 2, sec);
+    text("Escolher de novo", cx, cy - u(14) + bh * 3 / 2, gfx::LABEL, TEXT, middle_center, sec);
+    char buf[40];
+    snprintf(buf, sizeof buf, "Fica assim em %d s", max(secsLeft, 0));
+    text(buf, cx, h - u(20), gfx::SMALL, DIM, middle_center);
+    return;
+  }
+  const uint16_t band = blend(BG, ACCENT, 0.18f);
+  if (board::ROTATIONS == 4) {
+    fb().fillSmoothRoundRect(u(6), h - b - u(6), w - u(12), b, u(10), band);    // embaixo
+    fb().fillSmoothRoundRect(u(6), u(6), w - u(12), b, u(10), band);            // em cima
+    fb().fillSmoothRoundRect(u(6), b + u(12), b, h - 2 * b - u(24), u(10), band);  // esquerda
+    fb().fillSmoothRoundRect(w - b - u(6), b + u(12), b, h - 2 * b - u(24), u(10), band);  // direita
+    const char* t = "Este lado fica embaixo";
+    gfx::textTurned(t, cx, h - u(6) - b / 2, 0, gfx::LABEL, ACCENT, band);
+    gfx::textTurned(t, cx, u(6) + b / 2, 2, gfx::LABEL, ACCENT, band);
+    gfx::textTurned(t, u(6) + b / 2, cy, 1, gfx::SMALL, ACCENT, band);
+    gfx::textTurned(t, w - u(6) - b / 2, cy, 3, gfx::SMALL, ACCENT, band);
+    return;
+  }
+  text("Como ela vai ficar?", cx, u(40), gfx::TITLE, TEXT, middle_center);
+  const int pw = min((w - 3 * M()) / 2, u(130)), ph = pw * 4 / 3, top = cy - ph / 2;
+  for (int k = 0; k < 2; k++) {
+    const int x = cx + (k ? M() / 2 : -M() / 2 - pw), on = settings::v.orient == k;
+    fb().fillSmoothRoundRect(x, top, pw, ph, u(14), on ? blend(BG, ACCENT, 0.18f) : blend(BG, TRACK, 0.7f));
+    const int fw = k ? pw * 2 / 3 : pw / 2, fh = k ? pw / 2 : pw * 2 / 3;  // a placa em pé ou deitada
+    fb().fillSmoothRoundRect(x + (pw - fw) / 2, top + u(16), fw, fh, u(4), on ? ACCENT : MUTED);
+    text(k ? "Deitada" : "Em pé", x + pw / 2, top + ph - u(22), gfx::LABEL, TEXT, middle_center);
+  }
+  text("Toque no desenho que parece com a sua mesa", cx, h - u(24), gfx::SMALL, MUTED, middle_center);
+}
+
+// Na escolha: a borda tocada (0 embaixo, 1 direita, 2 em cima, 3 esquerda) ou a posição (0 em pé, 1 deitada);
+// na confirmação: 1 sim, 2 escolher de novo. -1: nada.
+int orientTap(int x, int y, bool confirm) {
+  const int w = W(), h = gfx::height(), b = ORIENT_BAND() + u(6), cx = w / 2, cy = gfx::height() / 2;
+  if (confirm) {
+    const int bh = max(u(44), TAPPX());
+    if (y >= cy - u(24) && y < cy - u(24) + bh) return 1;
+    if (y >= cy - u(14) + bh && y < cy - u(14) + 2 * bh) return 2;
+    return -1;
+  }
+  if (board::ROTATIONS == 4) {
+    if (y >= h - b) return 0;
+    if (y < b) return 2;
+    if (x < b) return 3;
+    if (x >= w - b) return 1;
+    return -1;
+  }
+  const int pw = min((w - 3 * M()) / 2, u(130)), ph = pw * 4 / 3, top = cy - ph / 2;
+  if (y < top || y >= top + ph) return -1;
+  return x < cx ? 0 : 1;
+}
+
 // Depois do "Atualizar agora": o que já foi e o que falta, até a contagem do firmware assumir a tela. O primeiro
 // passo fica pronto quando o daemon que fala com a placa já é a versão nova (agv no frame).
 void drawUpdating(const char* target) {

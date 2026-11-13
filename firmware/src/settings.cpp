@@ -1,5 +1,7 @@
 #include "settings.h"
 
+#include <stddef.h>
+
 #include <Preferences.h>
 
 #include "boards/board.h"
@@ -30,6 +32,8 @@ void begin() {
   const size_t n = prefs.getBytesLength("web");
   if (n && n <= sizeof w && prefs.getBytes("web", &w, n) == n) {
     w.host[sizeof w.host - 1] = 0;
+    // placa que já estava em uso antes da pergunta da posição: não pergunta depois da atualização
+    if (n <= offsetof(Web, orientSet)) w.orientSet = 1;
     const Web d;
     web = w;
     if (web.interval > 120) web.interval = d.interval;

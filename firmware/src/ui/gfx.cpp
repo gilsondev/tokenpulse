@@ -378,6 +378,22 @@ void fontOn(LGFX_Sprite& s, Font f) {
   if (full() && vlwOk) s.setFont(&(uiClass == MEDIUM ? vlwM : vlw)[sized(f)].font);
 }
 
+void textTurned(const char* s, int cx, int cy, int quarter, Font f, uint16_t c, uint16_t bg) {
+  if (!(quarter & 3)) return text(s, cx, cy, f, c, middle_center, bg);
+  setFont(f);
+  const int w = S().textWidth(s) + 2 * S().fontHeight(), h = 2 * S().fontHeight();
+  LGFX_Sprite spr(&S());
+  spr.setColorDepth(16);
+  if (!spr.createSprite(w, h)) return;
+  spr.fillScreen(bg);
+  spr.setFont(S().getFont());
+  spr.setTextDatum(middle_center);
+  spr.setTextColor(c, bg);
+  spr.drawString(s, w / 2, h / 2);
+  spr.pushRotateZoom(&S(), cx, cy, 90.f * (quarter & 3), 1.f, 1.f);
+  spr.deleteSprite();
+}
+
 int textWidth(const char* s, Font f) {
   setFont(f);
   return S().textWidth(s);

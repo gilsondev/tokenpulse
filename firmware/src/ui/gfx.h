@@ -50,6 +50,8 @@ void slide(int dir);
 enum Font : uint8_t { SMALL, LABEL, TITLE, NUM, HERO };
 // bg: a cor sob o texto (o texto pronto fica guardado já misturado com ela)
 void text(const char* s, int x, int y, Font f, uint16_t c, uint8_t datum = top_left, uint16_t bg = color::BG);
+// texto centrado em (cx, cy), girado `quarter` × 90° no sentido horário (a pergunta de qual lado fica embaixo)
+void textTurned(const char* s, int cx, int cy, int quarter, Font f, uint16_t c, uint16_t bg);
 int textWidth(const char* s, Font f);
 void fontOn(LGFX_Sprite& s, Font f);  // a mesma fonte, para desenhar num sprite próprio
 int lineHeight(Font f);  // altura de uma linha da fonte, em pixels

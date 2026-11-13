@@ -122,6 +122,9 @@ void handle(const String& line) {
   } else if (line == "unpair") {  // volta ao primeiro uso (o QR da instalação no boot), para testar a jornada
     settings::web.paired = 0;
     settings::saveWeb();
+  } else if (line == "reorient") {  // pergunta de novo qual lado fica embaixo, para testar o primeiro uso
+    settings::web.orientSet = 0;
+    settings::saveWeb();
   } else if (line == "rest") {  // descanso na hora, para testar e capturar
     power::rest();
   } else if (line.startsWith("play ")) {  // prévia de um som do alerta (sound.h)
