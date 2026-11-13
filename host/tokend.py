@@ -1899,6 +1899,8 @@ def update_frame():
     """"upd": a versão nova, quando o release do GitHub passa a deste daemon. A placa pergunta se atualiza."""
     latest = os.environ.get("TOKENPULSE_LATEST") or _rel["latest"]
     mine = vtuple(RELEASE)
+    if _rel.get("updating"):  # o install.sh já está rodando: todas as placas mostram o progresso, não só a tocada
+        return {"updg": _rel["updating"]}
     return {"upd": latest} if mine and vtuple(latest) and vtuple(latest) > mine else {}
 
 
@@ -1908,6 +1910,8 @@ def run_update():
     if not installed():
         return log("atualizar: daemon rodando do clone, use git pull")
     log("atualizar: rodando o install.sh")
+    _rel["updating"] = os.environ.get("TOKENPULSE_LATEST") or _rel["latest"]
+    _wake.set()  # o aviso sai para as placas antes de o install.sh reiniciar este daemon
     os.makedirs(LOG_DIR, exist_ok=True)
     with open(os.path.join(LOG_DIR, "tokenpulse-update.log"), "a") as out:
         subprocess.Popen(["/bin/bash", "-c", "curl -fsSL --retry 3 --retry-all-errors "

@@ -702,8 +702,15 @@ void render() {
   if (const int r = attentionRow(); r >= 0 && gfx::full() && !settingsOpen && app::hasData())
     return gfx::frame([r] { tall::drawAttention(r, millis() - attnMs); });
   if (gfx::full() && !app::frame["fwup"].isNull()) return updatingMs = 0, gfx::frame(tall::drawFwUp);
-  // pediu a atualização: o progresso até a contagem do firmware chegar (2 min no máximo, se algo falhar no caminho)
-  if (gfx::full() && updatingMs && millis() - updatingMs < 120000) return gfx::frame([] { tall::drawUpdating(updTarget.c_str()); });
+  // o daemon avisou que está se atualizando (qualquer placa tocou): o progresso aparece em todas
+  if (const char* u = app::frame["updg"] | ""; *u && !updatingMs) updatingMs = millis(), updTarget = u;
+  // o progresso até a contagem do firmware chegar. Sai sozinho em 2 min, ou 30 s depois de o programa novo
+  // falar com a placa sem mandar firmware (a placa já está na versão, ou roda um firmware de desenvolvimento)
+  static uint32_t agentOkMs = 0;
+  if (updatingMs && updTarget == (const char*)(app::frame["agv"] | "")) agentOkMs = agentOkMs ? agentOkMs : millis();
+  else agentOkMs = 0;
+  if (updatingMs && (millis() - updatingMs > 120000 || (agentOkMs && millis() - agentOkMs > 30000))) updatingMs = 0;
+  if (gfx::full() && updatingMs) return gfx::frame([] { tall::drawUpdating(updTarget.c_str()); });
   if (mcAlertOpen() && !settingsOpen) return gfx::frame([] { tall::drawMcAlert(millis() - mcaMs); });
   if (askOpen() && !settingsOpen && app::hasData()) return gfx::frame([] { gfx::full() ? tall::drawProvAsk() : drawAsk(); });
   if (gfx::full() && mcAskOpen() && !settingsOpen && app::hasData()) return gfx::frame(tall::drawMcAsk);
