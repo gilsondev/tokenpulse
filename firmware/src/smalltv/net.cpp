@@ -146,6 +146,13 @@ void handleScan() {
   server.send(200, "application/json", scanJson);
 }
 
+// O disconnect(true) só desliga o rádio: a rede fica gravada pelo SDK e volta no boot seguinte. Apagar a
+// configuração do SDK é o que faz a placa abrir o próprio WiFi na casa de outra pessoa.
+void forgetNetwork() {
+  WiFi.disconnect(true);
+  ESP.eraseConfig();
+}
+
 void handleWifi() {
   if (!ap_on) return server.send(403, "text/plain", "só pelo WiFi de configuração da placa\n");
   joinSsid = server.arg("ssid");
@@ -239,12 +246,12 @@ void begin() {
     server.send(204);
     config::v = config::Values();
     config::save();
-    WiFi.disconnect(true);
+    forgetNetwork();
     rebootAtMs = millis() + 500;
   });
   server.on("/api/forget", HTTP_POST, [] {  // apaga a rede gravada: no próximo boot a placa abre o AP
     server.send(204);
-    WiFi.disconnect(true);
+    forgetNetwork();
     rebootAtMs = millis() + 500;
   });
   server.on("/wifi", HTTP_POST, handleWifi);
