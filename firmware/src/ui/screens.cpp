@@ -548,12 +548,12 @@ void orientTap(int x, int y) {
   orientConfirmMs = millis();
 }
 bool updShown();
-// "Depois" pergunta de novo em 24 h.
+// "Depois" pergunta de novo em 6 h, o mesmo intervalo em que o daemon procura versão nova.
 String updSeen, updTarget;  // updTarget: a versão pedida no "Atualizar agora", até o firmware novo gravar
 uint32_t updLaterMs = 0, updatingMs = 0;
 bool updOpen() {
   const char* v = app::frame["upd"] | "";
-  return *v && (updSeen != v || millis() - updLaterMs > 24UL * 3600 * 1000);
+  return *v && (updSeen != v || millis() - updLaterMs > 6UL * 3600 * 1000);
 }
 bool updShown() { return updOpen() && !onboarding(); }
 
@@ -718,7 +718,15 @@ void render() {
   if (gfx::full() && mcAskOpen() && !settingsOpen && app::hasData()) return gfx::frame(tall::drawMcAsk);
   if (gfx::full() && loginOpen() && !settingsOpen && app::hasData()) return gfx::frame(tall::drawLoginAsk);
   // a versão nova só depois das perguntas do primeiro uso: atualizar no meio delas não faz sentido
-  if (gfx::full() && updShown() && !settingsOpen && app::hasData()) return gfx::frame(tall::drawUpdate);
+  // sem resposta em 30 s vale como "Depois": a tela não fica presa esperando alguém
+  static uint32_t updAskMs = 0;
+  if (gfx::full() && updShown() && !settingsOpen && app::hasData()) {
+    if (!updAskMs) updAskMs = millis();
+    const int left = 30 - (millis() - updAskMs) / 1000;
+    if (left > 0) return gfx::frame([left] { tall::drawUpdate(left); });
+    updSeen = app::frame["upd"] | "", updLaterMs = millis();
+  }
+  updAskMs = 0;
   if (board::PROFILE.oled && power::idle()) return gfx::frame(tall::drawSaver);
   const bool dark = settings::v.theme == 0 ? (bool)(app::frame["dark"] | true) : settings::v.theme == 2;
   if (dark != color::dark) color::apply(dark);

@@ -31,7 +31,7 @@ int mcAskTap(int x, int y);      // 1 mostrar, 2 agora não, 0 nada
 void drawLoginAsk();             // o Claude Code sem login ("lask"): como logar, ou pular
 bool loginSkipAt(int x, int y);  // o toque caiu em "Pular"
 void drawFwUp();                 // o daemon vai gravar o firmware novo ("fwup"): a versão e os segundos que faltam
-void drawUpdate();               // há versão nova ("upd"): atualizar agora ou depois
+void drawUpdate(int secsLeft);   // há versão nova ("upd"): atualizar agora ou depois, que vale sozinho no fim do tempo
 int updateTap(int x, int y);     // 1 atualizar, 2 depois, 0 nada
 void drawPairCode(int code, int secs);  // o código de 4 dígitos que libera a página web
 void drawOrient(bool confirm, int secsLeft);  // primeiro uso sem acelerômetro: qual lado fica embaixo, e a confirmação

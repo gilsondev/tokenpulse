@@ -2396,7 +2396,7 @@ void drawFwUp() {
 
 // Versão nova no GitHub: atualiza o programa do Mac e, em seguida, o firmware das placas.
 int updBtnY(int k) { return gfx::height() - u(30) - (2 - k) * (max(u(52), TAP()) + u(12)); }
-void drawUpdate() {
+void drawUpdate(int secsLeft) {
   gfx::clear();
   const int cx = W() / 2, bh = max(u(52), TAP()), bw = W() - 2 * M();
   char buf[48];
@@ -2407,7 +2407,9 @@ void drawUpdate() {
   const int ty = u(40) + below(gfx::TITLE, 34) + below(gfx::LABEL, 40);
   text(l1.c_str(), cx, ty, gfx::LABEL, MUTED, middle_center);
   if (l2.length()) text(fit(l2.c_str(), gfx::LABEL, bw).c_str(), cx, ty + below(gfx::LABEL, 24), gfx::LABEL, MUTED, middle_center);
-  const char* labels[] = {"Atualizar agora", "Depois"};
+  char later[24];
+  snprintf(later, sizeof later, "Depois (%d s)", secsLeft);
+  const char* labels[] = {"Atualizar agora", later};
   for (int k = 0; k < 2; k++) {
     const uint16_t c = k ? blend(BG, TRACK, 0.7f) : ACCENT;
     fb().fillSmoothRoundRect(M(), updBtnY(k), bw, bh, min(bh / 2, u(26)), c);

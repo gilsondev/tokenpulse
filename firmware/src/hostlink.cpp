@@ -188,7 +188,18 @@ void begin() {
 }
 
 void poll() {
-  if (Serial.available()) handle(Serial.readStringUntil('\n'));
+  // junta o que chegou e só trata a linha inteira: o loop não espera bytes e um frame lento não sai cortado
+  static String buf;
+  while (Serial.available()) {
+    char c = Serial.read();
+    if (c != '\n') {
+      if (buf.length() < 8192) buf += c;
+      continue;
+    }
+    String line = std::move(buf);
+    buf.reserve(4096);
+    handle(line);
+  }
   // pelo BLE só entram frames: comandos (OTA, toques, descanso) ficam restritos à USB
   String line;
   while (ble::poll(line))
