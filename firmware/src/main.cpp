@@ -14,6 +14,12 @@
 #include "ui/gfx.h"
 #include "ui/screens.h"
 
+#include <esp_ota_ops.h>
+
+// Firmware novo só vira "bom" depois de rodar (marcado no loop). Se travar ou reiniciar antes, o bootloader volta
+// para a versão anterior sozinho: um release com defeito de boot não fica preso na placa.
+extern "C" bool verifyRollbackLater() { return true; }
+
 #ifdef BOARD_HAS_PSRAM
 // O VLW de 120 px do descanso estoura os 8 KB padrão da loopTask; com PSRAM a RAM interna sobra.
 SET_LOOP_TASK_STACK_SIZE(16 * 1024);
@@ -166,10 +172,13 @@ void setup() {
   static const String bleName = String("TokenPulse ") + board::BLE_LABEL + " " + String((uint32_t)(ESP.getEfuseMac() >> 24) & 0xFFFFFF, HEX);
   ble::begin(bleName.c_str());
 #endif
+  enableLoopWDT();  // loop parado por 5 s reinicia a placa (e, com firmware recém-gravado, dispara o rollback)
 }
 
 void loop() {
   static uint32_t lastRenderMs = 0;
+  static bool valid = false;
+  if (!valid && millis() > 20000) valid = true, esp_ota_mark_app_valid_cancel_rollback();  // 20 s rodando e desenhando
   if (board::PROFILE.imu) checkOrientation();
   if (board::PROFILE.button) checkButton();
   checkRest();

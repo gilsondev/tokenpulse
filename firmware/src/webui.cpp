@@ -262,6 +262,7 @@ void startServer() {
   static const char* keep[] = {"Content-Length", "Cookie", "X-Token"};  // o ESP32 pede a lista, o ESP8266 aceita variádico
   server.collectHeaders(keep, 3);
   Update.onProgress([](size_t done, size_t) {
+    feedLoopWDT();  // o envio do firmware pelo WiFi passa dos 5 s do watchdog
     if (app::serialOta) return;  // OTA pela USB: a tela de progresso é a do hostlink
     static int lastPct = -1;
     const size_t total = max<size_t>(server.header("Content-Length").toInt(), 1);
@@ -306,6 +307,7 @@ void pickHost() {
   const IPAddress owner = MDNS.queryHost(ap, 1500);
   bool taken = (uint32_t)owner && owner != me;
   for (int k = 0; taken && k < 8; k++) {
+    feedLoopWDT();  // cada consulta mDNS espera até 1,5 s
     snprintf(name, sizeof name, "%s-%s", ap, COLORS[(seed + k) % 8]);
     const IPAddress ip = MDNS.queryHost(name, 1500);
     if (!(uint32_t)ip || ip == me) {

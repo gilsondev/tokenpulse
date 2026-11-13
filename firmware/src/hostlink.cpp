@@ -51,6 +51,7 @@ void runOta(size_t size, const char* md5) {
       return (void)Serial.printf("ERRO ota write em %u B: %s\n", done, n ? Update.errorString() : "3 s sem dados na serial");
     }
     done += n;
+    feedLoopWDT();  // o OTA inteiro leva até 60 s na CYD: o watchdog do loop é de 5 s
     Serial.println("OK");
     if (block % 8 == 0 || done == size) {  // a tela leva ~22 ms; redesenhar a cada bloco dobraria o tempo
       snprintf(status, sizeof status, "%u de %u KB", done / 1024, size / 1024);
@@ -59,6 +60,7 @@ void runOta(size_t size, const char* md5) {
     }
   }
   Serial.setTimeout(50);
+  feedLoopWDT();
   if (!Update.end(true)) {
     gfx::loading(gfx::FAIL, "atualizando firmware", "checksum não bateu, nada mudou", 1, color::RED);
     return (void)Serial.printf("ERRO ota end: %s\n", Update.errorString());

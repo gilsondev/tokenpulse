@@ -402,12 +402,14 @@ bool calibrateNative() {
     while (millis() - quiet < 300) {  // espera soltar o toque anterior
       if (board::touchRaw(x, y)) quiet = millis();
       hostlink::poll();
+      feedLoopWDT();  // a calibração espera a caneta sem prazo curto
     }
     long sx = 0, sy = 0, n = 0;
     uint32_t lastHit = 0;
     while (!n || millis() - lastHit < 150) {  // amostra enquanto a caneta está no alvo
       if (millis() - t0 > 60000) return false;
       hostlink::poll();
+      feedLoopWDT();
       if (!board::touchRaw(x, y)) continue;
       sx += x, sy += y, n++, lastHit = millis();
       delay(5);
