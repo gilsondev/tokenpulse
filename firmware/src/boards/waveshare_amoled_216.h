@@ -18,7 +18,7 @@ constexpr const char* BLE_LABEL = "AMOLED";  // no nome Bluetooth: "TokenPulse A
 constexpr uint8_t DEFAULT_ROTATION = 0;
 constexpr uint8_t ROTATIONS = 4;  // tela quadrada: as quatro posições custam o mesmo
 constexpr uint8_t ROT_FOR[4] = {0, 2, 3, 1};  // medido segurando a placa nas 4 posições
-constexpr Profile PROFILE{.touch = true, .calibrate = false, .imu = true, .led = false, .button = true, .speaker = true, .oled = true, .sd = true, .battery = true, .dense = true, .pxPerMm = 12.3f};
+constexpr Profile PROFILE{.touch = true, .calibrate = false, .imu = true, .led = false, .button = true, .speaker = true, .oled = true, .sd = true, .battery = true, .pxPerMm = 12.3f};
 constexpr uint8_t GRID_ROWS[2] = {0, 0};
 constexpr uint32_t SERIAL_BAUD = 115200;
 

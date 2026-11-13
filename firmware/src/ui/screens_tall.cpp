@@ -468,8 +468,14 @@ struct Cell {  // um bloco de layout: canto superior esquerdo e largura
 
 // Onde fica o modelo i: em pé, um por linha; deitada, em duas colunas (3 modelos em 124 px cada não
 // caberiam em 320 de altura).
+// Em pé, até 3 linhas de 124 px; numa tela baixa para a fonte (AMOLED), o que sobra acima dos pontos dividido por 3.
+int modelPitch() { return min(u(124), (gfx::height() - u(68) + lift() - u(24)) / 3); }
+// a linha do cache só entra se couber no bloco; o detalhe do modelo mostra tudo
+bool modelCacheFits() {
+  return below(gfx::TITLE, 30) + u(18) + below(gfx::LABEL, 22) + below(gfx::SMALL, 18) + gfx::lineHeight(gfx::SMALL) + u(8) <= modelPitch();
+}
 Cell modelCell(int i) {
-  if (!L()) return {M(), u(68) - lift() + i * u(124), W() - 2 * M()};
+  if (!L()) return {M(), u(68) - lift() + i * modelPitch(), W() - 2 * M()};
   const int gap = u(16), w = (W() - 2 * M() - gap) / 2;
   return {M() + (i % 2) * (w + gap), u(64) - lift() + (i / 2) * u(124), w};
 }
@@ -498,7 +504,7 @@ void drawModels(bool live, int page) {
     text(fit(buf, gfx::SMALL, w).c_str(), x, y2, gfx::SMALL, DIM);
     if (*(m[6] | "")) snprintf(buf, sizeof buf, "Cache lido %s · escrito %s", (const char*)m[5], (const char*)m[6]);
     else snprintf(buf, sizeof buf, "Cache lido %s", (const char*)m[5]);  // o Codex não escreve cache
-    text(fit(buf, gfx::SMALL, w).c_str(), x, y2 + below(gfx::SMALL, 18), gfx::SMALL, DIM);
+    if (L() || modelCacheFits()) text(fit(buf, gfx::SMALL, w).c_str(), x, y2 + below(gfx::SMALL, 18), gfx::SMALL, DIM);
     i++;
   }
   dots(page);
@@ -530,7 +536,7 @@ void drawWeb(bool) {
   fb().qrcode(qr, (W() - side) / 2, top, side);
   int y = top + side + u(14);
   if (net) {
-    text("Escaneie, ou abra no celular ou no computador:", W() / 2, y, gfx::SMALL, MUTED, middle_center);
+    text("Escaneie ou abra no navegador:", W() / 2, y, gfx::SMALL, MUTED, middle_center);
     snprintf(qr, sizeof qr, "%s.local", webui::host());
     text(qr, W() / 2, y + below(gfx::SMALL, 22), gfx::LABEL, ACCENT, middle_center);
   } else {
@@ -773,11 +779,18 @@ bool restSessions(int x0, int y0, bool measure, int& w, int& h) {
     uint16_t c;
   } lines[] = {{block, "Pedem aprovação", RED}, {turn, "Esperam você", YELLOW}, {work, "Trabalhando", GREEN},
                {total - work - block - turn, "Paradas", REST_MUTED}};
+  const int numW = gfx::textWidth("00", gfx::HERO);
+  // o rótulo desce para a fonte do título se na do número não couber ao lado dele
+  gfx::Font LF = gfx::NUM;
   int shown = 0, labelW = 0;
-  for (auto& l : lines)
-    if (l.n) shown++, labelW = max(labelW, gfx::textWidth(l.label, gfx::NUM));
+  for (int pass = 0; pass < 2; pass++, LF = gfx::TITLE) {
+    shown = labelW = 0;
+    for (auto& l : lines)
+      if (l.n) shown++, labelW = max(labelW, gfx::textWidth(l.label, LF));
+    if (numW + u(18) + labelW <= W() - DRIFT()) break;
+  }
   const int title = gfx::lineHeight(gfx::TITLE) + u(14), nh = gfx::lineHeight(gfx::HERO);
-  const int step = max(nh, (gfx::height() - DRIFT() - title) / shown), numW = gfx::textWidth("00", gfx::HERO);
+  const int step = max(nh, (gfx::height() - DRIFT() - title) / shown);
   w = max(numW + u(18) + labelW, gfx::textWidth("Sessões", gfx::TITLE)), h = title + shown * step;
   if (measure) return true;
   text("Sessões", x0, y0, gfx::TITLE, REST_MUTED, top_left, 0);
@@ -787,7 +800,7 @@ bool restSessions(int x0, int y0, bool measure, int& w, int& h) {
     if (!l.n) continue;
     snprintf(buf, sizeof buf, "%d", l.n);
     text(buf, x0 + numW, y, gfx::HERO, l.c, top_right, 0);
-    text(l.label, x0 + numW + u(18), y + nh / 2, gfx::NUM, l.c == REST_MUTED ? REST_MUTED : REST_TEXT, middle_left, 0);
+    text(l.label, x0 + numW + u(18), y + nh / 2, LF, l.c == REST_MUTED ? REST_MUTED : REST_TEXT, middle_left, 0);
     y += step;
   }
   return true;
@@ -898,15 +911,18 @@ void drawWaiting() {
   const int sx = land ? lw + u(8) : M(), sw = W() - M() - sx;  // coluna dos passos
   mascot::draw(lcx - mascot::W_OFFLINE * px / 2, u(land ? 76 : 70), px, mascot::OFFLINE, BG);
   // deitada na CYD a coluna tem ~130 px: o título quebra em duas linhas e o resto desce junto
-  const int extra = title2("Sem dados do computador", lcx, u(land ? 166 : 160), lw - 2 * M(), TEXT) - gfx::lineHeight(gfx::TITLE) - u(4);
+  // de cima para baixo pelas alturas das fontes: na tela densa as posições fixas se sobreporiam
+  const int titleY = u(land ? 166 : 160);
+  int subY = titleY + title2("Sem dados do computador", lcx, titleY, lw - 2 * M(), TEXT);
   const bool usb = hostlink::usbPlugged(), port = usb && hostlink::portOpen();
   const uint32_t id = hostlink::lastIdMs();
   const bool daemon = port && id && millis() - id < 15000;
   if (app::lastFrameMs) snprintf(buf, sizeof buf, "Último dado há %lu min", (millis() - app::lastFrameMs) / 60000);
   else strcpy(buf, "Nenhum dado desde que a placa ligou");
   String sub2, sub1 = wrap2(buf, gfx::SMALL, lw - 2 * M(), sub2);
-  text(sub1.c_str(), lcx, u(land ? 204 : 198) + extra, gfx::SMALL, MUTED, middle_center);
-  if (sub2.length()) text(sub2.c_str(), lcx, u(land ? 204 : 198) + extra + below(gfx::SMALL, 18), gfx::SMALL, MUTED, middle_center);
+  text(sub1.c_str(), lcx, subY, gfx::SMALL, MUTED, top_center);
+  if (sub2.length()) text(sub2.c_str(), lcx, subY += below(gfx::SMALL, 18), gfx::SMALL, MUTED, top_center);
+  subY += below(gfx::SMALL, 18);
 
   struct Step {
     const char *name, *ok, *wait;
@@ -916,21 +932,23 @@ void drawWaiting() {
       {"Programa no computador", "Abriu a porta e se apresentou", "Rode o instalador de tokenpulse.s.gy/comecar", daemon},
       {"Dados", "Chegando", "Esperando o primeiro envio", false},
   };
-  int y = u(land ? 64 : 236);
+  int y = land ? u(64) : max(u(236), subY + u(16));
   bool blocked = false;
   for (auto& st : steps) {
     const bool cur = !st.done && !blocked;  // o primeiro passo que falta é o que importa agora
     const uint16_t c = st.done ? GREEN : cur ? AMBER : DIM;
     stepIcon(sx + u(10), y + u(10), st.done ? 0 : cur ? 1 : 2);
     text(st.name, sx + u(32), y, gfx::LABEL, st.done || cur ? TEXT : DIM);
+    int lines = 0;
     if (st.done || cur) {  // a dica pode ser longa: até duas linhas na largura disponível
       const int maxW = sw - u(32), y1 = y + below(gfx::LABEL, 22);
       String l2, l1 = wrap2(st.done ? st.ok : st.wait, gfx::SMALL, maxW, l2);
       text(fit(l1.c_str(), gfx::SMALL, maxW).c_str(), sx + u(32), y1, gfx::SMALL, c);
       if (l2.length()) text(fit(l2.c_str(), gfx::SMALL, maxW).c_str(), sx + u(32), y1 + below(gfx::SMALL, 18), gfx::SMALL, c);
+      lines = l2.length() ? 2 : 1;
     }
     if (!st.done) blocked = true;
-    y += u(land ? 76 : 70);
+    y += max(u(land ? 76 : 70), below(gfx::LABEL, 22) + lines * below(gfx::SMALL, 18) + u(12));
   }
   snprintf(buf, sizeof buf, "%s · %s", board::NICK, hostlink::firmware());
   text(buf, W() / 2, gfx::height() - u(16), gfx::SMALL, DIM, middle_center);
@@ -1180,7 +1198,7 @@ bool sessionTap(int x, int y, int ws, int sp) {
 int modelAt(int x, int y) {
   for (int i = 0; i < (int)app::frame["mods"].size(); i++) {
     const Cell c = modelCell(i);
-    if (x >= c.x && x < c.x + c.w && y >= c.y && y < c.y + u(118)) return i;
+    if (x >= c.x && x < c.x + c.w && y >= c.y && y < c.y + (L() ? u(118) : modelPitch() - u(6))) return i;
   }
   return -1;
 }
@@ -1258,7 +1276,11 @@ void drawModelDetail(bool live, int page, int idx) {
 // Histórico: tokens por dia nos últimos 14 dias, a barra tocada (ou hoje) em destaque.
 // deitada o gráfico fica mais largo e mais baixo, e o total e a média dividem uma linha
 int CH_Y() { return u(L() ? 128 : 150) - lift(); }
-int CH_H() { return u(L() ? 112 : 200) + lift(); }  // o gráfico cresce para cima no espaço da linha que saiu
+// o gráfico cresce para cima no espaço da linha que saiu, e encolhe para o rodapé (3 linhas em pé) caber acima dos pontos
+int CH_H() {
+  const int foot = u(34) + (L() ? gfx::lineHeight(gfx::SMALL) : below(gfx::SMALL, 20) + below(gfx::SMALL, 24) + gfx::lineHeight(gfx::SMALL));
+  return min(u(L() ? 112 : 200) + lift(), gfx::height() - u(24) - foot - CH_Y());
+}
 int gap() { return max(3, u(5)); }  // entre as barras
 
 int historyBarAt(int x, int y) {
@@ -1686,6 +1708,10 @@ void drawSettings(bool live) {
     text("›", M() + w - u(12), y + h / 2, gfx::TITLE, MUTED, middle_right, track);
     summary(list[i], buf, sizeof buf);
     const int room = w - u(60) - gfx::textWidth(NAMES[list[i]], NF);
+    if (gfx::textWidth(buf, SF) > room) {  // não coube: o resumo curto em vez de cortar com reticências
+      if (list[i] == G_REST) snprintf(buf, sizeof buf, "%d telas", __builtin_popcount(settings::web.restPages & 31));
+      else if (char* sep = strstr(buf, " · ")) *sep = 0;
+    }
     text(fit(buf, SF, room).c_str(), M() + w - u(32), y + h / 2, SF, MUTED, middle_right, track);
   }
   if (n > fits) {  // barra de rolagem: há grupos abaixo ou acima
@@ -2403,7 +2429,7 @@ void drawUpdate(int secsLeft) {
   text("Versão nova", cx, u(40), gfx::TITLE, TEXT, middle_center);
   snprintf(buf, sizeof buf, "%s → %s", hostlink::firmware(), (const char*)(app::frame["upd"] | ""));
   text(fit(buf, gfx::LABEL, bw).c_str(), cx, u(40) + below(gfx::TITLE, 34), gfx::LABEL, ACCENT, middle_center);
-  String l2, l1 = wrap2("Atualiza o programa do computador e depois o firmware das placas, em cerca de 1 min.", gfx::LABEL, bw, l2);
+  String l2, l1 = wrap2("Atualiza o computador e as placas, em cerca de 1 min.", gfx::LABEL, bw, l2);
   const int ty = u(40) + below(gfx::TITLE, 34) + below(gfx::LABEL, 40);
   text(l1.c_str(), cx, ty, gfx::LABEL, MUTED, middle_center);
   if (l2.length()) text(fit(l2.c_str(), gfx::LABEL, bw).c_str(), cx, ty + below(gfx::LABEL, 24), gfx::LABEL, MUTED, middle_center);

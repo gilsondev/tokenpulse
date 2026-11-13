@@ -20,7 +20,6 @@ struct Profile {
   bool oled = false;     // tela que marca com imagem parada: parada vira o protetor e a imagem anda
   bool sd = false;       // leitor de cartão SD: histórico guardado além dos 14 dias
   bool battery = false;  // PMU com bateria: o ícone de energia no cabeçalho
-  bool dense = false;    // tela pequena com muitos pixels: o cabeçalho sobe um tamanho de fonte
   float pxPerMm = 6.5f;  // densidade da tela: os alvos de toque têm um tamanho mínimo em milímetros, não em pixels
 };
 

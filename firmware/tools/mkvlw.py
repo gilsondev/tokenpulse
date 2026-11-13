@@ -12,7 +12,7 @@ from PIL import Image, ImageDraw, ImageFont
 TTF = Path(__file__).parent / "fonts" / "Inter.ttf"
 OUT = Path(__file__).parent.parent / "src" / "ui" / "fonts"
 
-TEXT = "".join(chr(c) for c in range(0x20, 0x7F)) + "áàâãéêíóôõúçÁÀÂÃÉÊÍÓÔÕÚÇ·…°–‹›"
+TEXT = "".join(chr(c) for c in range(0x20, 0x7F)) + "áàâãéêíóôõúçÁÀÂÃÉÊÍÓÔÕÚÇ·…°–‹›→"
 DIGITS = "0123456789%-, .kKMB"
 
 # nome, tamanho em px, peso (100 a 900), caracteres
@@ -28,6 +28,11 @@ FONTS = [
     ("inter_title_m", 16, 600, TEXT),
     ("inter_num_m", 22, 700, TEXT),
     ("inter_hero_m", 40, 700, DIGITS),
+    # AMOLED (12,3 px/mm): texto ~25% maior que o da Guition em pixels (~1,5 mm); o HERO fica, por causa do anel
+    ("inter_small_d", 18, 500, TEXT),
+    ("inter_label_d", 20, 500, TEXT),
+    ("inter_title_d", 24, 600, TEXT),
+    ("inter_num_d", 32, 700, TEXT),
     # SmallTV: o % de dois dígitos tem que caber no anel de 90 px por dentro
     ("inter_hero_s", 32, 700, DIGITS),
     # descanso das telas OLED: o % de uso grande, de longe
@@ -48,6 +53,8 @@ def vlw(size, weight, chars):
         if w and h:
             ImageDraw.Draw(img).text((-x0, -y0), ch, font=font, fill=255, anchor="ls")
         advance = round(font.getlength(ch))
+        if ch == " ":  # a LovyanGFX desenha o espaço com esta largura, não com a do glifo: a medida tem que bater
+            advance = max(size, ascent + descent) * 2 // 7
         glyphs += struct.pack(">7i", ord(ch), h, w, advance, -y0, x0, 0)
         bitmaps += img.tobytes()
     head = struct.pack(">6i", len(set(chars)), 11, size, 0, ascent, descent)
