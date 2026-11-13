@@ -21,6 +21,15 @@ while [ $# -gt 0 ]; do
   esac
   shift
 done
+# o daemon escreve o codinome no log ([Sumaúma] ota: ok), não o modelo
+case $board in
+  guition-jc3248w535) nick="Sumaúma" ;;
+  cyd-2432s028r) nick="Ipê" ;;
+  waveshare-amoled-216) nick="Jabuticaba" ;;
+  waveshare-s3-lcd-147b) nick="Açaí" ;;
+  smalltv-ultra) nick="Caixeta" ;;
+  *) nick=$board ;;
+esac
 if [ -z "$bin" ]; then
   "$pio" run -e "$board"
   bin="$PWD/.pio/build/$board/firmware.bin"
@@ -53,7 +62,7 @@ echo "$bin" > "$req.tmp" && mv "$req.tmp" "$req"  # o daemon nunca lê pela meta
 # uma falha por falta de resposta tenta mais uma vez: a placa só troca o firmware se o md5 bater
 for attempt in 1 2; do
   for _ in $(seq 1 90); do
-    result=$(tail -n +"$((start + 1))" "$log" | grep -m1 "\[$board\] ota:" || true)
+    result=$(tail -n +"$((start + 1))" "$log" | grep -m1 -E "\[($board|$nick)\] ota:" || true)
     [ -n "$result" ] && break
     sleep 1
   done
@@ -63,7 +72,7 @@ for attempt in 1 2; do
     # gravou não é o mesmo que bootou: espera a placa voltar e se apresentar ao daemon
     start=$(wc -l < "$log")
     for _ in $(seq 1 75); do
-      tail -n +"$((start + 1))" "$log" | grep -q "\[$board\] conectada" && { echo "a placa voltou com o firmware novo"; exit 0; }
+      tail -n +"$((start + 1))" "$log" | grep -qE "\[($board|$nick)\] conectada" && { echo "a placa voltou com o firmware novo"; exit 0; }
       sleep 1
     done
     echo "a placa não voltou em 75 s: o firmware novo pode estar travando no boot. Veja \"Placa não volta depois do OTA\" no README." >&2
