@@ -78,9 +78,11 @@ void badge(const char* label, int right, int top, uint16_t c, uint16_t base = BG
   text(label, right - w / 2, top + H / 2, gfx::SMALL, c, middle_center, bg);
 }
 
-// corta o texto com reticências até caber em `maxW`
+// Faz o texto caber em `maxW`: primeiro tira trechos inteiros do fim ("a · b · c" vira "a · b"), que meia palavra
+// com reticências não diz nada; só um trecho único que ainda não cabe é cortado com reticências.
 String fit(const char* s, gfx::Font f, int maxW) {
   String t = s ? s : "";
+  while (gfx::textWidth(t.c_str(), f) > maxW && t.lastIndexOf(" · ") > 0) t.remove(t.lastIndexOf(" · "));
   if (gfx::textWidth(t.c_str(), f) <= maxW) return t;
   while (t.length() > 1 && gfx::textWidth((t + "…").c_str(), f) > maxW) gfx::dropLastChar(t);
   return t + "…";
@@ -124,11 +126,13 @@ void stepIcon(int x, int y, int state) {
 // Engrenagem dos ajustes, ao lado do relógio: disco, 8 dentes e o furo no meio.
 bool gearActive = false;
 
+// do tamanho dos números do relógio, ao lado dele e na mesma linha de centro
+int GEAR_R() { return max(u(10), gfx::lineHeight(gfx::TITLE) * 2 / 5); }
 void gear(int cx, int cy, int r, uint16_t c) {
   for (int k = 0; k < 8; k++) {
     const float a = k * TAU / 8;
-    gfx::wideLine(cx + cosf(a) * r * 0.55f, cy + sinf(a) * r * 0.55f, cx + cosf(a) * r * 0.92f, cy + sinf(a) * r * 0.92f,
-                      r * 0.17f, c);
+    gfx::wideLine(cx + cosf(a) * r * 0.55f, cy + sinf(a) * r * 0.55f, cx + cosf(a) * r * 0.95f, cy + sinf(a) * r * 0.95f,
+                      max(1.5f, r * 0.24f), c);
   }
   fb().fillSmoothCircle(cx, cy, r * 0.68f, c);
   fb().fillSmoothCircle(cx, cy, r * 0.28f, BG);
@@ -215,7 +219,8 @@ constexpr int SUB_WARN = 2;
 bool subLine = true;  // o último cabeçalho desenhou a linha de baixo (modelo, CLI · Desk ou o aviso sem dados)
 // sem a linha de baixo, o conteúdo das telas de posição fixa sobe o espaço dela
 int lift() { return subLine ? 0 : u(L() ? 58 : 62) - u(46); }
-void header(bool live, const char* title, bool dropdown = false, int sub = 1) {
+// devolve true se o título perdeu um trecho por falta de espaço (quem chama pode mostrar o trecho em outro lugar)
+bool header(bool live, const char* title, bool dropdown = false, int sub = 1) {
   const auto& f = app::frame;
   JsonVariantConst cx = f["cx"];
   // a página de status do serviço mostrado: 1 instável, 2 fora do ar (na principal do Codex, a da OpenAI)
@@ -226,12 +231,15 @@ void header(bool live, const char* title, bool dropdown = false, int sub = 1) {
   if (secs >= 0) snprintf(clkBuf, sizeof clkBuf, "%02d:%02d", (int)(secs / 3600), (int)(secs / 60 % 60));
   const gfx::Font HT = gfx::LABEL, HS = gfx::SMALL;  // na tela densa, o gfx já sobe um tamanho
   const char* clk = secs >= 0 ? clkBuf : (const char*)(f["clk"] | "");
+  const int CLK_R = 2 * GEAR_R() + u(8);  // a borda direita do relógio, antes da engrenagem
   const int clkW = gfx::textWidth(clk, gfx::TITLE), clkCy = u(8) + gfx::lineHeight(gfx::TITLE) / 2;
-  const int pw = powerIcon(W() - M() - u(30) - clkW - u(8), clkCy, true);
-  const int bw = bleIcon(W() - M() - u(30) - clkW - u(8) - pw, clkCy, true);
-  const int mw = muteIcon(W() - M() - u(30) - clkW - u(8) - pw - bw, clkCy, true);
-  const int clkLeft = W() - M() - u(30) - clkW - (pw + bw + mw ? pw + bw + mw + u(8) : 0);
-  const String t = fit(title, HT, clkLeft - M() - u(10) - (dropdown ? u(18) : 0));
+  const int pw = powerIcon(W() - M() - CLK_R - clkW - u(8), clkCy, true);
+  const int bw = bleIcon(W() - M() - CLK_R - clkW - u(8) - pw, clkCy, true);
+  const int mw = muteIcon(W() - M() - CLK_R - clkW - u(8) - pw - bw, clkCy, true);
+  const int clkLeft = W() - M() - CLK_R - clkW - (pw + bw + mw ? pw + bw + mw + u(8) : 0);
+  const int tw = clkLeft - M() - u(10) - (dropdown ? u(18) : 0);
+  const String t = fit(title, HT, tw);
+  const bool cut = t != title;
   if (!strncmp(title, "‹", strlen("‹"))) {  // título que volta: um botão em pílula, para ver que dá para tocar
     const uint16_t pill = blend(BG, TRACK, 0.85f);
     const int ph = gfx::lineHeight(HT) + u(8);
@@ -245,9 +253,9 @@ void header(bool live, const char* title, bool dropdown = false, int sub = 1) {
     gfx::wideLine(x, y - d / 2, x + d, y + d / 2, 1.0f, MUTED);
     gfx::wideLine(x + d, y + d / 2, x + 2 * d, y - d / 2, 1.0f, MUTED);
   }
-  text(clk, W() - M() - u(30), u(8), gfx::TITLE, TEXT, top_right);
-  gear(W() - M() - u(10), u(19), u(10), gearActive ? ACCENT : MUTED);
-  if (!subLine) return;
+  text(clk, W() - M() - CLK_R, u(8), gfx::TITLE, TEXT, top_right);
+  gear(W() - M() - GEAR_R(), clkCy, GEAR_R(), gearActive ? ACCENT : MUTED);
+  if (!subLine) return cut;
   char buf[64];
   const char* svc = codexMain || codexOnly() ? "Codex" : "Claude";
   if (st) snprintf(buf, sizeof buf, st > 1 ? "%s fora do ar" : "%s instável", svc);
@@ -257,14 +265,20 @@ void header(bool live, const char* title, bool dropdown = false, int sub = 1) {
     snprintf(buf, sizeof buf, "CLI %d · Desk %d · Codex %d", (int)(f["cli"] | 0), (int)(f["desk"] | 0), (int)(cx["n"] | 0));
   else if (live) snprintf(buf, sizeof buf, "CLI %d · Desk %d", (int)(f["cli"] | 0), (int)(f["desk"] | 0));
   else snprintf(buf, sizeof buf, "Offline há %lu min", (millis() - app::lastFrameMs) / 60000);
-  if (live && !st && (int)(f["mc"]["r"] | 0))  // só com agente rodando: "Multica 0" só tomaria o espaço do modelo
-    snprintf(buf + strlen(buf), sizeof buf - strlen(buf), " · Multica %d", (int)(f["mc"]["r"] | 0));
+  // o modelo divide a linha com o status. Sem espaço sai, nesta ordem: o esforço ("· high"), o "Multica N" (está na
+  // página dele) e por fim o modelo. O status fica sempre.
+  const int mcRun = live && !st ? (int)(f["mc"]["r"] | 0) : 0;
+  String status = buf, model = codexMain ? (cx["m"] | "Codex") : (f["m"] | "Claude");
+  if (mcRun) status += " · Multica " + String(mcRun);
+  auto fits = [&] { return gfx::textWidth(model.c_str(), HS) + u(24) + gfx::textWidth(status.c_str(), HS) <= W() - 2 * M(); };
+  if (!fits() && model.indexOf(" · ") > 0) model.remove(model.indexOf(" · "));
+  if (!fits() && mcRun) status = buf;
   const uint16_t sc = !live || st > 1 ? RED : st ? AMBER : GREEN;
-  const int sy = u(10) + below(HT, 22), w = gfx::textWidth(buf, HS);
-  // o modelo divide a linha com o status: corta o modelo, nunca o status
-  text(fit(codexMain ? (cx["m"] | "Codex") : (f["m"] | "Claude"), HS, W() - 2 * M() - w - u(24)).c_str(), M(), sy, HS, DIM);
-  text(buf, W() - M(), sy, HS, sc == GREEN ? DIM : sc, top_right);
+  const int sy = u(10) + below(HT, 22), w = gfx::textWidth(status.c_str(), HS);
+  if (fits()) text(model.c_str(), M(), sy, HS, DIM);
+  text(status.c_str(), W() - M(), sy, HS, sc == GREEN ? DIM : sc, top_right);
   fb().fillSmoothCircle(W() - M() - w - u(8), sy + gfx::lineHeight(HS) / 2 - u(2), max(2, u(3)), sc);
+  return cut;
 }
 
 // Outra org salva no cswap para sugerir quando a janela esgota: a de menor % conhecido.
@@ -279,16 +293,23 @@ const char* suggestedOrg() {
   return best;
 }
 
-// Dígitos em células de largura fixa: o número não treme enquanto conta.
-void heroNumber(const char* s, int cx, int cy, uint16_t c) {
+// Dígitos em células de largura fixa: o número não treme enquanto conta. Mais largo que `maxW` ("100%" num anel
+// pequeno): o "%" sai menor, no alto, ao lado dos dígitos.
+void heroNumber(const char* s, int cx, int cy, uint16_t c, int maxW = 0) {
   const int cell = gfx::textWidth("0", gfx::HERO);
-  int total = 0;
-  for (const char* p = s; *p; p++) total += isdigit(*p) ? cell : gfx::textWidth(String(*p).c_str(), gfx::HERO);
-  int x = cx - total / 2;
+  auto width = [&](gfx::Font pf) {
+    int total = 0;
+    for (const char* p = s; *p; p++) total += isdigit(*p) ? cell : gfx::textWidth(String(*p).c_str(), *p == '%' ? pf : gfx::HERO);
+    return total;
+  };
+  const gfx::Font pf = maxW && width(gfx::HERO) > maxW ? gfx::NUM : gfx::HERO;
+  int x = cx - width(pf) / 2;
   for (const char* p = s; *p; p++) {
     char ch[2] = {*p, 0};
-    int w = isdigit(*p) ? cell : gfx::textWidth(ch, gfx::HERO);
-    text(ch, x + w / 2, cy, gfx::HERO, c, middle_center);
+    const gfx::Font f = *p == '%' ? pf : gfx::HERO;
+    int w = isdigit(*p) ? cell : gfx::textWidth(ch, f);
+    const int dy = f == gfx::HERO ? 0 : (gfx::lineHeight(gfx::NUM) - gfx::lineHeight(gfx::HERO)) / 3;
+    text(ch, x + w / 2, cy + dy, f, c, middle_center);
     x += w;
   }
 }
@@ -334,8 +355,26 @@ void drawMain(bool live, int page) {
   }
 
   // Anel da janela de 5h: o herói da tela. Em pé fica no alto e centrado; deitada, na coluna da esquerda.
-  const int r = u(land ? 108 : 100), thick = u(15);
-  const int cx = land ? M() + r + u(4) : W() / 2, cy = u(land ? 182 : 160);
+  // Semana, tokens e o gráfico, em pé, de baixo para cima (gráfico, números, semana): na tela média as fontes são
+  // maiores que a escala, e as posições fixas se sobreporiam. Deitada, de cima para baixo na coluna da direita.
+  const int base = u(land ? 290 : 456), sh = u(land ? 40 : 34), label = base - sh - below(gfx::SMALL, 18), bh = u(10);
+  int wy, ty;
+  if (land) {
+    wy = u(66);
+    ty = wy + below(gfx::LABEL, 26) + bh + u(8) + gfx::lineHeight(gfx::SMALL) + u(16);
+  } else {
+    ty = min(u(344), label - u(4) - gfx::lineHeight(gfx::NUM) - below(gfx::SMALL, 18));
+    wy = min(u(290), ty - u(12) - bh - below(gfx::LABEL, 26));
+  }
+  // Em pé o anel fica entre o cabeçalho e a semana, com folga dos dois lados; só encolhe se não houver altura.
+  const int headBottom = u(10) + (subLine ? below(gfx::LABEL, 22) + gfx::lineHeight(gfx::SMALL) : gfx::lineHeight(gfx::LABEL));
+  const int r = land ? u(108) : min(u(100), (wy - headBottom - u(16)) / 2);
+  const int thick = r < u(100) ? u(12) : u(15);  // anel menor, traço mais fino: o furo segura o texto de dentro
+  // tela quadrada (AMOLED): o anel vai para a esquerda só com o %, e o texto dele numa coluna à direita
+  const bool side = !land && W() * 10 >= gfx::height() * 9;
+  const int cx = land || side ? M() + r + u(4) : W() / 2, cy = land ? u(182) : max(u(160), headBottom + u(8) + r);
+  const int rx = cx + r + u(22), rw = W() - M() - rx;
+  const bool warnInside = land || (!side && cy + r + u(14) + gfx::lineHeight(gfx::SMALL) / 2 > wy);  // sem vão embaixo: o aviso entra no anel
   // o resto ocupa a largura toda em pé, ou a coluna à direita do anel deitada
   const int x0 = land ? cx + r + u(28) : M(), cw = W() - M() - x0;
   const float fade = anim::since(anim::alertMs, 400);  // mudou de faixa: a cor anterior vira a nova
@@ -359,34 +398,44 @@ void drawMain(bool live, int page) {
     text(fit(t, f, maxW).c_str(), cx, cy + dy, f, c, middle_center);
   };
   const char* warn = stale || p5 < 80 ? nullptr : p5 >= 100 ? "Esgotado" : p5 >= 90 ? "No limite" : "Perto do limite";
-  // deitada não há espaço sob o anel: o aviso de limite ocupa a linha de cima, dentro dele
-  if (land && warn) ringText(warn, u(-46), gfx::SMALL, levelColor(p5));
-  else ringText(*s5 ? s5 : "Sessão 5h", u(-46), gfx::SMALL, *s5 ? ACCENT : DIM);
-  if (p5 < 0) strcpy(buf, "--");
-  else snprintf(buf, sizeof buf, "%d%%", (int)lroundf(anim::p5));
-  heroNumber(buf, cx, cy, stale ? DIM : p5 < 0 ? TEXT : lc);  // o número na cor da faixa, como o anel
-  if (apiStale) snprintf(buf, sizeof buf, "Atualizado há %d min", app::dataAge() / 60);
-  ringText(apiStale ? buf : (const char*)(f["r5"] | ""), u(44), gfx::LABEL, apiStale ? AMBER : MUTED);
   const char* other = !stale && !codexMain && p5 >= 100 ? suggestedOrg() : nullptr;
+  if (apiStale) snprintf(buf, sizeof buf, "Atualizado há %d min", app::dataAge() / 60);
+  else strlcpy(buf, f["r5"] | "", sizeof buf);
   sugW = 0;
-  if (!land && other) {  // janela esgotada e há outra org salva: oferece a troca
-    sugY = cy + r + u(2), sugH = max(u(26), gfx::lineHeight(gfx::SMALL) + 6);
-  } else if (!land && warn) {
-    text(warn, cx, cy + r + u(14), gfx::SMALL, levelColor(p5), middle_center);
+  if (side) {  // coluna à direita: janela, reset e o aviso, centrados na altura do anel, um nível maiores que no anel
+    const char* win = *s5 ? s5 : "Sessão 5h";
+    auto big = [&](const char* t, gfx::Font f, gfx::Font smaller) { return gfx::textWidth(t, f) <= rw ? f : smaller; };
+    const gfx::Font WF = big(win, gfx::LABEL, gfx::SMALL), RF = big(buf, gfx::TITLE, gfx::LABEL);
+    const gfx::Font AF = warn ? big(warn, gfx::LABEL, gfx::SMALL) : gfx::SMALL;
+    const int h = gfx::lineHeight(WF) + u(4) + gfx::lineHeight(RF) + (warn ? u(10) + gfx::lineHeight(AF) : 0);
+    int y = cy - h / 2 - (other ? u(20) : 0);
+    text(fit(win, WF, rw).c_str(), rx, y, WF, *s5 ? ACCENT : DIM);
+    y += gfx::lineHeight(WF) + u(4);
+    text(fit(buf, RF, rw).c_str(), rx, y, RF, apiStale ? AMBER : TEXT);
+    y += gfx::lineHeight(RF) + u(10);
+    if (warn) text(warn, rx, y, AF, levelColor(p5)), y += gfx::lineHeight(AF) + u(10);
+    if (other) sugY = y, sugH = max(u(30), gfx::lineHeight(gfx::SMALL) + 8);
+    if (p5 < 0) strcpy(buf, "--");
+    else snprintf(buf, sizeof buf, "%d%%", (int)lroundf(anim::p5));
+    heroNumber(buf, cx, cy, stale ? DIM : p5 < 0 ? TEXT : lc, inner(gfx::lineHeight(gfx::HERO) * 7 / 20));
+  } else {
+    // sem espaço sob o anel (deitada, AMOLED): o aviso de limite ocupa a linha de cima, dentro dele
+    if (warnInside && warn) ringText(warn, u(-46), gfx::SMALL, levelColor(p5));
+    else ringText(*s5 ? s5 : "Sessão 5h", u(-46), gfx::SMALL, *s5 ? ACCENT : DIM);
+    if (p5 < 0) strcpy(buf, "--");
+    else snprintf(buf, sizeof buf, "%d%%", (int)lroundf(anim::p5));
+    heroNumber(buf, cx, cy, stale ? DIM : p5 < 0 ? TEXT : lc);  // o número na cor da faixa, como o anel
+    if (apiStale) snprintf(buf, sizeof buf, "Atualizado há %d min", app::dataAge() / 60);
+    else strlcpy(buf, f["r5"] | "", sizeof buf);
+    ringText(buf, u(44), gfx::LABEL, apiStale ? AMBER : MUTED);
+    if (!land && other) {  // janela esgotada e há outra org salva: oferece a troca
+      sugY = cy + r + u(2), sugH = max(u(26), gfx::lineHeight(gfx::SMALL) + 6);
+    } else if (!warnInside && warn) {
+      text(warn, cx, cy + r + u(14), gfx::SMALL, levelColor(p5), middle_center);
+    }
   }
 
-  // Semana, com o marcador do ritmo linear: barra à frente do marcador = uso adiantado. Em pé, de baixo
-  // para cima (gráfico, números, semana): na tela média as fontes são maiores que a escala, e as posições
-  // fixas se sobreporiam. Deitada, de cima para baixo na coluna da direita.
-  const int base = u(land ? 290 : 456), sh = u(land ? 40 : 34), label = base - sh - below(gfx::SMALL, 18), bh = u(10);
-  int wy, ty;
-  if (land) {
-    wy = u(66);
-    ty = wy + below(gfx::LABEL, 26) + bh + u(8) + gfx::lineHeight(gfx::SMALL) + u(16);
-  } else {
-    ty = min(u(344), label - u(4) - gfx::lineHeight(gfx::NUM) - below(gfx::SMALL, 18));
-    wy = min(u(290), ty - u(18) - bh - below(gfx::LABEL, 26));
-  }
+  // Semana, com o marcador do ritmo linear: barra à frente do marcador = uso adiantado.
   const int bw = cw, by = wy + below(gfx::LABEL, 26);
   text("Semana", x0, wy, gfx::LABEL, MUTED);
   if (pw < 0) strcpy(buf, "--");
@@ -452,10 +501,11 @@ void drawMain(bool live, int page) {
     text("Última hora", x0, label, gfx::SMALL, DIM);
   }
   if (other) {
-    snprintf(buf, sizeof buf, "Esgotado · trocar para %s ›", other);
-    const int sx = land ? x0 : M(), maxW = land ? cw : W() - 2 * M();
+    if (side) strcpy(buf, "Trocar org ›");  // ao lado, o "Esgotado" já está acima
+    else snprintf(buf, sizeof buf, "Esgotado · trocar para %s ›", other);
+    const int sx = land ? x0 : side ? rx : M(), maxW = land ? cw : side ? rw : W() - 2 * M();
     const String t = fit(buf, gfx::SMALL, maxW - u(24));
-    sugW = land ? cw : gfx::textWidth(t.c_str(), gfx::SMALL) + u(24), sugX = land ? sx : cx - sugW / 2;
+    sugW = land || side ? maxW : gfx::textWidth(t.c_str(), gfx::SMALL) + u(24), sugX = land || side ? sx : cx - sugW / 2;
     fb().fillSmoothRoundRect(sugX, sugY, sugW, sugH, sugH / 2, RED);
     text(t.c_str(), sugX + sugW / 2, sugY + sugH / 2, gfx::SMALL, BG, middle_center, RED);
   }
@@ -589,7 +639,12 @@ void drawAttention(int r, uint32_t ageMs) {
   int y = my + 8 * px + u(14);
   const int lh = gfx::lineHeight(gfx::NUM);
   String t2, t1 = wrap2(row[0] | "", gfx::NUM, maxW, t2);  // o título em até duas linhas, sem cortar no meio
-  if (*ask) t1 = fit(row[0] | "", gfx::NUM, maxW), t2 = "";  // com a pergunta embaixo, uma linha só
+  const int ql = gfx::lineHeight(gfx::LABEL);
+  int askN = 0;
+  for (String rest = ask; rest.length() && askN < 3; askN++) wrap2(String(rest).c_str(), gfx::LABEL, maxW, rest);
+  // o título só ganha a segunda linha se a pergunta inteira ainda couber acima do botão
+  if (t2.length() && y + 2 * (lh + u(2)) + gfx::lineHeight(gfx::SMALL) + u(12) + askN * ql > ATTN_BTN_Y() - u(10))
+    t1 = fit(row[0] | "", gfx::NUM, maxW), t2 = "";
   text(fit(t1.c_str(), gfx::NUM, maxW).c_str(), cx, y, gfx::NUM, TEXT, top_center, bg);
   y += lh + u(2);
   if (t2.length()) text(fit(t2.c_str(), gfx::NUM, maxW).c_str(), cx, y, gfx::NUM, TEXT, top_center, bg), y += lh + u(2);
@@ -601,7 +656,7 @@ void drawAttention(int r, uint32_t ageMs) {
   text(fit(buf, gfx::SMALL, maxW).c_str(), cx, y, gfx::SMALL, MUTED, top_center, bg);
   y += gfx::lineHeight(gfx::SMALL) + u(12);
   // a pergunta em até 3 linhas, quebrada nas palavras; o que não couber termina em reticências
-  const int ql = gfx::lineHeight(gfx::LABEL), room = (ATTN_BTN_Y() - u(10) - y) / ql;
+  const int room = (ATTN_BTN_Y() - u(10) - y) / ql;
   String rest = ask;
   for (int line = 0; line < min(3, room) && rest.length(); line++) {
     String l2, l1 = wrap2(rest.c_str(), gfx::LABEL, maxW, l2);
@@ -668,7 +723,7 @@ void drawProvAsk() {
     text("Achei o Claude", cx, y, gfx::TITLE, TEXT, top_center);
     y += below(gfx::TITLE, 30);
     text("e o Codex", cx, y, gfx::TITLE, TEXT, top_center);
-    y += below(gfx::TITLE, 30);
+    y += below(gfx::TITLE, 30) + u(4);
   }
   text(askBoth() ? "O que a placa mostra?" : "Nenhuma sessão do Claude Code por aqui", cx, y, gfx::SMALL, MUTED, top_center);
   y += below(gfx::SMALL, 20) + u(8);
@@ -681,14 +736,15 @@ void drawProvAsk() {
   for (int k = 0; k < n; k++) {
     const int x = M() + (k % askCols) * (askCellW + gap), ly = y + (k / askCols) * askLine, h = askLine - gap;
     fb().fillSmoothRoundRect(x, ly, askCellW, h, u(12), track);
-    const gfx::Font NF = h >= 2 * gfx::lineHeight(gfx::TITLE) + gfx::lineHeight(gfx::SMALL) ? gfx::TITLE : gfx::LABEL;
+    const int tx = askCols == 1 ? x + u(46) : x + u(14), tw = askCellW - (tx - x) - u(10);
+    const bool tall = h >= 2 * gfx::lineHeight(gfx::TITLE) + gfx::lineHeight(gfx::SMALL);
+    const gfx::Font NF = tall && gfx::textWidth(opts[k].name, gfx::TITLE) <= tw ? gfx::TITLE : gfx::LABEL;
     const bool hint = *opts[k].hint && h >= gfx::lineHeight(NF) + gfx::lineHeight(gfx::SMALL) + u(12);
     const int mid = ly + h / 2;
     if (askCols == 1) {
       fb().fillSmoothCircle(x + u(24), mid, u(10), MUTED);
       fb().fillSmoothCircle(x + u(24), mid, u(10) - max(2, u(2)), track);
     }
-    const int tx = askCols == 1 ? x + u(46) : x + u(14), tw = askCellW - (tx - x) - u(10);
     if (hint) {
       text(fit(opts[k].name, NF, tw).c_str(), tx, mid - 1, NF, TEXT, bottom_left, track);
       String l2, l1 = wrap2(opts[k].hint, gfx::SMALL, tw, l2);
@@ -1275,7 +1331,12 @@ void drawModelDetail(bool live, int page, int idx) {
 
 // Histórico: tokens por dia nos últimos 14 dias, a barra tocada (ou hoje) em destaque.
 // deitada o gráfico fica mais largo e mais baixo, e o total e a média dividem uma linha
-int CH_Y() { return u(L() ? 128 : 150) - lift(); }
+// em pé, abaixo do número do dia e da linha Claude · Codex (a barra mais alta não pode cobrir essa linha)
+int CH_Y() {
+  if (L()) return u(128) - lift();
+  const int top = u(66) + below(gfx::SMALL, 18) + gfx::lineHeight(gfx::NUM) + u(2) + gfx::lineHeight(gfx::SMALL) + u(10);
+  return max(u(150), top) - lift();
+}
 // o gráfico cresce para cima no espaço da linha que saiu, e encolhe para o rodapé (3 linhas em pé) caber acima dos pontos
 int CH_H() {
   const int foot = u(34) + (L() ? gfx::lineHeight(gfx::SMALL) : below(gfx::SMALL, 20) + below(gfx::SMALL, 24) + gfx::lineHeight(gfx::SMALL));
@@ -1319,6 +1380,8 @@ void drawHistory(bool live, int page, int sel) {
     String split = buf;
     split.replace('.', ',');
     // deitada não há espaço entre o número e as barras: a linha vai à direita do dia
+    // deitada a linha divide espaço com o dia: sem largura, fica só o Codex (o Claude é o resto do total)
+    if (L() && gfx::textWidth(split.c_str(), gfx::SMALL) > W() / 2 - M()) split = split.substring(split.indexOf("Codex"));
     if (L()) text(fit(split.c_str(), gfx::SMALL, W() / 2 - M()).c_str(), W() - M(), (u(66) - lift()), gfx::SMALL, DIM, top_right);
     else text(fit(split.c_str(), gfx::SMALL, W() - 2 * M()).c_str(), M(), ny + gfx::lineHeight(gfx::NUM) + u(2), gfx::SMALL, DIM);
   }
@@ -1710,7 +1773,7 @@ void drawSettings(bool live) {
     const int room = w - u(60) - gfx::textWidth(NAMES[list[i]], NF);
     if (gfx::textWidth(buf, SF) > room) {  // não coube: o resumo curto em vez de cortar com reticências
       if (list[i] == G_REST) snprintf(buf, sizeof buf, "%d telas", __builtin_popcount(settings::web.restPages & 31));
-      else if (char* sep = strstr(buf, " · ")) *sep = 0;
+      if (list[i] == G_PROV && provSel == 3) strlcpy(buf, "Os dois", sizeof buf);
     }
     text(fit(buf, SF, room).c_str(), M() + w - u(32), y + h / 2, SF, MUTED, middle_right, track);
   }
@@ -2089,12 +2152,17 @@ void mcCard(JsonArrayConst a, int k, int y, int h) {
   mascot::draw(x + pad, y + (h - 8 * px) / 2, px, mood, bg, k, !strcmp(prov, "Codex"));
   const int tx = x + pad + mascot::W * px + u(12), maxW = x + w - pad - tx;
   const int bw = *prov ? gfx::textWidth(prov, gfx::SMALL) + 2 * u(10) : 0;
-  if (*prov) badge(prov, x + w - u(10), y + u(8), providerColor(prov), bg);
+  // as três linhas formam um bloco centrado na altura do cartão (o cartão estica para ocupar a sobra da tela)
+  const int block = 2 * gfx::lineHeight(gfx::LABEL) + gfx::lineHeight(gfx::SMALL) + u(8);
+  const int top = y + max(u(8), (h - block) / 2);
+  if (*prov) badge(prov, x + w - u(10), top, providerColor(prov), bg);
   // baixo demais para três linhas (CYD deitada): a issue na primeira, ao lado do selo, e o estado embaixo
   const bool slim = h < 2 * gfx::lineHeight(gfx::LABEL) + gfx::lineHeight(gfx::SMALL) + u(14);
-  const int l1 = y + u(8), l3 = y + h - u(8) - gfx::lineHeight(gfx::SMALL);
+  const int l1 = top, l3 = min(y + h - u(8), top + block) - gfx::lineHeight(gfx::SMALL);
   const int l2 = (l1 + gfx::lineHeight(gfx::LABEL) + l3) / 2 - gfx::lineHeight(gfx::LABEL) / 2;
   snprintf(buf, sizeof buf, "%s · %s", (const char*)(a[2] | ""), (const char*)(a[3] | ""));
+  // sem espaço para "TP-42 · título", fica o título: o número da issue está no detalhe
+  if (gfx::textWidth(buf, gfx::LABEL) > (slim ? maxW - bw - u(8) : maxW)) strlcpy(buf, a[3] | "", sizeof buf);
   if (slim) {
     text(fit(buf, gfx::LABEL, maxW - bw - u(8)).c_str(), tx, l1, gfx::LABEL, kind == 1 ? MUTED : TEXT, top_left, bg);
   } else {
@@ -2102,7 +2170,10 @@ void mcCard(JsonArrayConst a, int k, int y, int h) {
     text(fit(buf, gfx::LABEL, maxW).c_str(), tx, l2, gfx::LABEL, kind == 1 ? MUTED : TEXT, top_left, bg);
   }
   ago(when, sizeof when, a[5] | -1);
-  if (kind == 0) snprintf(buf, sizeof buf, "Rodando %s · %s tokens", when, (const char*)(a[6] | "--"));
+  if (kind == 0) {
+    snprintf(buf, sizeof buf, "Rodando %s · %s tokens", when, (const char*)(a[6] | "--"));
+    if (gfx::textWidth(buf, gfx::SMALL) > maxW) snprintf(buf, sizeof buf, "Rodando %s", when);  // os tokens estão no detalhe
+  }
   else if (kind == 1) strcpy(buf, "Na fila");
   else if (kind == 2) snprintf(buf, sizeof buf, "Em revisão %s", when);
   else snprintf(buf, sizeof buf, *(a[12] | "") ? "Falhou %s · %s" : "Falhou %s", when, (const char*)(a[12] | ""));
@@ -2177,12 +2248,14 @@ void mcProjectIssues(bool live, JsonVariantConst mc, int proj) {
     card(x, y, w, h, u(10), track, lit);
     const int sw = gfx::textWidth(MC_STATUS[st], gfx::SMALL);
     const int mid = y + h / 2;  // título e detalhe empilhados no meio da linha
-    text(MC_STATUS[st], x + w - u(14), mid - u(2), gfx::SMALL, mcStatusColor(st), bottom_right, track);
-    text(fit(l[1] | "", gfx::LABEL, w - u(40) - sw).c_str(), x + u(14), mid - u(2), gfx::LABEL, TEXT, bottom_left, track);
+    // título comprido: o estado desce para a linha de baixo e o título usa a largura toda
+    const bool down = gfx::textWidth(l[1] | "", gfx::LABEL) > w - u(40) - sw;
+    text(MC_STATUS[st], x + w - u(14), down ? mid + u(4) : mid - u(2), gfx::SMALL, mcStatusColor(st), down ? top_right : bottom_right, track);
+    text(fit(l[1] | "", gfx::LABEL, down ? w - u(28) : w - u(40) - sw).c_str(), x + u(14), mid - u(2), gfx::LABEL, TEXT, bottom_left, track);
     ago(when, sizeof when, l[4] | -1);
     const char* who = l[3] | "";
     snprintf(buf, sizeof buf, "%s%s%s%s%s", (const char*)(l[0] | ""), *who ? " · " : "", who, *when ? " · " : "", when);
-    text(fit(buf, gfx::SMALL, w - u(28)).c_str(), x + u(14), mid + u(4), gfx::SMALL, MUTED, top_left, track);
+    text(fit(buf, gfx::SMALL, w - u(28) - (down ? sw + u(12) : 0)).c_str(), x + u(14), mid + u(4), gfx::SMALL, MUTED, top_left, track);
   }
   if (mcRowAll > fits) {  // barra de rolagem
     const int lh = fits * mcRowH - gap, bh = max(u(16), lh * fits / mcRowAll);
@@ -2256,11 +2329,12 @@ void drawMulti(bool live, int view, const char* issue, int sel) {
   if (view == 3) return mcProjectIssues(live, mc, sel);
   char title[48];
   snprintf(title, sizeof title, "Multica · %s", (const char*)(mc["w"] | ""));
-  header(live, title, false, SUB_WARN);
+  const bool wsCut = header(live, title, false, SUB_WARN);
+  int y = SET_Y();
+  if (wsCut) text(mc["w"] | "", M(), u(10) + below(gfx::LABEL, 22), gfx::SMALL, MUTED);  // saiu do título: vai na linha de baixo
   // os números são filtros da lista de baixo: o escolhido fica com a borda na cor dele
   const int gap = u(8), tw = (W() - 2 * M() - 3 * gap) / 4;
   const int th = gfx::lineHeight(gfx::NUM) + gfx::lineHeight(gfx::SMALL) + u(16);
-  int y = SET_Y();
   mcTileY = y, mcTileH = th, sel = constrain(sel, 0, 3);
   for (int k = 0; k < 4; k++) {
     const int x = M() + k * (tw + gap), count = mc["c"][k] | 0;
@@ -2283,8 +2357,10 @@ void drawMulti(bool live, int view, const char* issue, int sel) {
   int ah = max(max(u(66), 2 * gfx::lineHeight(gfx::LABEL) + gfx::lineHeight(gfx::SMALL) + u(16)), TAPPX());
   const int agap = u(8), room = mcProjY - u(8) - y;
   if (room < ah) ah = max(room, gfx::lineHeight(gfx::LABEL) + gfx::lineHeight(gfx::SMALL) + u(14));  // um cartão baixo
-  mcAgentY = y, mcAgentH = ah + agap;
   const int fits = max(1, (room + agap) / (ah + agap));
+  // estica para ocupar a sobra até Projetos, até 1,5x: poucos cartões não viram blocos enormes
+  ah = constrain((room + agap) / constrain(mcFiltered, 1, fits) - agap, ah, ah * 3 / 2);
+  mcAgentY = y, mcAgentH = ah + agap;
   mcAgentTop = constrain(mcAgentTop, 0, max(0, mcFiltered - fits));
   mcAgentN = min(mcFiltered - mcAgentTop, fits);
   if (!mcFiltered) text(MC_EMPTY[sel], W() / 2, (y + mcProjY) / 2, gfx::LABEL, DIM, middle_center);
@@ -2384,12 +2460,17 @@ void drawLoginAsk() {
   const int cx = W() / 2, bw = W() - 2 * M(), bh = max(u(56), TAP());
   text("Falta o login do Claude", cx, u(40), gfx::TITLE, TEXT, middle_center);
   text(fit("Sem ele, a placa não mostra o % de uso", gfx::LABEL, bw).c_str(), cx, u(40) + below(gfx::TITLE, 32), gfx::LABEL, MUTED, middle_center);
-  const int by = u(110), boxH = below(gfx::LABEL, 26) * 3 + u(24);
+  // a caixa cresce com o texto: o comando e a frase em até duas linhas, sem cortar
+  const int by = u(110), tx = M() + u(16), tw = bw - u(32);
+  String l2, l1 = wrap2("e entre na sua conta. A placa segue sozinha.", gfx::SMALL, tw, l2);
+  const int cmdY = by + u(14) + below(gfx::LABEL, 30), noteY = cmdY + gfx::lineHeight(gfx::TITLE) + u(6);
+  const int boxH = noteY - by + gfx::lineHeight(gfx::SMALL) * (l2.length() ? 2 : 1) + u(14);
   const uint16_t bg = blend(BG, TRACK, 0.6f);
   fb().fillSmoothRoundRect(M(), by, bw, boxH, u(14), bg);
-  text("No terminal, rode:", M() + u(16), by + u(14), gfx::LABEL, TEXT, top_left, bg);
-  text("claude", M() + u(16), by + u(14) + below(gfx::LABEL, 30), gfx::TITLE, GREEN, top_left, bg);
-  text(fit("e entre na sua conta. A placa segue sozinha.", gfx::SMALL, bw - u(32)).c_str(), M() + u(16), by + boxH - u(12), gfx::SMALL, DIM, bottom_left, bg);
+  text("No terminal, rode:", tx, by + u(14), gfx::LABEL, TEXT, top_left, bg);
+  text("claude", tx, cmdY, gfx::TITLE, GREEN, top_left, bg);
+  text(l1.c_str(), tx, noteY, gfx::SMALL, DIM, top_left, bg);
+  if (l2.length()) text(fit(l2.c_str(), gfx::SMALL, tw).c_str(), tx, noteY + gfx::lineHeight(gfx::SMALL), gfx::SMALL, DIM, top_left, bg);
   const int sy = gfx::height() - u(24) - bh;
   fb().fillSmoothRoundRect(M(), sy, bw, bh, min(bh / 2, u(26)), bg);
   text("Pular: só tokens, sem %", cx, sy + bh / 2, gfx::LABEL, TEXT, middle_center, bg);
