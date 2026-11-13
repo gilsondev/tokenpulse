@@ -30,8 +30,19 @@ jobs:
         run: |
           python3 .github/scripts/next_version.py | tee -a "$GITHUB_OUTPUT"
 
+  # o daemon e o instalador: testes, erros de Python (ruff, só as regras de erro real) e sintaxe dos scripts.
+  # Falhou aqui, não sai firmware nem release.
+  daemon:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv run --with pytest --with pyserial --with bleak pytest host/tests -q
+      - run: uvx ruff check --select F host/ .github/scripts/
+      - run: for f in docs/install.sh host/install.sh host/statusline.sh setup.sh update.sh firmware/flash.sh; do bash -n "$f"; done
+
   build:
-    needs: version
+    needs: [version, daemon]
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
