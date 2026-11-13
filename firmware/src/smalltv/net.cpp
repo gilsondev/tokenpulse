@@ -10,6 +10,7 @@
 #include "config.h"
 #include "page.h"
 #include "screen.h"
+#include "../web/auth_http.h"
 
 namespace net {
 namespace {
@@ -39,6 +40,13 @@ const char* hostName() { return config::v.host[0] ? config::v.host : ap; }
 
 // Provedores mora no daemon: a página guarda o pedido aqui e a resposta do próximo /frame o entrega
 String pendingAct;  // a ação para o daemon ("prov both", "mc 0"...), na resposta do próximo frame
+
+// mudar a placa pede o token (web/auth.h): o código da tela no navegador, o token no daemon
+bool locked() {
+  if (webauth::authed(server, config::v.token)) return false;
+  server.send(401, "text/plain", "Digite o código que aparece na tela da placa.");
+  return true;
+}
 
 void handleState() {
   JsonDocument d;
@@ -77,6 +85,7 @@ void handleState() {
 
 // Campos ausentes ficam como estão; fora da faixa, são cortados para a faixa.
 void handleConfig() {
+  if (locked()) return;
   auto& v = config::v;
   auto num = [](const char* k, int lo, int hi, uint8_t& field) {
     if (server.hasArg(k)) field = constrain(server.arg(k).toInt(), lo, hi);
@@ -183,14 +192,19 @@ void handleWifiState() {
 
 void handleHello() {
   daemonMs = millis();
-  char buf[160];
-  snprintf(buf, sizeof buf, "{\"board\":\"%s\",\"fw\":\"%s\",\"ip\":\"%s\",\"heap\":%u,\"safe\":%s}", app::BOARD,
-           app::FIRMWARE, WiFi.localIP().toString().c_str(), ESP.getFreeHeap(), app::safe ? "true" : "false");
+  char buf[200];
+  // o token vai para o daemon (OTA e captura) até um deles provar que guardou, mandando-o de volta no /frame;
+  // daemon antigo, que não guarda, não queima a entrega. Depois disso, só no próximo preparo
+  const bool give = !config::v.claimed;
+  snprintf(buf, sizeof buf, "{\"board\":\"%s\",\"fw\":\"%s\",\"ip\":\"%s\",\"heap\":%u,\"safe\":%s%s%s%s}", app::BOARD,
+           app::FIRMWARE, WiFi.localIP().toString().c_str(), ESP.getFreeHeap(), app::safe ? "true" : "false",
+           give ? ",\"token\":\"" : "", give ? config::v.token : "", give ? "\"" : "");
   server.send(200, "application/json", buf);
 }
 
 void handleFrame() {
   daemonMs = millis();
+  if (!config::v.claimed && webauth::authed(server, config::v.token)) config::v.claimed = 1, config::save();
   // parse num documento à parte: um corpo cortado não apaga o frame que está na tela
   JsonDocument next;
   if (DeserializationError err = deserializeJson(next, server.arg("plain"))) {
@@ -208,6 +222,7 @@ void handleFrame() {
 
 void begin() {
   snprintf(ap, sizeof ap, "tokenpulse-%s", app::CODE);
+  if (!config::v.token[0]) webauth::newToken(config::v.token, sizeof config::v.token), config::save();
   WiFi.persistent(true);
   WiFi.hostname(hostName());
   WiFi.setAutoReconnect(true);
@@ -233,16 +248,21 @@ void begin() {
   server.on("/api/config", HTTP_POST, handleConfig);
   // screenshot: 240x240 RGB565 cru. Mostra os seus dados a quem estiver na rede, como a própria tela
   server.on("/shot", HTTP_GET, [] {
+    if (locked()) return;
     if (app::safe) return server.send(503, "text/plain", "modo de recuperação: sem tela\n");
     server.setContentLength(240 * 240 * 2);
     server.send(200, "application/octet-stream", "");
     if (!screen::shot(server.arg("page"), [](const uint8_t* d, size_t n) { server.sendContent(reinterpret_cast<const char*>(d), n); }))
       server.client().stop();  // tela pedida não existe: corta a resposta, o cliente vê o tamanho errado
   });
-  server.on("/api/reboot", HTTP_POST, [] { server.send(204); rebootAtMs = millis() + 500; });
+  server.on("/api/reboot", HTTP_POST, [] {
+    if (locked()) return;
+    server.send(204), rebootAtMs = millis() + 500;
+  });
   // entrega para outra pessoa: ajustes de fábrica e sem a rede daqui. No próximo boot a placa abre o AP, e
   // depois do WiFi dela a tela mostra o QR code da instalação no Mac
   server.on("/api/prepare", HTTP_POST, [] {
+    if (locked()) return;
     server.send(204);
     config::v = config::Values();
     config::save();
@@ -250,6 +270,7 @@ void begin() {
     rebootAtMs = millis() + 500;
   });
   server.on("/api/forget", HTTP_POST, [] {  // apaga a rede gravada: no próximo boot a placa abre o AP
+    if (locked()) return;
     server.send(204);
     forgetNetwork();
     rebootAtMs = millis() + 500;
@@ -272,9 +293,10 @@ void begin() {
   // a página guiada vem antes do updater: o ESP8266WebServer usa a primeira rota que bate, e o POST
   // /update continua sendo o dele (o mesmo que o tokend usa)
   server.on("/update", HTTP_GET, [] { server.send_P(200, "text/html", UPDATE_PAGE); });
-  updater.setup(&server, "/update");
+  updater.setup(&server, "/update", "tokenpulse", config::v.token);  // página e daemon mandam o token no Basic
+  webauth::routes(server, config::v.token);
   // o total vem do Content-Length do envio: o Updater só sabe o espaço livre, não o tamanho do arquivo
-  server.collectHeaders("Content-Length");
+  server.collectHeaders("Content-Length", "Cookie", "X-Token");
   if (!app::safe) Update.onProgress([](size_t done, size_t) { screen::otaProgress(done, server.header("Content-Length").toInt()); });
   server.begin();
 }

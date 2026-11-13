@@ -15,6 +15,7 @@
 #include "ui/anim.h"
 #include "ui/gfx.h"
 #include "web/assets.h"
+#include "web/auth_http.h"
 #include "web/usb_page.h"
 
 namespace webui {
@@ -27,7 +28,13 @@ char ap[24];
 bool started = false, ap_on = false, mdns_on = false;
 uint32_t onlineSinceMs = 0, rebootAtMs = 0, joinMs = 0;
 String scanJson, joinSsid, mdnsHost;
-uint8_t lastReason = 0;  // motivo da última desconexão do WiFi: senha errada, rede não achada…
+uint8_t lastReason = 0;
+// mudar a placa pela página pede o token (web/auth.h): o código da tela no navegador
+bool locked() {
+  if (webauth::authed(server, settings::web.token)) return false;
+  server.send(401, "text/plain", "Digite o código que aparece na tela da placa.");
+  return true;
+}  // motivo da última desconexão do WiFi: senha errada, rede não achada…
 
 void startServer();
 
@@ -80,6 +87,7 @@ void handleState() {
 
 // Campos ausentes ficam como estão; fora da faixa, são cortados para a faixa.
 void handleConfig() {
+  if (locked()) return;
   auto& v = settings::v;
   auto& w = settings::web;
   auto num = [](const char* k, int lo, int hi, uint8_t& field) {
@@ -216,6 +224,7 @@ void startServer() {
   server.on("/api/state", HTTP_GET, handleState);
   server.on("/api/config", HTTP_POST, handleConfig);
   server.on("/api/play", HTTP_POST, [] {  // prévia do som escolhido
+    if (locked()) return;
     const int i = server.arg("i").toInt();
     if (i < 0 || i >= sound::COUNT) return server.send(400);
     board::play(i, settings::volumePct());
@@ -224,14 +233,19 @@ void startServer() {
   server.on("/api/scan", HTTP_GET, handleScan);
   server.on("/api/wifi", HTTP_GET, handleWifiState);
   server.on("/wifi", HTTP_POST, handleWifi);
-  server.on("/api/reboot", HTTP_POST, [] { server.send(204); rebootAtMs = millis() + 500; });
+  server.on("/api/reboot", HTTP_POST, [] {
+    if (locked()) return;
+    server.send(204), rebootAtMs = millis() + 500;
+  });
   server.on("/api/forget", HTTP_POST, [] {  // esquece a rede: o WiFi só volta quando pedido na tela
+    if (locked()) return;
     server.send(204);
     forgetWifi();
     rebootAtMs = millis() + 500;
   });
   // entrega para outra pessoa: ajustes de fábrica e sem a rede daqui. A calibração do toque fica: é da placa
   server.on("/api/prepare", HTTP_POST, [] {
+    if (locked()) return;
     server.send(204);
     const uint8_t orient = settings::v.orient;  // a posição é do suporte, como a calibração: fica
     settings::v = settings::Values();
@@ -243,9 +257,10 @@ void startServer() {
   });
   // a página guiada vem antes do updater: o WebServer usa a primeira rota que bate, e o POST é o dele
   server.on("/update", HTTP_GET, [] { server.send_P(200, "text/html", UPDATE_PAGE); });
-  updater.setup(&server, "/update");
-  static const char* keep[] = {"Content-Length"};  // o ESP32 pede a lista, o ESP8266 aceita variádico
-  server.collectHeaders(keep, 1);
+  updater.setup(&server, "/update", "tokenpulse", settings::web.token);  // a página manda o token no Basic
+  webauth::routes(server, settings::web.token);
+  static const char* keep[] = {"Content-Length", "Cookie", "X-Token"};  // o ESP32 pede a lista, o ESP8266 aceita variádico
+  server.collectHeaders(keep, 3);
   Update.onProgress([](size_t done, size_t) {
     if (app::serialOta) return;  // OTA pela USB: a tela de progresso é a do hostlink
     static int lastPct = -1;
@@ -269,6 +284,7 @@ void startServer() {
 
 void begin() {
   snprintf(ap, sizeof ap, "tokenpulse-%s", board::CODE);
+  if (!settings::web.token[0]) webauth::newToken(settings::web.token, sizeof settings::web.token), settings::saveWeb();
   WiFi.onEvent([](WiFiEvent_t, WiFiEventInfo_t info) { lastReason = info.wifi_sta_disconnected.reason; },
                ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
   if (!settings::web.wifi) return;  // nunca configurado: o WiFi fica desligado

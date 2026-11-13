@@ -10,6 +10,7 @@
 #include "screens_tall.h"
 #include "../power.h"
 #include "../settings.h"
+#include "../web/auth.h"
 #include "../sound.h"
 #include "../ble.h"
 
@@ -678,6 +679,17 @@ void render() {
   webDone();
   if (millis() < holdUntil) return;
   power::update();
+  if (webauth::codeActive()) {  // alguém pediu o código na página: ele passa na frente de tudo
+    power::wake();
+    if (gfx::full()) return gfx::frame([] { tall::drawPairCode(webauth::code, webauth::codeSecsLeft()); });
+    return gfx::frame([] {
+      char buf[16];
+      fb().fillScreen(BG);
+      label("Código da página", gfx::width() / 2, gfx::height() / 2 - s(24), MUTED, middle_center);
+      snprintf(buf, sizeof buf, "%d", webauth::code);
+      big(buf, gfx::width() / 2, gfx::height() / 2, ACCENT, middle_center);
+    });
+  }
   if (orientOpen()) {
     if (orientConfirmMs && millis() - orientConfirmMs > 20000) settings::web.orientSet = 1, settings::saveWeb();
     const int left = 20 - (millis() - orientConfirmMs) / 1000;

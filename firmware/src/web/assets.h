@@ -157,6 +157,11 @@ static const char UPDATE_PAGE[] PROGMEM = R"HTML(<!doctype html>
 <section><h2>Pelo computador</h2><p>Com o daemon rodando, dá para atualizar sem o navegador: <code>./update.sh</code> manda o último release, e <code id=flash>firmware/flash.sh &lt;placa&gt;</code> compila e manda.</p></section>
 </main>
 <script>
+// mudar a placa pede o código da tela dela (web/auth.h): um 401 pede o código, pareia e repete o pedido
+const tok=()=>(document.cookie.match(/(?:^|; )tp=([^;]+)/)||[])[1],_fetch=window.fetch.bind(window);
+async function unlock(){await _fetch('/api/pair/start',{method:'POST'});const c=prompt('Digite o código de 4 dígitos que apareceu na tela da placa:');if(!c)return false;
+  const r=await _fetch('/api/pair',{method:'POST',body:new URLSearchParams({code:c.trim()})});if(!r.ok)alert(await r.text());return r.ok}
+window.fetch=async(u,o)=>{let r=await _fetch(u,o);if(r.status===401&&await unlock())r=await _fetch(u,o);return r};
 const $=id=>document.getElementById(id),mark=(id,c)=>{$(id).className=c};
 const say=(id,t,c)=>{$(id).textContent=t;$(id).className=c||''};
 let before=null,room=0,file=null,board='';
@@ -186,8 +191,8 @@ $('file').onchange=e=>pick(e.target.files[0]);
 const drop=$('drop');
 drop.ondragover=e=>{e.preventDefault();drop.classList.add('on')};drop.ondragleave=()=>drop.classList.remove('on');
 drop.ondrop=e=>{e.preventDefault();drop.classList.remove('on');pick(e.dataTransfer.files[0])};
-$('send').onclick=()=>{
-  if(!file)return;$('send').disabled=true;$('bar').hidden=false;say('sendMsg','Enviando…');
+$('send').onclick=async()=>{
+  if(!file||(!tok()&&!await unlock()))return;$('send').disabled=true;$('bar').hidden=false;say('sendMsg','Enviando…');
   const x=new XMLHttpRequest(),fd=new FormData();fd.append('firmware',file,file.name);
   x.upload.onprogress=e=>{if(e.lengthComputable)$('bar').value=Math.round(100*e.loaded/e.total)};
   x.onload=()=>{
@@ -195,7 +200,7 @@ $('send').onclick=()=>{
     else{say('sendMsg','A placa recusou: '+x.responseText.replace(/<[^>]*>/g,'').trim()+'. Ela continua na versão atual.','err');mark('s3','bad');$('send').disabled=false}
   };
   x.onerror=()=>{say('sendMsg','A conexão caiu no meio do envio. A placa continua na versão atual; tente de novo.','err');mark('s3','bad');$('send').disabled=false};
-  x.open('POST','/update');x.send(fd);
+  x.open('POST','/update');x.setRequestHeader('Authorization','Basic '+btoa('tokenpulse:'+tok()));x.send(fd);
 };
 async function wait(){
   const t0=Date.now();await new Promise(r=>setTimeout(r,4000));

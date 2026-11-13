@@ -35,6 +35,7 @@ struct Web {
   uint8_t paired = 0;     // 1: um daemon já falou com a placa. Sem isso, a primeira tela é o QR da instalação
   uint8_t batBright = 2;  // brilho na bateria: 25/50/70/100% (só placa com bateria; o bright vale no USB)
   uint8_t orientSet = 0;  // 1: a pessoa já disse qual lado fica embaixo; 0: o primeiro uso pergunta
+  char token[33] = "";    // a chave da página web (web/auth.h); vazia: gera no boot. Troca no preparo
   // campo novo entra sempre no fim: o gravado por um firmware antigo é menor e o resto fica no padrão
 };
 extern Web web;

@@ -1,3 +1,4 @@
+#include "../web/auth.h"
 #include "screen.h"
 
 #include <LovyanGFX.hpp>
@@ -651,10 +652,23 @@ bool step() {
   return moving;
 }
 
+// O código que libera a página web no navegador, enquanto vale (2 min).
+void drawPairCode() {
+  char buf[24];
+  band.fillScreen(BG);
+  text("Código da página web", W / 2, 50, LABEL, TEXT, top_center);
+  snprintf(buf, sizeof buf, "%d %d %d %d", webauth::code / 1000, webauth::code / 100 % 10, webauth::code / 10 % 10, webauth::code % 10);
+  text(buf, W / 2, 96, HERO, ACCENT, top_center);
+  text("Digite no navegador", W / 2, 164, LABEL, MUTED, top_center);
+  snprintf(buf, sizeof buf, "Some em %d s", webauth::codeSecsLeft());
+  text(buf, W / 2, 200, LABEL, DIM, top_center);
+}
+
 void render(int y0, int y1, Slot slot, bool data) {
   for (oy = 0; oy < H; oy += BAND) {
     if (oy + BAND <= y0 || oy >= y1) continue;
     if (otaTotal) drawOta();
+    else if (webauth::codeActive()) drawPairCode();
     else data ? draw(slot) : drawWaiting();
     band.pushSprite(0, oy);
     yield();

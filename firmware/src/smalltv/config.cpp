@@ -39,6 +39,11 @@ void begin() {
   if (v.host[0] && !validHost(v.host)) v.host[0] = 0;
   if (v.hideCost > 1) v.hideCost = d.hideCost;
   if (v.alerts > 3) v.alerts = d.alerts;  // o byte além do layout antigo vem com o que havia na flash
+  // token e claimed também estão além do layout antigo: lixo da flash vira "sem token" e "não entregue"
+  bool hex = strlen(v.token) == 32;
+  for (int i = 0; hex && i < 32; i++) hex = isxdigit((unsigned char)v.token[i]);
+  if (!hex) v.token[0] = 0, v.claimed = 0;
+  if (v.claimed > 1) v.claimed = 0;
 }
 
 void save() {

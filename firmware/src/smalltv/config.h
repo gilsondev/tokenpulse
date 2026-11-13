@@ -15,6 +15,8 @@ struct Values {
   char host[32] = "";    // nome na rede (<host>.local); vazio: tokenpulse-<codinome>
   uint8_t hideCost = 0;  // 1: esconde o custo em US$. Campo novo vai no fim: o gravado antes continua válido
   uint8_t alerts = 3;    // 1: sessão pedindo aprovação segura a tela de sessões e pulsa; 2: aviso ao cruzar 70/80/90%
+  char token[33] = "";    // a chave da página web e do daemon (web/auth.h); troca no preparo
+  uint8_t claimed = 0;   // 1: um daemon já usou o token no /frame; o /hello para de entregá-lo até o preparo
 };
 
 extern Values v;

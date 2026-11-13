@@ -5,6 +5,7 @@
 """tokenpulse: lê o uso de tokens do Claude Code (CLI e Desktop) e envia 1 linha JSON por segundo
 para as telas ESP32 ligadas na USB. `--once` imprime um frame; `--demo` manda só dados fictícios."""
 import asyncio
+import base64
 import glob
 import hashlib
 import json
@@ -52,6 +53,7 @@ STATUS = os.path.join(HOME, ".claude/esp-tokens-status.json")
 ACCOUNT = os.path.join(HOME, ".claude.json")
 SHOT_DIR = os.path.join(HOME, ".claude/esp-tokens-shot")  # o shot.sh grava <placa> com {"cmds": [...], "out": "x.png"}
 OTA_DIR = os.path.join(HOME, ".claude/esp-tokens-ota")  # o flash.sh grava <placa> com o caminho do .bin
+KEYS = os.path.join(HOME, ".claude/esp-tokens-keys.json")  # o token de cada placa de WiFi, entregue no /hello; só este usuário lê
 BOARDS = os.path.join(HOME, ".claude/esp-tokens-boards.json")  # placas conectadas e o firmware de cada uma (update.sh)
 # Placas com Bluetooth que já estiveram na USB deste Mac: o daemon só conecta sem fio a elas, nunca à de um colega
 BLE_KNOWN = os.path.join(HOME, ".claude/esp-tokens-ble.json")
@@ -2319,9 +2321,41 @@ def resolve4(host):
         return None
 
 
-def net_hello(ip):
+def board_token(host):
+    try:
+        return json.load(open(KEYS)).get(host, "")
+    except (OSError, ValueError):
+        return ""
+
+
+def save_token(host, token):
+    """Guarda o token que a placa entregou no /hello: sem ele, o OTA e a captura pelo WiFi são recusados."""
+    try:
+        keys = json.load(open(KEYS))
+    except (OSError, ValueError):
+        keys = {}
+    if keys.get(host) == token:
+        return
+    keys[host] = token
+    fd = os.open(KEYS + ".tmp", os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as f:
+        json.dump(keys, f)
+    os.replace(KEYS + ".tmp", KEYS)
+
+
+def auth_headers(host):
+    token = board_token(host)
+    if not token:
+        return {}
+    basic = base64.b64encode(f"tokenpulse:{token}".encode()).decode()
+    return {"X-Token": token, "Authorization": f"Basic {basic}"}
+
+
+def net_hello(ip, host):
     try:
         h = json.loads(http(f"http://{ip}/hello", timeout=3))
+        if h.get("token"):
+            save_token(host, h["token"])
         return h["board"], h.get("fw", "")
     except (OSError, ValueError, KeyError, TypeError):
         return None
@@ -2335,7 +2369,7 @@ def net_ota(board, path):
             "Content-Type: application/octet-stream\r\n\r\n").encode() + data + f"\r\n--{boundary}--\r\n".encode()
     try:
         reply = http(f"http://{board.ip}/update", body,
-                     {"Content-Type": f"multipart/form-data; boundary={boundary}"}, timeout=120)
+                     {"Content-Type": f"multipart/form-data; boundary={boundary}"} | auth_headers(board.host), timeout=120)
     except OSError as e:
         return str(e)
     reply = reply.decode(errors="replace")
@@ -2375,7 +2409,7 @@ def net_loop():
                 if f"{name}.local" not in net_boards:
                     pending.setdefault(f"{name}.local", time.time() + 10)
         for host, until in list(pending.items()):
-            if (ip := resolve4(host)) and (h := net_hello(ip)):
+            if (ip := resolve4(host)) and (h := net_hello(ip, host)):
                 del pending[host]
                 net_boards[host] = board = NetBoard(host, ip, *h)
                 save_boards()
@@ -2404,7 +2438,7 @@ def net_loop():
             if not body:
                 continue
             try:
-                reply = http(f"http://{board.ip}/frame", body, {"Content-Type": "application/json"})
+                reply = http(f"http://{board.ip}/frame", body, {"Content-Type": "application/json"} | auth_headers(host))
                 board.fails = 0
                 if reply:  # a página da placa pediu uma troca de Provedores: vem na resposta do frame
                     try:

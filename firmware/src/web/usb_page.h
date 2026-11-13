@@ -78,6 +78,11 @@ static const char USB_PAGE[] PROGMEM = R"HTML(<!doctype html>
 </div></section>
 </main>
 <script>
+// mudar a placa pede o código da tela dela (web/auth.h): um 401 pede o código, pareia e repete o pedido
+const tok=()=>(document.cookie.match(/(?:^|; )tp=([^;]+)/)||[])[1],_fetch=window.fetch.bind(window);
+async function unlock(){await _fetch('/api/pair/start',{method:'POST'});const c=prompt('Digite o código de 4 dígitos que apareceu na tela da placa:');if(!c)return false;
+  const r=await _fetch('/api/pair',{method:'POST',body:new URLSearchParams({code:c.trim()})});if(!r.ok)alert(await r.text());return r.ok}
+window.fetch=async(u,o)=>{let r=await _fetch(u,o);if(r.status===401&&await unlock())r=await _fetch(u,o);return r};
 const $=id=>document.getElementById(id),f=$('f'),say=t=>$('msg').textContent=t;
 const ago=s=>s<0?'nunca':s<60?s+' s atrás':Math.floor(s/60)+' min atrás';
 let host='',provAt=0;

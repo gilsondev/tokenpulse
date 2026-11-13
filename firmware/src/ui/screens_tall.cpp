@@ -2414,6 +2414,19 @@ void drawUpdate() {
     text(labels[k], cx, updBtnY(k) + bh / 2, fontFor(bh) == gfx::SMALL ? gfx::LABEL : fontFor(bh), k ? TEXT : BG, middle_center, c);
   }
 }
+// O código que libera a página web no navegador: grande, com o tempo que falta. Some sozinho depois de usado.
+void drawPairCode(int code, int secs) {
+  gfx::clear();
+  const int cx = W() / 2, cy = gfx::height() / 2;
+  char buf[24];
+  text("Código da página web", cx, cy - u(70), gfx::TITLE, TEXT, middle_center);
+  snprintf(buf, sizeof buf, "%d %d %d %d", code / 1000, code / 100 % 10, code / 10 % 10, code % 10);
+  text(buf, cx, cy, gfx::NUM, ACCENT, middle_center);
+  title2("Digite no navegador para mudar os ajustes", cx, cy + u(46), W() - 2 * M(), MUTED, gfx::LABEL);
+  snprintf(buf, sizeof buf, "Some em %d s", secs);
+  text(buf, cx, gfx::height() - u(20), gfx::SMALL, DIM, middle_center);
+}
+
 // Primeiro uso numa placa sem acelerômetro: qual lado fica embaixo. A placa não sabe para que lado a pessoa olha,
 // então cada borda tem uma faixa escrita para ser lida quando aquela borda está embaixo: só uma aparece em pé, e é
 // nela que se toca. Com duas posições (em pé ou deitada), dois desenhos da placa no lugar das faixas.
