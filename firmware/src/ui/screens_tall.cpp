@@ -2560,15 +2560,22 @@ void drawOrient(bool confirm, int secsLeft) {
   }
   const uint16_t band = blend(BG, ACCENT, 0.18f);
   if (board::ROTATIONS == 4) {
-    fb().fillSmoothRoundRect(u(6), h - b - u(6), w - u(12), b, u(10), band);    // embaixo
-    fb().fillSmoothRoundRect(u(6), u(6), w - u(12), b, u(10), band);            // em cima
-    fb().fillSmoothRoundRect(u(6), b + u(12), b, h - 2 * b - u(24), u(10), band);  // esquerda
-    fb().fillSmoothRoundRect(w - b - u(6), b + u(12), b, h - 2 * b - u(24), u(10), band);  // direita
+    // as faixas das bordas curtas vão de ponta a ponta; as outras cabem entre elas, com vão: os cantos não se tocam
+    const int e = u(6), g = max(u(12), 8), wide = w > h;
+    const int hx = wide ? e + b + g : e, hw = w - 2 * hx, vy = wide ? e : e + b + g, vh = h - 2 * vy;
+    fb().fillSmoothRoundRect(hx, h - b - e, hw, b, u(10), band);  // embaixo
+    fb().fillSmoothRoundRect(hx, e, hw, b, u(10), band);          // em cima
+    fb().fillSmoothRoundRect(e, vy, b, vh, u(10), band);          // esquerda
+    fb().fillSmoothRoundRect(w - b - e, vy, b, vh, u(10), band);  // direita
     const char* t = "Este lado fica embaixo";
     gfx::textTurned(t, cx, h - u(6) - b / 2, 0, gfx::LABEL, ACCENT, band);
     gfx::textTurned(t, cx, u(6) + b / 2, 2, gfx::LABEL, ACCENT, band);
     gfx::textTurned(t, u(6) + b / 2, cy, 1, gfx::SMALL, ACCENT, band);
     gfx::textTurned(t, w - u(6) - b / 2, cy, 3, gfx::SMALL, ACCENT, band);
+    // a instrução no meio, no sentido da faixa de baixo (a posição de fábrica, a mais provável)
+    const int lh = gfx::lineHeight(gfx::SMALL);
+    text("Toque na faixa que ficou", cx, cy - lh / 2 - u(2), gfx::SMALL, DIM, middle_center);
+    text("embaixo, virada para você", cx, cy + lh / 2 + u(2), gfx::SMALL, DIM, middle_center);
     return;
   }
   text("Como ela vai ficar?", cx, u(40), gfx::TITLE, TEXT, middle_center);
@@ -2594,6 +2601,8 @@ int orientTap(int x, int y, bool confirm) {
     return -1;
   }
   if (board::ROTATIONS == 4) {
+    if (w > h && x < b) return 3;  // deitada, as laterais vão de ponta a ponta: valem nos cantos
+    if (w > h && x >= w - b) return 1;
     if (y >= h - b) return 0;
     if (y < b) return 2;
     if (x < b) return 3;
