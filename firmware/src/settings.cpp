@@ -20,6 +20,7 @@ constexpr const char* NS = "ajustes";
 constexpr uint8_t VERSION = 1;
 
 void begin() {
+  v.orient = board::DEFAULT_ROTATION;  // de fábrica, a posição em que a placa costuma ficar
   if (!prefs.begin(NS, true)) return;  // primeira vez: ainda não existe, ficam os padrões
   Values read;
   if (prefs.getUChar("ver", 0) == VERSION && prefs.getBytes("v", &read, sizeof read) == sizeof read) v = read;

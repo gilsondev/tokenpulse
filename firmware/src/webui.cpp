@@ -233,7 +233,9 @@ void startServer() {
   // entrega para outra pessoa: ajustes de fábrica e sem a rede daqui. A calibração do toque fica: é da placa
   server.on("/api/prepare", HTTP_POST, [] {
     server.send(204);
+    const uint8_t orient = settings::v.orient;  // a posição é do suporte, como a calibração: fica
     settings::v = settings::Values();
+    settings::v.orient = orient;
     settings::save();
     settings::web = settings::Web();
     forgetWifi();

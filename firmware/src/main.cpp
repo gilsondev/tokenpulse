@@ -154,8 +154,8 @@ void setup() {
     int side = -1;
     for (uint32_t t0 = millis(); side < 0 && millis() - t0 < 300; delay(20)) side = gravitySide();
     if (side >= 0) gfx::setRotation(board::ROT_FOR[side]);
-  } else if (settings::v.orient) {
-    gfx::setRotation(settings::v.orient);
+  } else {
+    gfx::setRotation(settings::v.orient);  // a posição gravada, inclusive a 0 (o padrão da placa pode ser outro)
   }
   screens::bootSplash();
   // touch resistivo sem calibração gravada: calibra antes de tudo, senão os toques caem longe da caneta
