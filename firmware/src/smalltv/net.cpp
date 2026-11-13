@@ -214,6 +214,8 @@ void handleFrame() {
   app::lastFrameMs = millis();
   fresh = true;
   if (!pendingAct.length()) return server.send(204);
+  // o token volta junto: o daemon só executa a ação de quem prova ser a placa que pareou com ele
+  server.sendHeader("X-Token", config::v.token);
   server.send(200, "application/json", "{\"act\":\"" + pendingAct + "\"}");
   pendingAct = "";
 }

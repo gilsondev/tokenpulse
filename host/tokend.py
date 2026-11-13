@@ -8,6 +8,7 @@ import asyncio
 import base64
 import glob
 import hashlib
+import hmac
 import json
 import os
 import re
@@ -53,6 +54,7 @@ STATUS = os.path.join(HOME, ".claude/esp-tokens-status.json")
 ACCOUNT = os.path.join(HOME, ".claude.json")
 SHOT_DIR = os.path.join(HOME, ".claude/esp-tokens-shot")  # o shot.sh grava <placa> com {"cmds": [...], "out": "x.png"}
 OTA_DIR = os.path.join(HOME, ".claude/esp-tokens-ota")  # o flash.sh grava <placa> com o caminho do .bin
+NET_ACTIONS = {"prov", "mc", "mcws", "lskip", "update"}  # o que a página do SmallTV pede; trocar de conta é só no cabo
 KEYS = os.path.join(HOME, ".claude/esp-tokens-keys.json")  # o token de cada placa de WiFi, entregue no /hello; só este usuário lê
 BOARDS = os.path.join(HOME, ".claude/esp-tokens-boards.json")  # placas conectadas e o firmware de cada uma (update.sh)
 # Placas com Bluetooth que já estiveram na USB deste Mac: o daemon só conecta sem fio a elas, nunca à de um colega
@@ -2442,13 +2444,25 @@ def net_loop():
             if not body:
                 continue
             try:
-                reply = http(f"http://{board.ip}/frame", body, {"Content-Type": "application/json"} | auth_headers(host))
+                req = urllib.request.Request(f"http://{board.ip}/frame", body,
+                                             {"Content-Type": "application/json"} | auth_headers(host))
+                with urllib.request.urlopen(req, timeout=4) as r:
+                    reply, proof = r.read(), r.headers.get("X-Token", "")
                 board.fails = 0
-                if reply:  # a página da placa pediu uma troca de Provedores: vem na resposta do frame
+                if reply:  # a página da placa pediu uma ação (Provedores, Multica, atualizar): vem na resposta do frame
                     try:
-                        board_action("ACTION " + str(json.loads(reply).get("act", "")))
+                        act = str(json.loads(reply).get("act", ""))
                     except (ValueError, AttributeError):
-                        board.log(f"resposta do frame ignorada: {reply[:80]!r}")
+                        act = ""
+                    token = board_token(host)
+                    # pelo WiFi, só o que a página do SmallTV oferece, e só de quem mostra o token que a placa nos deu:
+                    # outro aparelho que se anuncie como _tokenpulse não troca a conta nem roda nada no computador
+                    if not act.split()[:1] or act.split()[0] not in NET_ACTIONS:
+                        board.log(f"ação pelo WiFi recusada: {act[:40]!r}")
+                    elif not token or not hmac.compare_digest(proof, token):
+                        board.log(f"ação pelo WiFi recusada: placa sem o token pareado ({act[:20]!r})")
+                    else:
+                        board_action("ACTION " + act)
             except OSError as e:
                 board.fails += 1
                 if board.fails >= 3:  # 6 s sem resposta: some até o mDNS achar de novo
