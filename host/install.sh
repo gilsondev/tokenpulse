@@ -4,6 +4,9 @@
 set -e
 repo=$(cd "$(dirname "$0")/.." && pwd)
 uv=$(command -v uv) || { echo "instale o uv antes: https://docs.astral.sh/uv/" >&2; exit 1; }
+# o % de uso vem da statusline do Claude Code (documentada); a API da Anthropic fica de reserva
+msg=$("$uv" run -q --no-project "$repo/host/statusline_setup.py" install "$repo/host/statusline.sh" 2>/dev/null || true)
+[ -n "$msg" ] && { [ -n "${TOKENPULSE_QUIET:-}" ] && echo "  ✓ $msg" || echo "$msg"; }
 if [ "$(uname)" = Linux ]; then
   unit=~/.config/systemd/user/tokenpulse.service
   mkdir -p ~/.config/systemd/user ~/.local/state/tokenpulse

@@ -1033,9 +1033,10 @@ def org():
     return _org["name"]
 
 
-# % de 5h e da semana direto da Anthropic, com o token OAuth que o Claude Code guarda no Keychain (no Linux, no
-# ~/.claude/.credentials.json).
-# É o mesmo endpoint que o Claude Code usa. Não é documentado: se falhar, vale a statusline.
+# % de 5h e da semana: a fonte é a statusline do Claude Code (rate_limits, documentado). Só quando ela não serve
+# (nenhuma sessão de terminal nos últimos 10 min, janela recém-resetada ou org recém-trocada) o daemon pergunta
+# direto à Anthropic, com o token OAuth que o Claude Code guarda no Keychain (no Linux, no
+# ~/.claude/.credentials.json). Esse endpoint é o mesmo que o Claude Code usa, mas não é documentado.
 USAGE_URL = "https://api.anthropic.com/api/oauth/usage"
 _api = {"five": None, "week": None, "at": 0.0, "err": "", "org": ""}
 _per_org = {}  # org -> último % visto quando ela estava logada: {"p5", "pw", "at"}
@@ -1058,6 +1059,17 @@ def fetch_usage():
 
 USAGE_EVERY = 120  # o % muda devagar; 60 s já levou a 429
 USAGE_MAX_WAIT = 1800
+STATUS_FRESH = 600  # s: statusline mais nova que isso vale sozinha, sem chamar a API
+
+
+def status_fresh():
+    """A statusline serve como fonte: recente, com a janela de 5 h e escrita depois da última troca de org."""
+    try:
+        at = os.path.getmtime(STATUS)
+        has_5h = bool((json.load(open(STATUS)).get("rate_limits") or {}).get("five_hour"))
+    except (OSError, ValueError, AttributeError):
+        return False
+    return has_5h and time.time() - at < STATUS_FRESH and at >= _org["changed_at"]
 
 
 USAGE_CACHE = os.path.join(HOME, ".claude/esp-tokens-usage.json")
@@ -1080,6 +1092,9 @@ def usage_loop():
             if _refetch.wait(next_at - time.time()) and wait <= USAGE_EVERY:
                 break
         _refetch.clear()
+        if status_fresh():  # a statusline está valendo: a API fica para quando ela parar
+            next_at = time.time() + USAGE_EVERY
+            continue
         try:
             name = read_org()
             five, week = fetch_usage()
@@ -1437,14 +1452,10 @@ def limits():
         status_at = os.path.getmtime(STATUS)
     except OSError:
         status_at = 0.0
-    # usa a fonte mais recente: a API (pausada em caso de 429) ou a statusline das sessões de CLI
+    # a statusline primeiro; a API só quando ela não serve e o resultado dela é mais novo
     # o % da API é de uma org: depois de uma troca, só vale quando chegar o da org nova
     api_ok = _api["at"] and _api["org"] in ("", _org["name"])
-    try:  # a statusline só concorre se trouxer a janela de 5h (logo depois do reset ela vem sem)
-        status_has_5h = bool((json.load(open(STATUS)).get("rate_limits") or {}).get("five_hour"))
-    except (OSError, ValueError, AttributeError):
-        status_has_5h = False
-    if api_ok and (_api["at"] >= status_at or not status_has_5h):
+    if not status_fresh() and api_ok and _api["at"] >= status_at:
         age = time.time() - _api["at"]
         five = {"used_percentage": _api["five"].get("utilization"), "resets_at": _api["five"].get("resets_at")}
         week = {"used_percentage": _api["week"].get("utilization"), "resets_at": _api["week"].get("resets_at")}
@@ -1458,6 +1469,8 @@ def limits():
         if time.time() - age < _org["changed_at"]:
             return {"p5": -1, "pw": -1, "r5": "trocou de org", "age": int(age)}
         five, week = rl.get("five_hour") or {}, rl.get("seven_day") or {}
+        if status_fresh() and _org["name"]:  # a lista de orgs mostra o último % de cada uma: a statusline também conta
+            _per_org[_org["name"]] = {"p5": five.get("used_percentage"), "pw": week.get("used_percentage"), "at": time.time()}
     return {"age": int(age)} | window_fields(five, week, datetime.now())
 
 

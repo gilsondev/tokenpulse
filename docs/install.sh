@@ -21,6 +21,7 @@ main() {  # numa função: com curl | bash, nada roda antes de o script chegar i
       launchctl bootout "gui/$(id -u)/$label" 2>/dev/null || true
       rm -f ~/Library/LaunchAgents/$label.plist
     fi
+    [ -f "$dir/host/statusline_setup.py" ] && command -v uv >/dev/null && uv run -q --no-project "$dir/host/statusline_setup.py" remove || true
     rm -rf "$dir"
     echo "tokenpulse removido. A placa volta para \"sem dados do Mac\"."
     return

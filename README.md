@@ -348,8 +348,10 @@ downloads `tokenpulse-<board>-ota.bin` for the ones behind and waits for each to
 After that, `update.sh` and `firmware/flash.sh smalltv-ultra` update over WiFi. Don't use the Mac's WiFi to
 join `tokenpulse-<codename>`: without a network cable, the Mac has no internet while it is on it.
 
-Optional: point the `statusLine` in `~/.claude/settings.json` to `host/statusline.sh` (pass your current
-statusline as an argument to chain it). It serves as a fallback for the % when the usage API answers 429.
+The installer points the `statusLine` in `~/.claude/settings.json` to `host/statusline.sh`, chaining the
+statusline you already had, so your terminal looks the same. The 5-hour and weekly % come from it (Claude Code's
+documented `rate_limits`); the daemon asks Anthropic's usage endpoint only when no terminal session wrote it in the
+last 10 minutes. `--uninstall` restores your previous statusline.
 
 ## Usage
 
