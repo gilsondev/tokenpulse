@@ -32,7 +32,8 @@ void drawLoginAsk();             // o Claude Code sem login ("lask"): como logar
 bool loginSkipAt(int x, int y);  // o toque caiu em "Pular"
 void drawFwUp();                 // o daemon vai gravar o firmware novo ("fwup"): a versão e os segundos que faltam
 void drawUpdate();               // há versão nova ("upd"): atualizar agora ou depois
-int updateTap(int x, int y);     // 1 atualizar, 2 depois, 0 nada  // o aviso do Multica (bloco "mca"): issue em revisão ou run que falhou
+int updateTap(int x, int y);     // 1 atualizar, 2 depois, 0 nada
+void drawUpdating(const char* target);  // o progresso depois do "Atualizar agora", até a contagem do firmware
 void drawProvAsk();                          // primeiro uso com o Codex no Mac: quais provedores mostrar
 const char* provAskTap(int x, int y);        // o modo escolhido no toque ("both", "claude", "codex", "auto"), ou nullptr
 void drawSaver();   // OLED parada: só o relógio, em cinza sobre preto, mudando de lugar a cada minuto

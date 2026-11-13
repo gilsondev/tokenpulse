@@ -526,8 +526,8 @@ bool loginOpen() { return !app::frame["lask"].isNull() && !loginDone; }
 bool onboarding() { return askOpen() || mcAskOpen() || loginOpen(); }
 bool updShown();
 // "Depois" pergunta de novo em 24 h.
-String updSeen;
-uint32_t updLaterMs = 0;
+String updSeen, updTarget;  // updTarget: a versão pedida no "Atualizar agora", até o firmware novo gravar
+uint32_t updLaterMs = 0, updatingMs = 0;
 bool updOpen() {
   const char* v = app::frame["upd"] | "";
   return *v && (updSeen != v || millis() - updLaterMs > 24UL * 3600 * 1000);
@@ -664,7 +664,9 @@ void render() {
   }
   if (const int r = attentionRow(); r >= 0 && gfx::full() && !settingsOpen && app::hasData())
     return gfx::frame([r] { tall::drawAttention(r, millis() - attnMs); });
-  if (gfx::full() && !app::frame["fwup"].isNull()) return gfx::frame(tall::drawFwUp);
+  if (gfx::full() && !app::frame["fwup"].isNull()) return updatingMs = 0, gfx::frame(tall::drawFwUp);
+  // pediu a atualização: o progresso até a contagem do firmware chegar (2 min no máximo, se algo falhar no caminho)
+  if (gfx::full() && updatingMs && millis() - updatingMs < 120000) return gfx::frame([] { tall::drawUpdating(updTarget.c_str()); });
   if (mcAlertOpen() && !settingsOpen) return gfx::frame([] { tall::drawMcAlert(millis() - mcaMs); });
   if (askOpen() && !settingsOpen && app::hasData()) return gfx::frame([] { gfx::full() ? tall::drawProvAsk() : drawAsk(); });
   if (gfx::full() && mcAskOpen() && !settingsOpen && app::hasData()) return gfx::frame(tall::drawMcAsk);
@@ -757,7 +759,7 @@ void tap(int x, int y) {
   if (gfx::full() && !app::frame["fwup"].isNull()) return void(hostlink::action("ACTION fwlater"));
   if (gfx::full() && updShown() && app::hasData()) {
     const int b = tall::updateTap(x, y);
-    if (b == 1) hostlink::action("ACTION update");
+    if (b == 1) hostlink::action("ACTION update"), updatingMs = millis(), updTarget = app::frame["upd"] | "";
     if (b) updSeen = app::frame["upd"] | "", updLaterMs = millis();
     return;
   }

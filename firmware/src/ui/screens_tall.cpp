@@ -2414,6 +2414,23 @@ void drawUpdate() {
     text(labels[k], cx, updBtnY(k) + bh / 2, fontFor(bh) == gfx::SMALL ? gfx::LABEL : fontFor(bh), k ? TEXT : BG, middle_center, c);
   }
 }
+// Depois do "Atualizar agora": o que já foi e o que falta, até a contagem do firmware assumir a tela. O primeiro
+// passo fica pronto quando o daemon que fala com a placa já é a versão nova (agv no frame).
+void drawUpdating(const char* target) {
+  gfx::clear();
+  const int cx = W() / 2, bw = W() - 2 * M();
+  text("Atualizando", cx, u(40), gfx::TITLE, TEXT, middle_center);
+  title2("Não desligue a placa nem o computador", cx, u(40) + below(gfx::TITLE, 26), bw, MUTED, gfx::LABEL);
+  const bool agentDone = !strcmp(app::frame["agv"] | "", target);
+  const char* steps[] = {"Programa no computador", "Firmware desta placa"};
+  int y = gfx::height() / 2 - u(10);
+  for (int k = 0; k < 2; k++, y += max(u(56), TAPPX())) {
+    const int st = k == 0 ? (agentDone ? 0 : 1) : (agentDone ? 1 : 2);
+    stepIcon(M() + u(24), y, st);
+    text(steps[k], M() + u(48), y, gfx::LABEL, st == 2 ? DIM : TEXT, middle_left);
+  }
+}
+
 int updateTap(int x, int y) {
   const int bh = max(u(52), TAP());
   for (int k = 0; k < 2; k++)
