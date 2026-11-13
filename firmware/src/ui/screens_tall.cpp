@@ -2508,7 +2508,8 @@ void drawUpdate(int secsLeft) {
   const int cx = W() / 2, bh = max(u(52), TAP()), bw = W() - 2 * M();
   char buf[48];
   text("Versão nova", cx, u(40), gfx::TITLE, TEXT, middle_center);
-  snprintf(buf, sizeof buf, "%s → %s", hostlink::firmware(), (const char*)(app::frame["upd"] | ""));
+  // quem atualiza é o programa do computador: a versão de partida é a dele, não a do firmware desta placa
+  snprintf(buf, sizeof buf, "%s → %s", (const char*)(app::frame["agv"] | hostlink::firmware()), (const char*)(app::frame["upd"] | ""));
   text(fit(buf, gfx::LABEL, bw).c_str(), cx, u(40) + below(gfx::TITLE, 34), gfx::LABEL, ACCENT, middle_center);
   String l2, l1 = wrap2("Atualiza o computador e as placas, em cerca de 1 min.", gfx::LABEL, bw, l2);
   const int ty = u(40) + below(gfx::TITLE, 34) + below(gfx::LABEL, 40);
