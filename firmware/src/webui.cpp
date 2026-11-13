@@ -8,6 +8,7 @@
 #include <WiFi.h>
 
 #include "app.h"
+#include "ble.h"
 #include "boards/board.h"
 #include "hostlink.h"
 #include "settings.h"
@@ -253,6 +254,7 @@ void startServer() {
     settings::save();
     settings::web = settings::Web();
     forgetWifi();
+    ble::forgetBonds();  // o computador de antes deixa de conectar pelo Bluetooth
     rebootAtMs = millis() + 500;
   });
   // a página guiada vem antes do updater: o WebServer usa a primeira rota que bate, e o POST é o dele

@@ -12,5 +12,6 @@ bool poll(String& line);        // próxima linha completa que chegou pelo BLE
 void send(const char* line);    // manda uma linha (com '\n') ao Mac, se houver alguém conectado
 bool connected();
 const char* name();             // o nome anunciado, que o daemon guarda para achar a placa ("" sem BLE)
+void forgetBonds();             // apaga os pareamentos guardados: na entrega, o computador antigo deixa de conectar
 
 }  // namespace ble

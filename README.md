@@ -419,3 +419,5 @@ Waveshare, in OpenSCAD, inspired by the
 `firmware/data/sounds/LICENSE-kenney*.txt`). The ES8311 driver in `firmware/lib/ES8311` is from Espressif
 (Apache-2.0), and the AMOLED audio and PMU setup came from
 [claude-desktop-buddy-esp32](https://github.com/vthinkxie/claude-desktop-buddy-esp32) (MIT). Made with Claude Code.
+
+tokenpulse is an independent project, not affiliated with or endorsed by Anthropic or OpenAI. To report a security issue, see [SECURITY.md](SECURITY.md).

@@ -86,6 +86,7 @@ void send(const char* line) {
 
 bool connected() { return linked; }
 const char* name() { return advName.c_str(); }
+void forgetBonds() { NimBLEDevice::deleteAllBonds(); }
 
 }  // namespace ble
 
@@ -97,6 +98,7 @@ bool poll(String&) { return false; }
 void send(const char*) {}
 bool connected() { return false; }
 const char* name() { return ""; }
+void forgetBonds() {}
 }  // namespace ble
 
 #endif
