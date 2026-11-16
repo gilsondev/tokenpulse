@@ -99,45 +99,47 @@ def test_api_is_the_fallback_when_statusline_is_old(status, monkeypatch):
     assert not tokend.status_fresh() and tokend.limits()["p5"] == 80
 
 
-def test_session_from_before_org_switch_is_ignored(tmp_path, monkeypatch):
+def test_statusline_percent_belongs_to_the_org_with_that_weekly_reset(tmp_path, monkeypatch):
     path = tmp_path / "status.json"
     monkeypatch.setattr(tokend, "STATUS", str(path))
-    monkeypatch.setattr(tokend, "_sess_start", {(None, "velha"): time.time() - 3600, (None, "nova"): time.time()})
-    monkeypatch.setitem(tokend._org, "changed_at", time.time() - 60)
+    monkeypatch.setattr(tokend, "_status", {"seen": None, "at": 0.0, "rl": {}, "org": ""})
+    monkeypatch.setattr(tokend, "_per_org", {})
     monkeypatch.setitem(tokend._org, "name", "Jus Team")
-    monkeypatch.setattr(tokend, "_api", {"five": {"utilization": 12}, "week": {"utilization": 3},
-                                         "at": time.time() - 30, "err": "", "org": "Jus Team"})
+    team, jus = time.time() + 6 * 86400, time.time() + 86400
+    monkeypatch.setattr(tokend, "_week_reset", {"Jus Team": team, "Jus": jus})
 
-    def write(session, p5):
-        reset = time.time() + 3 * 3600
-        path.write_text(json.dumps({"session_id": session, "rate_limits": {
-            "five_hour": {"used_percentage": p5, "resets_at": reset}, "seven_day": {"used_percentage": 5, "resets_at": reset}}}))
+    def write(week_reset, p5, age):
+        path.write_text(json.dumps({"rate_limits": {"five_hour": {"used_percentage": p5, "resets_at": time.time() + 3600},
+                                                    "seven_day": {"used_percentage": 5, "resets_at": week_reset + 60}}}))
+        os.utime(path, (time.time() - age, time.time() - age))
+        return tokend.limits()
 
-    write("velha", 90)  # agente aberto na org anterior: o % é dela
-    assert not tokend.status_fresh() and tokend.limits()["p5"] == 12
-    write("nova", 33)
-    assert tokend.status_fresh() and tokend.limits()["p5"] == 33
-    write("velha", 90)  # a escrita da sessão velha não apaga a da nova
-    assert tokend.limits()["p5"] == 33
+    out = write(jus, 30, age=20)  # a sessão aberta segue gastando a Jus depois de logar na Jus Team
+    assert out["org"] == "Jus" and out["p5"] == 30
+    out = write(team, 2, age=10)
+    assert out["org"] == "Jus Team" and out["p5"] == 2
+    assert tokend._per_org["Jus"]["p5"] == 30
 
 
-def test_resumed_session_dates_from_the_process(tmp_path, monkeypatch):
-    path = tmp_path / "status.json"
-    monkeypatch.setattr(tokend, "STATUS", str(path))
-    monkeypatch.setattr(tokend, "_sess_start", {})
-    started = tokend.proc_start(os.getpid())
-    assert time.time() - 3600 < started <= time.time()
-    old_transcript = str(HOST / "tokend.py")  # --resume: o transcript é de antes da troca, o processo não
-
-    def write(changed_at):
-        monkeypatch.setitem(tokend._org, "changed_at", changed_at)
-        tokend._status.update(seen=None, at=0.0, rl={})
-        path.write_text(json.dumps({"session_id": "s", "transcript_path": old_transcript, "tp_pid": os.getpid(),
-                                    "rate_limits": {"five_hour": {"used_percentage": 7, "resets_at": time.time() + 60}}}))
-        return tokend.statusline()[1]
-
-    assert write(started - 1)  # troca antes de o processo abrir: o % vale
-    assert not write(started + 1)  # processo aberto antes da troca: fica de fora
+def test_cswap_list_gives_each_org_weekly_reset(tmp_path, monkeypatch):
+    fake = tmp_path / "cswap"
+    fake.write_text("""#!/bin/sh
+cat <<'OUT'
+Accounts:
+  1: conta1 (x) [Jus Team] (active)
+     ├ 5h:      0%   resets 20:00         in 4h 10m
+     ├ 7d:      2%   resets Nov 23 06:00  in 6d 14h
+  2: conta2 (y) [Jus]
+     ├ 7d:     30%   resets Nov 17 00:00  in 8h 10m
+OUT
+""")
+    fake.chmod(0o755)
+    monkeypatch.setattr(tokend, "CSWAP", str(fake))
+    monkeypatch.setattr(tokend, "_week_reset", {})
+    tokend._refresh_accounts()
+    assert abs(tokend._week_reset["Jus Team"] - (time.time() + 6 * 86400 + 14 * 3600)) < 5
+    assert abs(tokend._week_reset["Jus"] - (time.time() + 8 * 3600 + 10 * 60)) < 5
+    assert [r[:3] for r in tokend._accounts["list"]] == [[1, "Jus Team", 1], [2, "Jus", 0]]
 
 
 def test_board_token_file_is_private(tmp_path, monkeypatch):

@@ -814,7 +814,9 @@ def history_rows(today_events, codex_today=None):
 CSWAP = shutil.which("cswap") or os.path.join(HOME, ".local/bin/cswap")
 CLAUDE = shutil.which("claude") or os.path.join(HOME, ".local/bin/claude")
 _ACCOUNT_LINE = re.compile(r"^\s*(\d+):\s*\S+.*?\[(?P<org>[^\]]+)\](?P<active>\s*\(active\))?")
+_WEEK_LINE = re.compile(r"7d:.*\bin (?:(\d+)d)?\s*(?:(\d+)h)?\s*(?:(\d+)m)?")
 _accounts = {"at": 0.0, "list": []}
+_week_reset = {}  # org -> quando a janela de 7 dias reseta: fixo por conta, diz de qual org é um % da statusline
 _action = {"state": "", "target": "", "msg": "", "at": 0.0}  # o que a placa pediu e em que pé está
 
 
@@ -836,6 +838,9 @@ def _refresh_accounts():
                 relogin = i + 1 < len(out) and "re-login needed" in out[i + 1]
                 rows.append([int(line.split(":")[0]), cut(scrub(m["org"]), 32), 1 if m["active"] else 0,
                              1 if relogin else 0])
+            elif rows and (w := _WEEK_LINE.search(line)):
+                d, h, mi = (int(x or 0) for x in w.groups())
+                _week_reset[rows[-1][1]] = time.time() + d * 86400 + h * 3600 + mi * 60
     except (OSError, subprocess.TimeoutExpired):
         pass
     _accounts.update(at=time.time(), list=rows, busy=False)
@@ -1063,48 +1068,36 @@ USAGE_MAX_WAIT = 1800
 STATUS_FRESH = 600  # s: statusline mais nova que isso vale sozinha, sem chamar a API
 
 
-_status = {"seen": None, "at": 0.0, "rl": {}}
-_sess_start = {}  # (PID do Claude Code, session_id) -> quando a sessão começou
+_status = {"seen": None, "at": 0.0, "rl": {}, "org": ""}
 
 
-def proc_start(pid):
-    r = subprocess.run(["ps", "-o", "lstart=", "-p", str(pid)], capture_output=True, text=True, timeout=2,
-                       env={**os.environ, "LC_ALL": "C"})
-    return time.mktime(time.strptime(r.stdout.strip(), "%a %b %d %H:%M:%S %Y"))
-
-
-def session_start(st):
-    """Início da sessão que escreveu a statusline: o do processo do Claude Code, que guarda o token da org em que
-    abriu. Sem o PID (statusline.sh antigo): a criação do transcript ou a 1ª vez que o daemon a viu."""
-    pid = st.get("tp_pid")
-    key = (pid, st.get("session_id") or "")
-    if key not in _sess_start:
-        try:
-            _sess_start[key] = proc_start(pid) if pid else os.stat(st["transcript_path"]).st_birthtime
-        except (OSError, KeyError, TypeError, AttributeError, ValueError, subprocess.TimeoutExpired):
-            _sess_start[key] = time.time()
-    return _sess_start[key]
+def org_of(rl):
+    """A org de um rate_limits da statusline, pelo reset de 7 dias; sem conta conhecida que bata, a logada.
+    O Claude Code aberto não troca de conta junto com o cswap: segue gastando a anterior por um tempo."""
+    reset = parse_reset((rl.get("seven_day") or {}).get("resets_at"))
+    for name, at in _week_reset.items():
+        if reset and abs(reset.timestamp() - at) < 1800:
+            return name
+    return _org["name"]
 
 
 def statusline():
-    """(hora, rate_limits) da última escrita da statusline que vale para a org logada. Uma sessão aberta antes
-    da troca de org segue com o token da org anterior, e o % que ela escreve é dessa org: fica de fora."""
+    """(hora, rate_limits, org) da última escrita da statusline."""
     try:
         at = os.path.getmtime(STATUS)
         if (STATUS, at) != _status["seen"]:
             _status["seen"] = (STATUS, at)
-            st = json.load(open(STATUS))
-            if not _org["changed_at"] or session_start(st) >= _org["changed_at"]:
-                _status.update(at=at, rl=st.get("rate_limits") or {})
+            rl = json.load(open(STATUS)).get("rate_limits") or {}
+            _status.update(at=at, rl=rl, org=org_of(rl))
     except (OSError, ValueError, AttributeError):
         pass
-    return _status["at"], _status["rl"]
+    return _status["at"], _status["rl"], _status["org"]
 
 
 def status_fresh():
-    """A statusline serve como fonte: recente, com a janela de 5 h e escrita depois da última troca de org."""
-    at, rl = statusline()
-    return bool(rl.get("five_hour")) and time.time() - at < STATUS_FRESH and at >= _org["changed_at"]
+    """A statusline serve como fonte: recente e com a janela de 5 h."""
+    at, rl, _ = statusline()
+    return bool(rl.get("five_hour")) and time.time() - at < STATUS_FRESH
 
 
 USAGE_CACHE = os.path.join(HOME, ".claude/esp-tokens-usage.json")
@@ -1139,6 +1132,8 @@ def usage_loop():
                 raise ValueError("resposta sem five_hour/seven_day")
             _api.update(five=five, week=week, at=time.time(), err="", org=name)
             _per_org[name] = {"p5": five.get("utilization"), "pw": week.get("utilization"), "at": time.time()}
+            if reset := parse_reset(week.get("resets_at")):
+                _week_reset[name] = reset.timestamp()
             wait = USAGE_EVERY
         except Exception as e:  # rede, Keychain, 401 ou formato novo: registra uma vez e segue na statusline
             if getattr(e, "code", None) == 429:  # respeita o Retry-After; sem ele, dobra a espera
@@ -1483,25 +1478,24 @@ def multica_frame():
 
 
 def limits():
-    status_at, rl = statusline()
-    # a statusline primeiro; a API só quando ela não serve e o resultado dela é mais novo
-    # o % da API é de uma org: depois de uma troca, só vale quando chegar o da org nova
+    """% de 5 h e da semana, com a org dona dele: a da statusline recente, que é a que as sessões estão gastando
+    (duas orgs em uso alternam), ou a logada pela API."""
+    status_at, rl, status_org = statusline()
     api_ok = _api["at"] and _api["org"] in ("", _org["name"])
-    if not status_fresh() and api_ok and _api["at"] >= status_at:
-        age = time.time() - _api["at"]
-        five = {"used_percentage": _api["five"].get("utilization"), "resets_at": _api["five"].get("resets_at")}
-        week = {"used_percentage": _api["week"].get("utilization"), "resets_at": _api["week"].get("resets_at")}
-    else:
+    if status_fresh() or not api_ok or _api["at"] < status_at:
         if not status_at:
-            return {"p5": -1, "pw": -1}
+            return {"p5": -1, "pw": -1, "org": _org["name"]}
+        if status_org != _org["name"] and not status_fresh():  # % velho de outra org: a logada ainda sem dado
+            return {"p5": -1, "pw": -1, "r5": "trocou de org", "org": _org["name"]}
         age = time.time() - status_at
-        # a statusline não diz de qual org é o %: se a org mudou depois dela, o % é da org anterior
-        if status_at < _org["changed_at"]:
-            return {"p5": -1, "pw": -1, "r5": "trocou de org", "age": int(age)}
         five, week = rl.get("five_hour") or {}, rl.get("seven_day") or {}
-        if status_fresh() and _org["name"]:  # a lista de orgs mostra o último % de cada uma: a statusline também conta
-            _per_org[_org["name"]] = {"p5": five.get("used_percentage"), "pw": week.get("used_percentage"), "at": time.time()}
-    return {"age": int(age)} | window_fields(five, week, datetime.now())
+        if status_fresh() and status_org:  # a lista de orgs mostra o último % de cada uma
+            _per_org[status_org] = {"p5": five.get("used_percentage"), "pw": week.get("used_percentage"), "at": time.time()}
+        return {"age": int(age), "org": status_org} | window_fields(five, week, datetime.now())
+    age = time.time() - _api["at"]
+    five = {"used_percentage": _api["five"].get("utilization"), "resets_at": _api["five"].get("resets_at")}
+    week = {"used_percentage": _api["week"].get("utilization"), "resets_at": _api["week"].get("resets_at")}
+    return {"age": int(age), "org": _org["name"]} | window_fields(five, week, datetime.now())
 
 
 def window_fields(five, week, now):
@@ -2558,11 +2552,11 @@ def main():
             if not woke or "--once" in sys.argv:  # acordado por evento do herdr: manda já, os .jsonl esperam o próximo segundo
                 usage.poll()
                 codex.poll()
-            org_name = org()  # antes de limits(), que depende de saber se a org mudou
+            org()  # antes de limits(), que compara com a org logada
             # a escolha explícita em Provedores vale mesmo sem uso recente: não muda a placa sozinha depois de 7 dias
             cx = codex.snapshot(chosen=provider_mode() in ("codex", "both"))
             frame = (usage.snapshot() | limits() | account_frame() | ({"st": _claude["st"]} if _claude["st"] else {})
-                     | {"clk": datetime.now().strftime("%H:%M"), "t": local_time(), "org": org_name, "dark": dark_mode(), "agv": AGENT})
+                     | {"clk": datetime.now().strftime("%H:%M"), "t": local_time(), "dark": dark_mode(), "agv": AGENT})
             if cx or os.path.exists(PROVIDERS):  # depois de escolhido, o ajuste continua nos ajustes da placa
                 frame = with_codex(frame, cx, usage.events, codex, usage.recent)
             frame |= multica_frame() | update_frame() | login_frame()
