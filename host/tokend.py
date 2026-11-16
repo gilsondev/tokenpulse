@@ -1064,18 +1064,26 @@ STATUS_FRESH = 600  # s: statusline mais nova que isso vale sozinha, sem chamar 
 
 
 _status = {"seen": None, "at": 0.0, "rl": {}}
-_sess_start = {}  # session_id -> quando a sessão começou
+_sess_start = {}  # (PID do Claude Code, session_id) -> quando a sessão começou
+
+
+def proc_start(pid):
+    r = subprocess.run(["ps", "-o", "lstart=", "-p", str(pid)], capture_output=True, text=True, timeout=2,
+                       env={**os.environ, "LC_ALL": "C"})
+    return time.mktime(time.strptime(r.stdout.strip(), "%a %b %d %H:%M:%S %Y"))
 
 
 def session_start(st):
-    """Início da sessão que escreveu a statusline: criação do transcript (macOS) ou a 1ª vez que o daemon a viu."""
-    sid = st.get("session_id") or ""
-    if sid not in _sess_start:
+    """Início da sessão que escreveu a statusline: o do processo do Claude Code, que guarda o token da org em que
+    abriu. Sem o PID (statusline.sh antigo): a criação do transcript ou a 1ª vez que o daemon a viu."""
+    pid = st.get("tp_pid")
+    key = (pid, st.get("session_id") or "")
+    if key not in _sess_start:
         try:
-            _sess_start[sid] = os.stat(st["transcript_path"]).st_birthtime
-        except (OSError, KeyError, TypeError, AttributeError):
-            _sess_start[sid] = time.time()
-    return _sess_start[sid]
+            _sess_start[key] = proc_start(pid) if pid else os.stat(st["transcript_path"]).st_birthtime
+        except (OSError, KeyError, TypeError, AttributeError, ValueError, subprocess.TimeoutExpired):
+            _sess_start[key] = time.time()
+    return _sess_start[key]
 
 
 def statusline():

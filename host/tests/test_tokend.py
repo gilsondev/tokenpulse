@@ -102,7 +102,7 @@ def test_api_is_the_fallback_when_statusline_is_old(status, monkeypatch):
 def test_session_from_before_org_switch_is_ignored(tmp_path, monkeypatch):
     path = tmp_path / "status.json"
     monkeypatch.setattr(tokend, "STATUS", str(path))
-    monkeypatch.setattr(tokend, "_sess_start", {"velha": time.time() - 3600, "nova": time.time()})
+    monkeypatch.setattr(tokend, "_sess_start", {(None, "velha"): time.time() - 3600, (None, "nova"): time.time()})
     monkeypatch.setitem(tokend._org, "changed_at", time.time() - 60)
     monkeypatch.setitem(tokend._org, "name", "Jus Team")
     monkeypatch.setattr(tokend, "_api", {"five": {"utilization": 12}, "week": {"utilization": 3},
@@ -119,6 +119,25 @@ def test_session_from_before_org_switch_is_ignored(tmp_path, monkeypatch):
     assert tokend.status_fresh() and tokend.limits()["p5"] == 33
     write("velha", 90)  # a escrita da sessão velha não apaga a da nova
     assert tokend.limits()["p5"] == 33
+
+
+def test_resumed_session_dates_from_the_process(tmp_path, monkeypatch):
+    path = tmp_path / "status.json"
+    monkeypatch.setattr(tokend, "STATUS", str(path))
+    monkeypatch.setattr(tokend, "_sess_start", {})
+    started = tokend.proc_start(os.getpid())
+    assert time.time() - 3600 < started <= time.time()
+    old_transcript = str(HOST / "tokend.py")  # --resume: o transcript é de antes da troca, o processo não
+
+    def write(changed_at):
+        monkeypatch.setitem(tokend._org, "changed_at", changed_at)
+        tokend._status.update(seen=None, at=0.0, rl={})
+        path.write_text(json.dumps({"session_id": "s", "transcript_path": old_transcript, "tp_pid": os.getpid(),
+                                    "rate_limits": {"five_hour": {"used_percentage": 7, "resets_at": time.time() + 60}}}))
+        return tokend.statusline()[1]
+
+    assert write(started - 1)  # troca antes de o processo abrir: o % vale
+    assert not write(started + 1)  # processo aberto antes da troca: fica de fora
 
 
 def test_board_token_file_is_private(tmp_path, monkeypatch):
