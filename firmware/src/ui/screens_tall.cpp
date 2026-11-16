@@ -2080,11 +2080,24 @@ void drawAccount(bool live) {
 }
 
 // Toque na Conta: arma ou confirma uma troca (true) ou devolve false para fechar o painel (o título "‹" fecha).
+uint8_t asked = 0;  // troca pedida por esta placa: 1 pedida, 2 o computador já está trocando
+uint32_t doneMs = 0;
+
+bool switchFinished() {
+  const char* st = app::frame["act"][0] | "";
+  if (asked == 1 && (!strcmp(st, "switching") || !strcmp(st, "login"))) asked = 2;  // o "done" de antes não conta
+  if (asked != 2 || strcmp(st, "done")) return doneMs = 0, false;
+  if (!doneMs) doneMs = millis();
+  if (millis() - doneMs < 2000) return false;  // o "Pronto" fica à vista um instante
+  asked = 0, doneMs = 0;
+  return true;
+}
+
 bool accountTap(int x, int y) {
   auto confirm = [](int num, const char* action) {
     if (armed(num)) {
       hostlink::action(action);
-      armedAcct = -2;
+      armedAcct = -2, asked = 1;
     } else {
       armedAcct = num, armedMs = millis();
     }

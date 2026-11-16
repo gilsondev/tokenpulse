@@ -747,6 +747,7 @@ void render() {
   updateLed();
   const bool live = app::live();
   resolveOpen();
+  if (gfx::full() && settingsOpen && about == 3 && tall::switchFinished()) gfx::slide(1), go(0, 0);
   if (gfx::full()) tall::setGearActive(settingsOpen);
   gfx::frame([live] {
     if (gfx::full() && settingsOpen) {
