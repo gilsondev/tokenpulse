@@ -1063,14 +1063,40 @@ USAGE_MAX_WAIT = 1800
 STATUS_FRESH = 600  # s: statusline mais nova que isso vale sozinha, sem chamar a API
 
 
-def status_fresh():
-    """A statusline serve como fonte: recente, com a janela de 5 h e escrita depois da última troca de org."""
+_status = {"seen": None, "at": 0.0, "rl": {}}
+_sess_start = {}  # session_id -> quando a sessão começou
+
+
+def session_start(st):
+    """Início da sessão que escreveu a statusline: criação do transcript (macOS) ou a 1ª vez que o daemon a viu."""
+    sid = st.get("session_id") or ""
+    if sid not in _sess_start:
+        try:
+            _sess_start[sid] = os.stat(st["transcript_path"]).st_birthtime
+        except (OSError, KeyError, TypeError, AttributeError):
+            _sess_start[sid] = time.time()
+    return _sess_start[sid]
+
+
+def statusline():
+    """(hora, rate_limits) da última escrita da statusline que vale para a org logada. Uma sessão aberta antes
+    da troca de org segue com o token da org anterior, e o % que ela escreve é dessa org: fica de fora."""
     try:
         at = os.path.getmtime(STATUS)
-        has_5h = bool((json.load(open(STATUS)).get("rate_limits") or {}).get("five_hour"))
+        if (STATUS, at) != _status["seen"]:
+            _status["seen"] = (STATUS, at)
+            st = json.load(open(STATUS))
+            if not _org["changed_at"] or session_start(st) >= _org["changed_at"]:
+                _status.update(at=at, rl=st.get("rate_limits") or {})
     except (OSError, ValueError, AttributeError):
-        return False
-    return has_5h and time.time() - at < STATUS_FRESH and at >= _org["changed_at"]
+        pass
+    return _status["at"], _status["rl"]
+
+
+def status_fresh():
+    """A statusline serve como fonte: recente, com a janela de 5 h e escrita depois da última troca de org."""
+    at, rl = statusline()
+    return bool(rl.get("five_hour")) and time.time() - at < STATUS_FRESH and at >= _org["changed_at"]
 
 
 USAGE_CACHE = os.path.join(HOME, ".claude/esp-tokens-usage.json")
@@ -1449,10 +1475,7 @@ def multica_frame():
 
 
 def limits():
-    try:
-        status_at = os.path.getmtime(STATUS)
-    except OSError:
-        status_at = 0.0
+    status_at, rl = statusline()
     # a statusline primeiro; a API só quando ela não serve e o resultado dela é mais novo
     # o % da API é de uma org: depois de uma troca, só vale quando chegar o da org nova
     api_ok = _api["at"] and _api["org"] in ("", _org["name"])
@@ -1461,13 +1484,11 @@ def limits():
         five = {"used_percentage": _api["five"].get("utilization"), "resets_at": _api["five"].get("resets_at")}
         week = {"used_percentage": _api["week"].get("utilization"), "resets_at": _api["week"].get("resets_at")}
     else:
-        try:
-            age = time.time() - os.path.getmtime(STATUS)
-            rl = json.load(open(STATUS)).get("rate_limits") or {}
-        except (OSError, ValueError):
+        if not status_at:
             return {"p5": -1, "pw": -1}
+        age = time.time() - status_at
         # a statusline não diz de qual org é o %: se a org mudou depois dela, o % é da org anterior
-        if time.time() - age < _org["changed_at"]:
+        if status_at < _org["changed_at"]:
             return {"p5": -1, "pw": -1, "r5": "trocou de org", "age": int(age)}
         five, week = rl.get("five_hour") or {}, rl.get("seven_day") or {}
         if status_fresh() and _org["name"]:  # a lista de orgs mostra o último % de cada uma: a statusline também conta

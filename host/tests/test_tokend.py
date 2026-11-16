@@ -99,6 +99,28 @@ def test_api_is_the_fallback_when_statusline_is_old(status, monkeypatch):
     assert not tokend.status_fresh() and tokend.limits()["p5"] == 80
 
 
+def test_session_from_before_org_switch_is_ignored(tmp_path, monkeypatch):
+    path = tmp_path / "status.json"
+    monkeypatch.setattr(tokend, "STATUS", str(path))
+    monkeypatch.setattr(tokend, "_sess_start", {"velha": time.time() - 3600, "nova": time.time()})
+    monkeypatch.setitem(tokend._org, "changed_at", time.time() - 60)
+    monkeypatch.setitem(tokend._org, "name", "Jus Team")
+    monkeypatch.setattr(tokend, "_api", {"five": {"utilization": 12}, "week": {"utilization": 3},
+                                         "at": time.time() - 30, "err": "", "org": "Jus Team"})
+
+    def write(session, p5):
+        reset = time.time() + 3 * 3600
+        path.write_text(json.dumps({"session_id": session, "rate_limits": {
+            "five_hour": {"used_percentage": p5, "resets_at": reset}, "seven_day": {"used_percentage": 5, "resets_at": reset}}}))
+
+    write("velha", 90)  # agente aberto na org anterior: o % é dela
+    assert not tokend.status_fresh() and tokend.limits()["p5"] == 12
+    write("nova", 33)
+    assert tokend.status_fresh() and tokend.limits()["p5"] == 33
+    write("velha", 90)  # a escrita da sessão velha não apaga a da nova
+    assert tokend.limits()["p5"] == 33
+
+
 def test_board_token_file_is_private(tmp_path, monkeypatch):
     monkeypatch.setattr(tokend, "KEYS", str(tmp_path / "keys.json"))
     tokend.save_token("tokenpulse-caixeta.local", "ab" * 16)
