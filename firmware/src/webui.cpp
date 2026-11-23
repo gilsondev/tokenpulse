@@ -30,6 +30,9 @@ bool started = false, ap_on = false, mdns_on = false;
 uint32_t onlineSinceMs = 0, rebootAtMs = 0, joinMs = 0;
 String scanJson, joinSsid, mdnsHost;
 uint8_t lastReason = 0;
+uint32_t wifiFrameMs = 0;  // o último /frame do daemon
+bool mdnsData = false;     // o mDNS anuncia _tokenpulse: muda com o ajuste Sem fio
+String pendingAct;         // a ação para o daemon ("prov both", "focus 3"...), na resposta do próximo /frame
 // mudar a placa pela página pede o token (web/auth.h): o código da tela no navegador
 bool locked() {
   if (webauth::authed(server, settings::web.token)) return false;
@@ -68,6 +71,7 @@ void handleState() {
   d["imu"] = board::PROFILE.imu;  // a tela gira sozinha: sem escolha de em pé ou deitada
   d["rotations"] = board::ROTATIONS;
   d["speaker"] = board::PROFILE.speaker;
+  d["ble"] = ble::name()[0] != 0;  // a página mostra o ajuste Sem fio
   d["oled"] = board::PROFILE.oled;
   if (board::PROFILE.speaker)
     for (const char* s : sound::NAMES) d["sounds"].add(s);
@@ -80,7 +84,7 @@ void handleState() {
   const auto& v = settings::v;
   const auto& w = settings::web;
   c["bright"] = v.bright, c["batBright"] = w.batBright, c["idle"] = v.idle, c["theme"] = v.theme, c["orient"] = v.orient, c["hideCost"] = v.hideCost;
-  c["interval"] = w.interval, c["pages"] = w.pages, c["alerts"] = w.alerts, c["sound"] = w.sound, c["volume"] = w.volume, c["restSecs"] = w.restSecs, c["restPages"] = w.restPages, c["soundOut"] = w.soundOut, c["soundNew"] = w.soundNew, c["soundWeek"] = w.soundWeek, c["soundBat"] = w.soundBat, c["soundMac"] = w.soundMac, c["soundBle"] = w.soundBle, c["host"] = host();
+  c["interval"] = w.interval, c["pages"] = w.pages, c["alerts"] = w.alerts, c["sound"] = w.sound, c["volume"] = w.volume, c["restSecs"] = w.restSecs, c["restPages"] = w.restPages, c["soundOut"] = w.soundOut, c["soundNew"] = w.soundNew, c["soundWeek"] = w.soundWeek, c["soundBat"] = w.soundBat, c["soundMac"] = w.soundMac, c["soundBle"] = w.soundBle, c["host"] = host(), c["link"] = w.link;
   String out;
   serializeJson(d, out);
   server.send(200, "application/json", out);
@@ -115,6 +119,7 @@ void handleConfig() {
   const uint8_t orient = v.orient;
   num("bright", 0, 3, v.bright);
   num("batBright", 0, 3, w.batBright);
+  num("link", 0, 1, w.link);
   num("idle", 0, 3, v.idle);
   num("theme", 0, 2, v.theme);
   num("orient", 0, board::ROTATIONS - 1, v.orient);
@@ -143,6 +148,8 @@ void handleScan() {
   if (server.hasArg("again")) scanJson = "", WiFi.scanDelete(), WiFi.scanNetworks(true);
   if (scanJson.length()) return server.send(200, "application/json", scanJson);
   int n = WiFi.scanComplete();
+  // tentando entrar numa rede que não responde, o ESP32 recusa a busca: para a tentativa para a lista aparecer
+  if (n == WIFI_SCAN_FAILED && !online()) WiFi.disconnect();
   if (n == WIFI_SCAN_FAILED) WiFi.scanNetworks(true), n = WIFI_SCAN_RUNNING;
   if (n == WIFI_SCAN_RUNNING) return server.send(200, "application/json", "{\"state\":\"scanning\"}");
   int order[32], m = 0;
@@ -257,6 +264,29 @@ void startServer() {
     ble::forgetBonds();  // o computador de antes deixa de conectar pelo Bluetooth
     rebootAtMs = millis() + 500;
   });
+  server.on("/hello", HTTP_GET, [] {
+    JsonDocument d;
+    d["board"] = board::NAME, d["fw"] = hostlink::firmware(), d["ble"] = ble::name();
+    d["full"] = true;  // o frame inteiro, como na serial: o do SmallTV vem enxuto
+    String out;
+    serializeJson(d, out);
+    server.send(200, "application/json", out);
+  });
+  server.on("/frame", HTTP_POST, [] {
+    if (!wifiData()) return server.send(409, "text/plain", "Sem fio em Bluetooth\n");
+    // sem o token que só sai pelo cabo, ninguém na rede troca o que a placa mostra
+    if (!webauth::authed(server, settings::web.token)) return server.send(401, "text/plain", "token\n");
+    if (!hostlink::ingest(server.arg("plain"))) return server.send(400, "text/plain", "frame inválido\n");
+    wifiFrameMs = millis();
+    if (!pendingAct.length()) return server.send(204);
+    server.sendHeader("X-Token", settings::web.token);  // prova ao daemon que a ação vem desta placa
+    JsonDocument d;
+    d["act"] = pendingAct;
+    String out;
+    serializeJson(d, out);
+    pendingAct = "";
+    server.send(200, "application/json", out);
+  });
   // a página guiada vem antes do updater: o WebServer usa a primeira rota que bate, e o POST é o dele
   server.on("/update", HTTP_GET, [] { server.send_P(200, "text/html", UPDATE_PAGE); });
   updater.setup(&server, "/update", "tokenpulse", settings::web.token);  // a página manda o token no Basic
@@ -288,8 +318,11 @@ void startServer() {
 void begin() {
   snprintf(ap, sizeof ap, "tokenpulse-%s", board::CODE);
   if (!settings::web.token[0]) webauth::newToken(settings::web.token, sizeof settings::web.token), settings::saveWeb();
-  WiFi.onEvent([](WiFiEvent_t, WiFiEventInfo_t info) { lastReason = info.wifi_sta_disconnected.reason; },
-               ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
+  WiFi.onEvent([](WiFiEvent_t, WiFiEventInfo_t info) {
+    if (info.wifi_sta_disconnected.reason != lastReason)  // vai para o log do daemon: o motivo de não entrar na rede
+      Serial.printf("wifi: fora da rede, motivo %u\n", info.wifi_sta_disconnected.reason);
+    lastReason = info.wifi_sta_disconnected.reason;
+  }, ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
   if (!settings::web.wifi) return;  // nunca configurado: o WiFi fica desligado
   WiFi.setHostname(host());
   WiFi.mode(WIFI_STA);
@@ -328,11 +361,15 @@ void loop() {
   if (online()) {
     if (!onlineSinceMs) onlineSinceMs = millis();
     if (!settings::web.wifi) settings::web.wifi = 1, settings::saveWeb();  // conectou pela página: liga ao ligar
-    if (mdns_on && mdnsHost != host()) MDNS.end(), mdns_on = false;   // renomeada na página
+    if (mdns_on && (mdnsHost != host() || mdnsData != wifiData())) MDNS.end(), mdns_on = false;  // renomeada, ou Sem fio mudou
     if (!mdns_on && !settings::web.host[0]) pickHost();
     if (!mdns_on && (mdns_on = MDNS.begin(host()))) {
-      mdnsHost = host();
-      MDNS.addService("http", "tcp", 80);  // _tokenpulse._tcp não: o daemon acharia que os dados vão pelo WiFi
+      mdnsHost = host(), mdnsData = wifiData();
+      MDNS.addService("http", "tcp", 80);
+      if (mdnsData) {  // o daemon procura _tokenpulse para mandar os dados pelo WiFi
+        MDNS.addService("tokenpulse", "tcp", 80);
+        MDNS.addServiceTxt("tokenpulse", "tcp", "board", board::NAME);
+      }
     }
     if (ap_on && millis() - onlineSinceMs > 60000) {  // conectou e ficou: o WiFi da placa não é mais preciso
       dns.stop();
@@ -391,6 +428,20 @@ void resume() {
 }
 
 bool online() { return started && WiFi.status() == WL_CONNECTED; }
+
+bool wifiData() {
+#ifdef TOKENPULSE_BLE
+  return settings::web.link == 1;
+#else
+  return true;
+#endif
+}
+
+bool wifiFed() { return wifiFrameMs && millis() - wifiFrameMs < 10000; }
+
+void queueAction(const char* line) {
+  if (wifiFrameMs && millis() - wifiFrameMs < 10000 && !strncmp(line, "ACTION ", 7)) pendingAct = line + 7;
+}
 bool apOn() { return ap_on; }
 const char* apName() { return ap; }
 const char* host() { return settings::web.host[0] ? settings::web.host : ap; }

@@ -54,9 +54,11 @@ lugar novo, para o vidro não marcar. Ela usa o resto do hardware da placa:
 
 - **Bateria:** o ícone no cabeçalho mostra a carga e se a placa está na USB. O Sobre mostra a porcentagem e
   a previsão de carga completa. A carga para em 4,1 V em vez de 4,2 V, para a bateria durar mais ciclos.
-- **Bluetooth:** fora do cabo, a placa continua recebendo os dados sem fio, por um link criptografado. O Mac
-  aprende o nome dela ("TokenPulse AMOLED" e o final do WiFi dela) na primeira conexão pela USB. Se a placa
-  for apagada por completo, remova-a nos ajustes de Bluetooth do Mac para parear de novo.
+- **Bluetooth ou WiFi:** fora do cabo, a placa continua recebendo os dados sem fio. Em Ajustes → Conexão você
+  escolhe por onde. O Bluetooth gasta menos bateria e usa um link criptografado: o Mac aprende o nome dela
+  ("TokenPulse AMOLED" e o final do WiFi dela) na primeira conexão pela USB, e se a placa for apagada por completo,
+  remova-a nos ajustes de Bluetooth do Mac para parear de novo. O WiFi alcança a casa toda e fica ligado na
+  bateria, gastando mais; precisa de uma rede de 2,4 GHz configurada pela página web.
 - **Relógio** guardado no RTC, e o histórico diário num **cartão microSD**, além dos 14 dias que o Mac manda.
 - **Som:** um alerta quando uma sessão pede aprovação e sons para a janela de 5 h esgotada ou renovada, a
   semana esgotada, bateria fraca, Mac sem dados e Bluetooth. O botão BOOT silencia por 1 h.
@@ -72,10 +74,11 @@ verde trabalhando, vermelho aprovar, amarelo sua vez.
 
 **Página web.** Guition e ESP32-2432S028R têm uma página de ajustes com mais opções que a tela: troca automática
 de tela depois de N segundos sem toque, quais telas entram na volta, o alerta de aprovar, o nome na rede, as
-versões do firmware e do agente, atualização guiada e "Preparar para entrega". Os dados continuam pelo cabo: o
-WiFi só liga quando você pede em Ajustes → Sobre → página web, que mostra o QR para o celular entrar no WiFi da
-placa e escolher a rede da casa. Depois disso a placa entra nessa rede ao ligar, e a página fica em
-`http://<nome>.local`.
+versões do firmware e do agente, atualização guiada e "Preparar para entrega". O WiFi só liga quando você pede em
+Ajustes → Sobre → página web, que mostra o QR para o celular entrar no WiFi da placa e escolher a rede da casa
+(2,4 GHz). Depois disso a placa entra nessa rede ao ligar, e a página fica em `http://<nome>.local`. Fora do cabo,
+por exemplo num carregador em outro cômodo, os dados chegam por essa rede: o Mac acha a placa sozinho e manda os
+dados com a chave que ela entregou pela USB.
 
 <table><tr>
 <td width="33%"><img src="docs/screenshots/12-pagina-web.png" alt="Tela da página web: QR code do endereço .local"></td>

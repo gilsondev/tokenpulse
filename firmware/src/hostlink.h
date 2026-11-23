@@ -13,7 +13,8 @@
 
 namespace hostlink {
 
-void action(const char* line);  // pede uma ação ao Mac (ACTION ...): pela serial e, se houver, pelo BLE
+void action(const char* line);  // pede uma ação ao Mac (ACTION ...): pela serial, pelo BLE e pelo WiFi
+bool ingest(const String& line);  // um frame do daemon, venha da serial, do BLE ou do WiFi; false se não é JSON válido
 
 void begin();
 void poll();  // lê e trata o que chegou na serial; chamado a cada volta do loop

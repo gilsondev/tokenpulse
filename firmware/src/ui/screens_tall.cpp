@@ -178,9 +178,29 @@ int powerIcon(int right, int cy, bool draw) {
   return bw + cap + tw + u(4);
 }
 
-// Bluetooth, à esquerda da bateria: o símbolo em cinza ligado à espera do Mac, em azul conectado. Devolve a
-// largura usada (0 em placa sem BLE).
+// WiFi, só conectado numa rede: um ponto e dois arcos, branco sem dados do Mac e azul recebendo os dados.
+int wifiIcon(int right, int cy, bool draw) {
+  if (!webui::online()) return 0;
+  const int r = u(10), cx = right - u(8), base = cy + u(6);
+  if (draw) {
+    const uint16_t c = webui::wifiFed() ? 0x3D9F : TEXT;
+    const float t = max(1.f, u(1) * 0.9f);
+    fb().fillCircle(cx, base - u(1), max(1, u(2)), c);
+    for (int k = 1; k <= 2; k++) {  // cada arco em 6 trechos, de -45° a 45° em torno do alto
+      const float rr = r * k / 2.f + u(1);
+      for (int i = 0; i < 6; i++) {
+        const float a0 = (-45 + 15 * i) * DEG_TO_RAD, a1 = (-30 + 15 * i) * DEG_TO_RAD;
+        gfx::wideLine(cx + rr * sinf(a0), base - rr * cosf(a0), cx + rr * sinf(a1), base - rr * cosf(a1), t, c);
+      }
+    }
+  }
+  return u(16) + u(6);
+}
+
+// Por onde os dados chegam sem o cabo, à esquerda da bateria: o WiFi (Sem fio em WiFi, ou placa sem Bluetooth com
+// rede configurada) ou o Bluetooth, em cinza à espera do Mac e em azul conectado. Devolve a largura usada.
 int bleIcon(int right, int cy, bool draw) {
+  if (webui::wifiData() && (ble::name()[0] || settings::web.wifi)) return wifiIcon(right, cy, draw);
 #ifdef TOKENPULSE_BLE
   const int h = u(14), w = u(4), x = right - w - u(1), y = cy - h / 2;
   if (draw) {
@@ -1493,6 +1513,9 @@ Row restRows[] = {
     {"Relógio", &settings::web.restSecs, {"HH:MM", "HH:MM:SS"}, 2},
     {"Telas do descanso", &settings::web.restPages, {"Relógio", "Uso", "Sessões", "Modelos", "14 dias"}, 5, MASK},
 };
+// Fora do cabo, os dados vêm pelo Bluetooth ou pelo WiFi. Em WiFi, ele fica ligado na bateria: alcança a casa
+// toda, gastando mais. Só a placa que tem os dois escolhe.
+Row linkRows[] = {{"Sem fio", &settings::web.link, {"Bluetooth", "WiFi"}, 2}};
 struct Group {
   const char* name;
   Row* rows;
@@ -1505,11 +1528,12 @@ const Group GROUPS[] = {
     {"Cartão SD", nullptr, 0},  // tela própria: o estado do cartão e o botão de formatar
     {"Provedores", provRows, 1},
     {"Multica", mcRows, 2},
+    {"Conexão", linkRows, 1},
 };
 int group = -1;  // -1: a lista
 
 // Os itens da lista, na ordem: grupos que a placa tem, depois Conta e Sobre.
-enum Item : int8_t { G_SCREEN, G_SOUND, G_REST, G_SD, G_PROV, G_MC, ACCOUNT, ABOUT };
+enum Item : int8_t { G_SCREEN, G_SOUND, G_REST, G_SD, G_PROV, G_MC, G_LINK, ACCOUNT, ABOUT };
 int items(Item* out) {
   int n = 0;
   out[n++] = G_SCREEN;
@@ -1518,6 +1542,7 @@ int items(Item* out) {
   if (board::PROFILE.sd) out[n++] = G_SD;
   if ((int)(app::frame["cxok"] | 0)) out[n++] = G_PROV;  // só quando o Mac tem o Codex
   if (!app::frame["mcs"].isNull()) out[n++] = G_MC;       // só quando o Mac tem o Multica
+  if (ble::name()[0]) out[n++] = G_LINK;                   // só quem tem Bluetooth e WiFi escolhe
   if (!codexOnly()) out[n++] = ACCOUNT;                   // a conta é a org do Claude
   out[n++] = ABOUT;
   return n;
@@ -1603,6 +1628,7 @@ void summary(Item it, char* buf, size_t n) {
       break;
     }
     case G_MC: strlcpy(buf, mcOn ? "Oculta" : (const char*)(app::frame["mcs"]["w"][mcWs] | ""), n); break;
+    case G_LINK: strlcpy(buf, settings::web.link ? "WiFi" : "Bluetooth", n); break;
     case ACCOUNT: strlcpy(buf, app::frame["org"] | "", n); break;
     default: strlcpy(buf, hostlink::firmware(), n);
   }
@@ -1665,7 +1691,7 @@ void drawRow(const Row& r, Cell c, uint16_t track) {
 void settingsHome() { group = -1, groupTop = 0, listFirst = 0; }
 bool settingsScroll(int dir) {
   if (group < 0) {  // a lista de grupos: 2 linhas por gesto
-    Item list[8];
+    Item list[9];
     const int n = items(list), to = constrain(listFirst + 2 * dir, 0, max(0, n - listFits(n)));
     if (to == listFirst) return false;
     listFirst = to;
@@ -1755,14 +1781,14 @@ void drawSettings(bool live) {
     return;
   }
   header(live, "Ajustes", false, false);
-  Item list[8];
+  Item list[9];
   const int n = items(list), rh = listRowH(n), fits = listFits(n);
   listFirst = constrain(listFirst, 0, max(0, n - fits));
   const int w = W() - 2 * M() - (n > fits ? u(10) : 0);
   // linha alta: a fonte sobe um tamanho junto com ela, para o texto acompanhar o alvo
   const bool big = rh - u(8) >= 2 * gfx::lineHeight(gfx::TITLE) - u(4);
   const gfx::Font NF = big ? gfx::TITLE : gfx::LABEL, SF = gfx::LABEL;
-  static const char* NAMES[] = {"Tela", "Som", "Descanso", "Cartão SD", "Provedores", "Multica", "Conta", "Sobre"};
+  static const char* NAMES[] = {"Tela", "Som", "Descanso", "Cartão SD", "Provedores", "Multica", "Conexão", "Conta", "Sobre"};
   char buf[48];
   for (int i = listFirst; i < min(n, listFirst + fits); i++) {
     const int y = SET_Y() + (i - listFirst) * rh, h = rh - u(8);
@@ -1786,7 +1812,7 @@ void drawSettings(bool live) {
 // Toque nos ajustes: 0 trocou um ajuste (ou abriu/fechou um grupo), 1 abriu o Sobre, 2 abriu a Conta, -1 nada
 int settingsTap(int x, int y) {
   if (group < 0) {
-    Item list[8];
+    Item list[9];
     const int n = items(list), rh = listRowH(n);
     const int i = listFirst + (y - SET_Y()) / rh;
     if (y < SET_Y() || i >= min(n, listFirst + listFits(n)) || x < M() || x > W() - M()) return -1;

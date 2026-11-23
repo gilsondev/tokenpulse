@@ -44,6 +44,7 @@ void begin() {
     if (web.volume < 1 || web.volume > 3) web.volume = d.volume;
     if (web.restSecs > 1) web.restSecs = d.restSecs;
     if (web.batBright > 3) web.batBright = d.batBright;
+    if (web.link > 1) web.link = d.link;
     if (!web.restPages || web.restPages > 31) web.restPages = d.restPages;
     if (web.soundOut > sound::COUNT) web.soundOut = d.soundOut;
     if (web.soundNew > sound::COUNT) web.soundNew = d.soundNew;

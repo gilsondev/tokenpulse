@@ -186,14 +186,15 @@ void loop() {
   if (board::PROFILE.touch) checkTouch();
   hostlink::poll();
   webui::loop();
-  // na bateria: WiFi parado (só serve para a página; volta no USB ou ao abrir a Página web), 5 quadros/s quando
-  // ninguém toca há 3 s e uma pausa no loop
-  static int battery = -1;
-  const bool bat = power::onBattery();
-  if (bat != battery) {
-    battery = bat;
-    bat ? webui::pause() : webui::resume();
+  // na bateria: WiFi parado, a menos que os dados venham por ele (Sem fio em WiFi); volta no USB ou ao abrir a
+  // Página web. 5 quadros/s quando ninguém toca há 3 s e uma pausa no loop
+  static int wifiOff = -1;
+  const bool bat = power::onBattery(), off = bat && !webui::wifiData();
+  if (off != wifiOff) {
+    wifiOff = off;
+    off ? webui::pause() : webui::resume();
   }
+  ble::enable(!webui::wifiData());  // um ou outro: em WiFi, o Mac não fica preso no Bluetooth
   const uint32_t every = bat && millis() - power::lastActiveMs() > 3000 ? 200 : 33;
   if (millis() - lastRenderMs >= every) {  // o envio do quadro anterior corre no outro núcleo
     lastRenderMs = millis();

@@ -14,6 +14,7 @@ static const char USB_PAGE[] PROGMEM = R"HTML(<!doctype html>
 <section><h2>Tela</h2>
 <label id=brite>Brilho <select name=bright><option value=0>25%<option value=1>50%<option value=2>75%<option value=3>100%</select></label>
 <label id=bbrow hidden>Brilho na bateria <select name=batBright><option value=0>25%<option value=1>50%<option value=2>70%<option value=3>100%</select></label>
+<label id=lkrow hidden>Sem o cabo, os dados chegam por <select name=link><option value=0>Bluetooth<option value=1>WiFi (alcança mais, gasta mais bateria)</select></label>
 <label>Escurecer quando ninguém toca <select name=idle><option value=0>depois de 5 min<option value=1>depois de 10 min<option value=2>depois de 30 min<option value=3>nunca</select></label>
 <label>Tema <select name=theme><option value=0>segue o macOS<option value=1>claro<option value=2>escuro</select></label>
 <label id=orow>Tela <select name=orient><option value=0>em pé<option value=1>deitada<option value=2 hidden>em pé, de cabeça para baixo<option value=3 hidden>deitada, virada</select></label>
@@ -114,7 +115,7 @@ async function state(){
 state().then(s=>{
   const c=s.cfg;host=c.host;
   for(const k of['bright','idle','theme','orient','interval'])f[k].value=c[k];
-  f.batBright.value=c.batBright??2;$('bbrow').hidden=!s.battery;if(s.battery)$('brite').firstChild.textContent='Brilho no USB ';
+  f.batBright.value=c.batBright??2;$('bbrow').hidden=!s.battery;f.link.value=c.link??0;$('lkrow').hidden=!s.ble;if(s.battery)$('brite').firstChild.textContent='Brilho no USB ';
   f.hideCost.checked=!!c.hideCost;f.alerts.checked=!!(c.alerts&1);f.beep.checked=!!(c.alerts&2);f.sound.value=c.sound;f.volume.value=c.volume;f.soundOut.value=c.soundOut;f.soundNew.value=c.soundNew;f.soundWeek.value=c.soundWeek;f.soundBat.value=c.soundBat;f.soundMac.value=c.soundMac;f.soundBle.value=c.soundBle;f.restSecs.value=c.restSecs;for(let i=0;i<5;i++)f['rp'+i].checked=!!(c.restPages>>i&1);f.host.value=c.host;
   f.sessions.checked=!!(c.pages&1);f.models.checked=!!(c.pages&2);f.history.checked=!!(c.pages&4);
 });
@@ -124,7 +125,7 @@ f.addEventListener('change',async e=>{
   if(['mc','mcws'].includes(e.target.name)){const r=await fetch('/api/config',{method:'POST',body:new URLSearchParams({[e.target.name]:e.target.value})});return say(r.ok?'Salvo: vale para todas as placas deste computador.':await r.text())}
   if(['pauto','pcl','pcx'].includes(e.target.name)){const v=provVal(e);provAt=Date.now();provShow(v);const r=await fetch('/api/config',{method:'POST',body:new URLSearchParams({prov:v})});return say(r.ok?'Salvo: vale para todas as placas deste computador.':await r.text())}
   if(e.target.name==='host'&&!f.host.checkValidity())return say('Nome: letras minúsculas, números e hífen.');
-  const b=new URLSearchParams({bright:f.bright.value,batBright:f.batBright.value,idle:f.idle.value,theme:f.theme.value,orient:f.orient.value,
+  const b=new URLSearchParams({bright:f.bright.value,batBright:f.batBright.value,link:f.link.value||0,idle:f.idle.value,theme:f.theme.value,orient:f.orient.value,
     hideCost:+f.hideCost.checked,interval:f.interval.value,alerts:(f.alerts.checked?1:0)|(f.beep.checked?2:0),sound:f.sound.value||0,volume:f.volume.value||2,soundOut:f.soundOut.value||0,soundNew:f.soundNew.value||0,soundWeek:f.soundWeek.value||0,soundBat:f.soundBat.value||0,soundMac:f.soundMac.value||0,soundBle:f.soundBle.value||0,restSecs:f.restSecs.value||0,restPages:[0,1,2,3,4].reduce((m,i)=>m|(f['rp'+i].checked?1<<i:0),0)||1,host:f.host.value,
     pages:(f.sessions.checked?1:0)|(f.models.checked?2:0)|(f.history.checked?4:0)});
   const r=await fetch('/api/config',{method:'POST',body:b});

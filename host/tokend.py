@@ -55,7 +55,8 @@ ACCOUNT = os.path.join(HOME, ".claude.json")
 SHOT_DIR = os.path.join(HOME, ".claude/esp-tokens-shot")  # o shot.sh grava <placa> com {"cmds": [...], "out": "x.png"}
 OTA_CONFIRM = 25  # s: o firmware marca a imagem nova como boa aos 20 s (main.cpp)
 OTA_DIR = os.path.join(HOME, ".claude/esp-tokens-ota")  # o flash.sh grava <placa> com o caminho do .bin
-NET_ACTIONS = {"prov", "mc", "mcws", "lskip", "update"}  # o que a página do SmallTV pede; trocar de conta é só no cabo
+# o que uma placa pede pelo WiFi, sempre provando ter o token que ela nos deu (o WiFi do computador é só no cabo)
+NET_ACTIONS = {"prov", "mc", "mcws", "mcopen", "mcproj", "lskip", "update", "fwlater", "focus", "switch", "login"}
 KEYS = os.path.join(HOME, ".claude/esp-tokens-keys.json")  # o token de cada placa de WiFi, entregue no /hello; só este usuário lê
 BOARDS = os.path.join(HOME, ".claude/esp-tokens-boards.json")  # placas conectadas e o firmware de cada uma (update.sh)
 # Placas com Bluetooth que já estiveram na USB deste Mac: o daemon só conecta sem fio a elas, nunca à de um colega
@@ -1564,6 +1565,7 @@ class Board:
         self.gone = False  # a thread acabou com a porta (OTA reiniciou a placa, ou deu erro): reconectar
         self.bridge = False  # conversor USB-serial (CH340): abrir a porta reinicia o ESP32
         self.caps = []  # o que o firmware entende além dos frames ("wifi"), vindo do hello
+        self.host = ""  # o .local dela: na USB, o WiFi não manda dados para esta placa
         self.out = None  # linha para mandar antes do próximo frame (o WiFi do computador): nunca vai para o log
 
     def log(self, msg):
@@ -1590,7 +1592,8 @@ def remember_ble(name):
         log(f"bluetooth: {name} pareada (veio pela USB)")
 
 
-_usb_ble = set()  # nomes Bluetooth das placas que estão na USB agora: com cabo, o BLE fica de lado
+_usb_ble = set()  # nomes Bluetooth das placas que estão na USB ou no WiFi agora: aí o BLE fica de lado
+_usb_hosts = set()  # o .local das placas na USB agora: com cabo, o WiFi não manda dados
 BLE_SERVICE = "6e400001-b5a3-f393-e0a9-e50e24dcca9e"  # o "UART" da Nordic, o mesmo do firmware
 BLE_RX = "6e400002-b5a3-f393-e0a9-e50e24dcca9e"  # o daemon escreve aqui
 BLE_TX = "6e400003-b5a3-f393-e0a9-e50e24dcca9e"  # a placa avisa por aqui (ACTION ...)
@@ -1743,6 +1746,9 @@ def connect(path, vid):
                     board = Board(path, ser, hello["board"], hello.get("fw", ""), hello.get("ble", ""),
                                   hello.get("reset", ""))
                     board.caps = hello.get("caps", [])
+                    board.host = hello.get("host", "")
+                    if board.host and hello.get("token"):  # pelo cabo: com ele, os dados vão também pelo WiFi
+                        save_token(board.host, hello["token"])
                     board.bridge = vid != ESPRESSIF_VID
                     if board.ble:
                         remember_ble(board.ble)
@@ -2356,8 +2362,9 @@ _latest = {}     # o último frame montado pelo laço principal
 
 
 class NetBoard:
-    def __init__(self, host, ip, name, fw):
+    def __init__(self, host, ip, name, fw, ble="", full=False):
         self.host, self.ip, self.name, self.fw = host, ip, name, fw
+        self.ble, self.full = ble, full  # full: placa ESP32, que recebe o frame inteiro como na serial
         self.path = f"http://{host}"
         self.fails = 0
 
@@ -2433,7 +2440,7 @@ def net_hello(ip, host):
         h = json.loads(http(f"http://{ip}/hello", timeout=3))
         if h.get("token"):
             save_token(host, h["token"])
-        return h["board"], h.get("fw", "")
+        return h["board"], h.get("fw", ""), h.get("ble", ""), bool(h.get("full"))
     except (OSError, ValueError, KeyError, TypeError):
         return None
 
@@ -2505,6 +2512,8 @@ def net_loop():
             slim["agv"] = AGENT  # a página da placa mostra a versão do agente ao lado da do firmware
             body = json.dumps(slim, ensure_ascii=False).encode()
         for host, board in list(net_boards.items()):
+            if host in _usb_hosts:  # no cabo: dados e firmware vão pela USB
+                continue
             if path := pending_ota(board.name) or auto_ota(board, warn=False):
                 t0 = time.time()
                 err = net_ota(board, path)
@@ -2515,7 +2524,7 @@ def net_loop():
             if not body:
                 continue
             try:
-                req = urllib.request.Request(f"http://{board.ip}/frame", body,
+                req = urllib.request.Request(f"http://{board.ip}/frame", encode_frame(frame | fw_frame(board)) if board.full else body,
                                              {"Content-Type": "application/json"} | auth_headers(host))
                 with urllib.request.urlopen(req, timeout=4) as r:
                     reply, proof = r.read(), r.headers.get("X-Token", "")
@@ -2620,8 +2629,10 @@ def main():
                     log(f"{path}: sem resposta ao id; " + ("tento de novo" if native else "só testo de novo se replugar"))
                 retry = 5 if time.time() - first_fail[path] < 60 else 60
                 ignored[path] = time.time() + (retry if native else 10 ** 9)
-        global _usb_ble
-        _usb_ble = {b.ble for b in boards.values() if b.ble}  # troca do conjunto inteiro: a thread do BLE só lê
+        global _usb_ble, _usb_hosts
+        # trocas do conjunto inteiro: as threads só leem. Pelo WiFi, a placa também deixa o BLE de lado
+        _usb_ble = {b.ble for b in boards.values() if b.ble} | {b.ble for b in list(net_boards.values()) if b.ble}
+        _usb_hosts = {b.host for b in boards.values() if b.host}
         for path, board in list(boards.items()):
             if not serve(board, frame):
                 del boards[path]

@@ -11,6 +11,7 @@ void begin(const char* name);   // anuncia com este nome (TokenPulse <placa> <fi
 bool poll(String& line);        // próxima linha completa que chegou pelo BLE
 void send(const char* line);    // manda uma linha (com '\n') ao Mac, se houver alguém conectado
 bool connected();
+void enable(bool on);           // Sem fio em WiFi: para de anunciar e solta o Mac, para os dados irem só pelo WiFi
 const char* name();             // o nome anunciado, que o daemon guarda para achar a placa ("" sem BLE)
 void forgetBonds();             // apaga os pareamentos guardados: na entrega, o computador antigo deixa de conectar
 

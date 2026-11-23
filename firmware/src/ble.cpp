@@ -13,6 +13,7 @@ constexpr size_t MAX_LINE = 8192;  // o mesmo teto do buffer da serial
 NimBLECharacteristic* tx = nullptr;
 String advName;
 volatile bool linked = false;
+volatile bool enabled = true;
 // O NimBLE chama onWrite na tarefa dele: a linha montada vai por uma fila para o loop, que é quem desenha.
 QueueHandle_t lines = nullptr;
 String partial;
@@ -44,7 +45,7 @@ class Server : public NimBLEServerCallbacks {
   void onDisconnect(NimBLEServer*, NimBLEConnInfo&, int) override {
     linked = false;
     partial = String();
-    NimBLEDevice::startAdvertising();
+    if (enabled) NimBLEDevice::startAdvertising();
   }
 };
 }  // namespace
@@ -85,6 +86,16 @@ void send(const char* line) {
 }
 
 bool connected() { return linked; }
+
+void enable(bool on) {
+  if (on == enabled || !tx) return;
+  enabled = on;
+  if (on) return void(NimBLEDevice::startAdvertising());
+  NimBLEDevice::stopAdvertising();
+  NimBLEServer* s = NimBLEDevice::getServer();
+  for (uint16_t h : s->getPeerDevices()) s->disconnect(h);
+}
+
 const char* name() { return advName.c_str(); }
 void forgetBonds() { NimBLEDevice::deleteAllBonds(); }
 
@@ -97,6 +108,7 @@ void begin(const char*) {}
 bool poll(String&) { return false; }
 void send(const char*) {}
 bool connected() { return false; }
+void enable(bool) {}
 const char* name() { return ""; }
 void forgetBonds() {}
 }  // namespace ble

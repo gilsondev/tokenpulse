@@ -58,9 +58,11 @@ board's hardware:
 - **Battery:** the icon in the header shows the charge and whether the board is on USB. About shows the
   percentage and the estimated time to a full charge. Charging stops at 4.1 V instead of 4.2 V, so the battery
   lasts more cycles.
-- **Bluetooth:** off the cable, the board keeps receiving data wirelessly, over an encrypted link. The Mac
-  learns its name ("TokenPulse AMOLED" plus the end of its WiFi name) on the first USB connection. If the board
-  is fully erased, remove it in the Mac's Bluetooth settings to pair again.
+- **Bluetooth or WiFi:** off the cable, the board keeps receiving data wirelessly. Settings → Connection picks
+  which. Bluetooth uses less battery over an encrypted link: the Mac learns its name ("TokenPulse AMOLED" plus
+  the end of its WiFi name) on the first USB connection, and if the board is fully erased, remove it in the Mac's
+  Bluetooth settings to pair again. WiFi reaches the whole house and stays on while on battery, using more; it
+  needs a 2.4 GHz network set up through the web page.
 - **Clock** kept in the RTC, and the daily history on a **microSD card**, beyond the 14 days the Mac sends.
 - **Sound:** an alert when a session asks for approval and sounds for the 5-hour window used up or renewed,
   the week used up, low battery, Mac without data and Bluetooth. The BOOT button mutes for 1 h.
@@ -76,10 +78,11 @@ green working, red approve, yellow your turn.
 
 **Web page.** Guition and ESP32-2432S028R have a settings page with more options than the screen: automatic
 screen change after N seconds without touch, which screens join the rotation, the approval alert, the network
-name, the firmware and agent versions, guided update and "Prepare for handover". Data still goes over the
-cable: WiFi only turns on when you ask for it in Settings → About → web page, which shows the QR for the phone
-to join the board's WiFi and pick the home network. After that the board joins that network on boot, and the
-page lives at `http://<name>.local`.
+name, the firmware and agent versions, guided update and "Prepare for handover". WiFi only turns on when you
+ask for it in Settings → About → web page, which shows the QR for the phone to join the board's WiFi and pick the
+home network (2.4 GHz). After that the board joins that network on boot, and the page lives at
+`http://<name>.local`. Off the cable, for example on a charger in another room, data arrives over that network:
+the Mac finds the board by itself and sends data with the key the board handed over USB.
 
 <table><tr>
 <td width="33%"><img src="docs/screenshots/12-pagina-web.png" alt="Web page screen: QR code of the .local address"></td>

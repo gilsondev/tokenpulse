@@ -89,12 +89,10 @@ void handle(const String& line) {
   if (line == "id") {
     idMs = millis();
     if (!settings::web.paired) settings::web.paired = 1, settings::saveWeb();
-#ifdef TOKENPULSE_BLE  // o nome no BLE: com a placa na USB, o daemon não a usa também sem fio
-    Serial.printf("hello {\"board\":\"%s\",\"fw\":\"%s\",\"ble\":\"%s\",\"reset\":\"%s\",\"caps\":[\"wifi\"]}\n", board::NAME, firmware(),
-                  ble::name(), resetReason());
-#else
-    Serial.printf("hello {\"board\":\"%s\",\"fw\":\"%s\",\"reset\":\"%s\",\"caps\":[\"wifi\"]}\n", board::NAME, firmware(), resetReason());
-#endif
+    // o nome no BLE e o .local: com a placa na USB, o daemon não a usa também sem fio. O token só sai pelo cabo:
+    // com ele, o daemon manda os dados pelo WiFi e a placa recusa frame de quem não o tem
+    Serial.printf("hello {\"board\":\"%s\",\"fw\":\"%s\",\"ble\":\"%s\",\"host\":\"%s.local\",\"token\":\"%s\",\"reset\":\"%s\","
+                  "\"caps\":[\"wifi\"]}\n", board::NAME, firmware(), ble::name(), webui::host(), settings::web.token, resetReason());
   } else if (line == "imu") {
     int16_t x, y;
     if (board::gravity(x, y)) Serial.printf("acc=%d,%d rot=%d\n", x, y, gfx::rotation());
@@ -161,19 +159,7 @@ void handle(const String& line) {
     JsonDocument cmd;
     if (!deserializeJson(cmd, line)) runOta(cmd["ota"], cmd["md5"]);
   } else if (line.startsWith("{")) {
-    // parse num documento à parte: uma linha cortada não pode apagar o frame que está na tela
-    JsonDocument next;
-    if (DeserializationError err = deserializeJson(next, line)) {
-      Serial.printf("frame inválido (%u B): %s; RAM livre %u, maior bloco %u\n", line.length(), err.c_str(), ESP.getFreeHeap(), ESP.getMaxAllocHeap());
-      return;
-    }
-    app::frame = std::move(next);
-    app::syncClock(app::frame["t"] | 0);
-    sd::saveHistory(app::frame["hist"]);
-    static uint32_t rtcMs = 0;  // a hora do Mac vai para o RTC no primeiro frame e depois a cada hora
-    if (app::nowLocal() && (!rtcMs || millis() - rtcMs > 3600000)) rtcMs = millis() | 1, board::rtcWrite(app::nowLocal());
-    app::lastFrameMs = millis();
-    anim::onFrame();
+    ingest(line);
   } else if (line.length()) {
     Serial.printf("comando desconhecido: %s\n", line.c_str());
   }
@@ -206,10 +192,28 @@ void poll() {
     if (line.startsWith("{")) handle(line);
 }
 
+bool ingest(const String& line) {
+  // parse num documento à parte: uma linha cortada não pode apagar o frame que está na tela
+  JsonDocument next;
+  if (DeserializationError err = deserializeJson(next, line)) {
+    Serial.printf("frame inválido (%u B): %s; RAM livre %u, maior bloco %u\n", line.length(), err.c_str(), ESP.getFreeHeap(), ESP.getMaxAllocHeap());
+    return false;
+  }
+  app::frame = std::move(next);
+  app::syncClock(app::frame["t"] | 0);
+  sd::saveHistory(app::frame["hist"]);
+  static uint32_t rtcMs = 0;  // a hora do Mac vai para o RTC no primeiro frame e depois a cada hora
+  if (app::nowLocal() && (!rtcMs || millis() - rtcMs > 3600000)) rtcMs = millis() | 1, board::rtcWrite(app::nowLocal());
+  app::lastFrameMs = millis();
+  anim::onFrame();
+  return true;
+}
+
 void action(const char* line) {
   Serial.println(line);
   String l = String(line) + "\n";
   ble::send(l.c_str());
+  webui::queueAction(line);
 }
 
 uint32_t lastIdMs() { return idMs; }
