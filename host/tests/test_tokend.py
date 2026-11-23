@@ -74,7 +74,7 @@ def test_wifi_for_board(monkeypatch, networks, expected):
 def status(tmp_path, monkeypatch):
     path = tmp_path / "status.json"
     monkeypatch.setattr(tokend, "STATUS", str(path))
-    monkeypatch.setattr(tokend, "_status", {"seen": None, "at": 0.0, "rl": {}, "org": "", "sid": ""})
+    monkeypatch.setattr(tokend, "_status", {"seen": None, "at": 0.0, "rl": {}, "org": "", "rose": 0.0})
     monkeypatch.setattr(tokend, "_newest", {})
     monkeypatch.setitem(tokend._org, "changed_at", 0.0)
     monkeypatch.setitem(tokend._org, "name", "")
@@ -105,14 +105,16 @@ def test_api_is_the_fallback_when_statusline_is_old(status, monkeypatch):
 
 def test_idle_session_does_not_overwrite_newer_percent(status, monkeypatch):
     monkeypatch.setattr(tokend, "_api", {"five": None, "week": None, "at": 0.0, "err": "", "org": ""})
-    status(37, age=30, sid="ativa")
+    status(37, age=90, sid="ativa")
     assert tokend.limits()["p5"] == 37
-    status(2, age=20, sid="parada")  # o refreshInterval faz a sessão parada repetir o % de quando parou
+    status(2, age=80, sid="parada")  # o refreshInterval faz a sessão parada repetir o % de quando parou
     assert tokend.limits()["p5"] == 37
-    status(0, age=10, sid="parada", five=False)  # janela de 5 h dela já expirou: sem o campo
+    status(0, age=70, sid="parada", five=False)  # janela de 5 h dela já expirou: sem o campo
     assert tokend.limits()["p5"] == 37
-    status(38, sid="outra")
+    status(38, age=60, sid="outra")
     assert tokend.limits()["p5"] == 38
+    status(38, sid="mais-uma")  # a sessão que trouxe o 38 fechou: outra com o mesmo número mantém o dado novo
+    assert tokend.limits()["age"] < 5
 
 
 def test_api_wins_when_a_subagent_spends_past_the_statusline(status, monkeypatch):
@@ -140,7 +142,7 @@ def test_stalled_only_with_tokens_and_a_frozen_statusline(monkeypatch):
 def test_statusline_percent_belongs_to_the_org_with_that_weekly_reset(tmp_path, monkeypatch):
     path = tmp_path / "status.json"
     monkeypatch.setattr(tokend, "STATUS", str(path))
-    monkeypatch.setattr(tokend, "_status", {"seen": None, "at": 0.0, "rl": {}, "org": "", "sid": ""})
+    monkeypatch.setattr(tokend, "_status", {"seen": None, "at": 0.0, "rl": {}, "org": "", "rose": 0.0})
     monkeypatch.setattr(tokend, "_newest", {})
     monkeypatch.setattr(tokend, "_per_org", {})
     monkeypatch.setitem(tokend._org, "name", "Jus Team")

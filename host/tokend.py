@@ -1072,7 +1072,7 @@ STALL = 180        # s: tokens chegando e o % da statusline parado há isso: um 
 STALL_EVERY = 300  # s: nesse caso a API entra, no máximo uma vez a cada tanto
 
 
-_status = {"seen": None, "at": 0.0, "rl": {}, "org": "", "sid": "", "rose": 0.0}
+_status = {"seen": None, "at": 0.0, "rl": {}, "org": "", "rose": 0.0}
 _tokens = {"at": 0.0}  # a última resposta com uso nos .jsonl, de qualquer sessão ou subagente
 _newest = {}  # org -> (minuto do reset de 5 h, %): o % mais novo de cada org; na mesma janela ele só sobe
 
@@ -1088,21 +1088,21 @@ def org_of(rl):
 
 
 def statusline():
-    """(hora, rate_limits, org) da última escrita da statusline que trouxe o % mais novo. Com o refreshInterval,
-    sessões paradas também escrevem, repetindo o % de quando pararam: só vale quem traz número mais novo, ou a
-    sessão que trouxe o último."""
+    """(hora, rate_limits, org) da última escrita da statusline com o % mais novo. Com o refreshInterval, sessões
+    paradas também escrevem, repetindo o % de quando pararam: um número menor não vale, e o mesmo número de outra org
+    não troca a org da placa."""
     try:
         at = os.path.getmtime(STATUS)
         if (STATUS, at) != _status["seen"]:
             _status["seen"] = (STATUS, at)
             d = json.load(open(STATUS))
-            rl, sid = d.get("rate_limits") or {}, d.get("session_id") or ""
+            rl = d.get("rate_limits") or {}
             five, org = rl.get("five_hour") or {}, org_of(rl)
             mark = (round((five.get("resets_at") or 0) / 60), five.get("used_percentage") or 0)
             best = _newest.get(org, (0, 0))
-            if five and (mark > best or (mark == best and sid == _status["sid"])):
+            if five and (mark > best or (mark == best and org == _status["org"])):
                 _newest[org] = mark
-                _status.update(at=at, rl=rl, org=org, sid=sid, rose=at if mark > best else _status["rose"])
+                _status.update(at=at, rl=rl, org=org, rose=at if mark > best else _status["rose"])
     except (OSError, ValueError, AttributeError):
         pass
     return _status["at"], _status["rl"], _status["org"]
@@ -1141,7 +1141,9 @@ def usage_loop():
             if _refetch.wait(next_at - time.time()) and wait <= USAGE_EVERY:
                 break
         _refetch.clear()
-        if status_fresh() and not (stalled() and time.time() - _api["at"] >= STALL_EVERY):
+        _, rl, status_org = statusline()
+        behind = stalled() or api_ahead(rl, status_org)  # a API sabe de gasto que a statusline não viu: segue nela
+        if status_fresh() and not (behind and time.time() - _api["at"] >= STALL_EVERY):
             next_at = time.time() + USAGE_EVERY  # a statusline está valendo: a API fica para quando ela parar
             continue
         try:
