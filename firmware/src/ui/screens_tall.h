@@ -11,6 +11,7 @@ namespace screens::tall {
 constexpr int PAGES = 4;  // principal, sessões, modelos, histórico; os ajustes abrem pela engrenagem
 inline bool codexMain = false;  // a principal mostrada é a do Codex (bloco "cx" do frame)
 inline bool codexOnly() { return (int)(app::frame["cxo"] | 0); }  // ajuste Provedores em "Só Codex"
+inline bool canSwitch() { return !codexOnly() && !app::frame["accts"].isNull(); }  // sem cswap no Mac, uma conta só
 inline bool multiShown = false;  // a página do Multica (bloco "mc"), uma face a mais das sessões
 
 void drawWaiting();

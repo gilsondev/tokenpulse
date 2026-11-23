@@ -228,3 +228,11 @@ def test_statusline_without_previous(claude_home):
     assert json.loads(claude_home.read_text())["statusLine"]["command"] == "/opt/tp/host/statusline.sh"
     setup.remove()
     assert "statusLine" not in json.loads(claude_home.read_text())
+
+
+def test_no_account_switch_without_cswap(monkeypatch, tmp_path):
+    monkeypatch.setattr(tokend, "CSWAP", str(tmp_path / "cswap"))
+    assert "accts" not in tokend.account_frame()
+    (tmp_path / "cswap").touch()
+    monkeypatch.setattr(tokend, "accounts_frame", lambda: [])
+    assert tokend.account_frame()["accts"] == []

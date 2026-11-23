@@ -992,7 +992,10 @@ def account_frame():
     # a org do Claude Code mudou depois do pedido: a troca já valeu, mesmo com o cswap add ainda rodando
     if state in ("login", "switching") and _org["changed_at"] > _action["at"]:
         state = "done"
-    return {"accts": accounts_frame(), "act": [state, act["target"], act["msg"]]}
+    out = {"act": [state, act["target"], act["msg"]]}
+    if os.path.exists(CSWAP):  # sem cswap, a placa mostra só a conta logada, sem troca de org
+        out["accts"] = accounts_frame()
+    return out
 
 
 _theme = {"at": 0.0, "dark": True}

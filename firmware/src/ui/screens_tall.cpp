@@ -371,7 +371,7 @@ void drawMain(bool live, int page) {
     snprintf(buf, sizeof buf, *plan ? "Codex · %s" : "Codex", plan);
     header(live, buf, false);
   } else {
-    header(live, f["org"] | "Claude", !codexOnly());  // só o Claude troca de org
+    header(live, f["org"] | "Claude", canSwitch());  // só o Claude troca de org
   }
 
   // Anel da janela de 5h: o herói da tela. Em pé fica no alto e centrado; deitada, na coluna da esquerda.
@@ -1543,7 +1543,7 @@ int items(Item* out) {
   if ((int)(app::frame["cxok"] | 0)) out[n++] = G_PROV;  // só quando o Mac tem o Codex
   if (!app::frame["mcs"].isNull()) out[n++] = G_MC;       // só quando o Mac tem o Multica
   if (ble::name()[0]) out[n++] = G_LINK;                   // só quem tem Bluetooth e WiFi escolhe
-  if (!codexOnly()) out[n++] = ACCOUNT;                   // a conta é a org do Claude
+  if (canSwitch()) out[n++] = ACCOUNT;                    // a conta é a org do Claude
   out[n++] = ABOUT;
   return n;
 }
