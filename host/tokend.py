@@ -218,6 +218,7 @@ class Usage:
         cread, cwrite = u.get("cache_read_input_tokens") or 0, u.get("cache_creation_input_tokens") or 0
         ts = datetime.fromisoformat(d["timestamp"].replace("Z", "+00:00")).timestamp()
         self.seen[key] = ts
+        _tokens["at"] = max(_tokens["at"], ts)
         project = os.path.basename((d.get("cwd") or "").rstrip("/")) or "?"
         e = Event(ts, inp + out + cread + cwrite, inp, out, cread, cwrite, d.get("entrypoint", "cli"),
                   d.get("sessionId"), model_label(msg.get("model"), None), project, cost_usd(msg.get("model"), u))
@@ -1066,9 +1067,13 @@ def fetch_usage():
 USAGE_EVERY = 120  # o % muda devagar; 60 s já levou a 429
 USAGE_MAX_WAIT = 1800
 STATUS_FRESH = 600  # s: statusline mais nova que isso vale sozinha, sem chamar a API
+STALL = 180        # s: tokens chegando e o % da statusline parado há isso: um subagente gasta sem a sessão saber
+STALL_EVERY = 300  # s: nesse caso a API entra, no máximo uma vez a cada tanto
 
 
-_status = {"seen": None, "at": 0.0, "rl": {}, "org": ""}
+_status = {"seen": None, "at": 0.0, "rl": {}, "org": "", "sid": "", "rose": 0.0}
+_tokens = {"at": 0.0}  # a última resposta com uso nos .jsonl, de qualquer sessão ou subagente
+_newest = {}  # org -> (minuto do reset de 5 h, %): o % mais novo de cada org; na mesma janela ele só sobe
 
 
 def org_of(rl):
@@ -1082,16 +1087,31 @@ def org_of(rl):
 
 
 def statusline():
-    """(hora, rate_limits, org) da última escrita da statusline."""
+    """(hora, rate_limits, org) da última escrita da statusline que trouxe o % mais novo. Com o refreshInterval,
+    sessões paradas também escrevem, repetindo o % de quando pararam: só vale quem traz número mais novo, ou a
+    sessão que trouxe o último."""
     try:
         at = os.path.getmtime(STATUS)
         if (STATUS, at) != _status["seen"]:
             _status["seen"] = (STATUS, at)
-            rl = json.load(open(STATUS)).get("rate_limits") or {}
-            _status.update(at=at, rl=rl, org=org_of(rl))
+            d = json.load(open(STATUS))
+            rl, sid = d.get("rate_limits") or {}, d.get("session_id") or ""
+            five, org = rl.get("five_hour") or {}, org_of(rl)
+            mark = (round((five.get("resets_at") or 0) / 60), five.get("used_percentage") or 0)
+            best = _newest.get(org, (0, 0))
+            if five and (mark > best or (mark == best and sid == _status["sid"])):
+                _newest[org] = mark
+                _status.update(at=at, rl=rl, org=org, sid=sid, rose=at if mark > best else _status["rose"])
     except (OSError, ValueError, AttributeError):
         pass
     return _status["at"], _status["rl"], _status["org"]
+
+
+def stalled():
+    """Tokens chegando e o % da statusline parado: a sessão espera um subagente, cujo uso não entra no rate_limits
+    dela até ele acabar (medido em 23/11: a statusline em 41% e a API em 42% por minutos)."""
+    now = time.time()
+    return now - _tokens["at"] < 120 and now - _status["rose"] > STALL
 
 
 def status_fresh():
@@ -1120,8 +1140,8 @@ def usage_loop():
             if _refetch.wait(next_at - time.time()) and wait <= USAGE_EVERY:
                 break
         _refetch.clear()
-        if status_fresh():  # a statusline está valendo: a API fica para quando ela parar
-            next_at = time.time() + USAGE_EVERY
+        if status_fresh() and not (stalled() and time.time() - _api["at"] >= STALL_EVERY):
+            next_at = time.time() + USAGE_EVERY  # a statusline está valendo: a API fica para quando ela parar
             continue
         try:
             name = read_org()
@@ -1482,7 +1502,7 @@ def limits():
     (duas orgs em uso alternam), ou a logada pela API."""
     status_at, rl, status_org = statusline()
     api_ok = _api["at"] and _api["org"] in ("", _org["name"])
-    if status_fresh() or not api_ok or _api["at"] < status_at:
+    if (status_fresh() or not api_ok or _api["at"] < status_at) and not api_ahead(rl, status_org):
         if not status_at:
             return {"p5": -1, "pw": -1, "org": _org["name"]}
         if status_org != _org["name"] and not status_fresh():  # % velho de outra org: a logada ainda sem dado
@@ -1496,6 +1516,14 @@ def limits():
     five = {"used_percentage": _api["five"].get("utilization"), "resets_at": _api["five"].get("resets_at")}
     week = {"used_percentage": _api["week"].get("utilization"), "resets_at": _api["week"].get("resets_at")}
     return {"age": int(age), "org": _org["name"]} | window_fields(five, week, datetime.now())
+
+
+def api_ahead(rl, status_org):
+    """A API tem um % maior para a mesma janela de 5 h da statusline: veio do gasto de um subagente."""
+    five, api = rl.get("five_hour") or {}, _api["five"] or {}
+    a, b = parse_reset(five.get("resets_at")), parse_reset(api.get("resets_at"))
+    return bool(_api["at"] and _api["org"] == status_org == _org["name"] and a and b
+                and abs((a - b).total_seconds()) < 600 and (api.get("utilization") or 0) > (five.get("used_percentage") or 0))
 
 
 def window_fields(five, week, now):

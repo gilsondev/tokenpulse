@@ -13,6 +13,7 @@ import sys
 HOME = os.path.expanduser("~")
 SETTINGS = os.path.join(os.environ.get("CLAUDE_CONFIG_DIR") or os.path.join(HOME, ".claude"), "settings.json")
 PREV = os.path.join(HOME, ".claude", "esp-tokens-statusline-prev")
+REFRESH = 30  # s: sem isso a statusline para enquanto a sessão espera um subagente, e o % da placa congela
 
 
 def load():
@@ -56,7 +57,7 @@ def install(script):
     else:
         command = shlex.quote(script)
         message = "statusline ligada"
-    settings["statusLine"] = {**line, "type": "command", "command": command}
+    settings["statusLine"] = {"refreshInterval": REFRESH, **line, "type": "command", "command": command}
     save(settings)
     print(message)
 
@@ -71,6 +72,8 @@ def remove():
             previous = f.read().strip()
     except FileNotFoundError:
         previous = ""
+    if line.get("refreshInterval") == REFRESH:
+        line.pop("refreshInterval")
     if previous:
         settings["statusLine"] = {**line, "command": previous}
     else:

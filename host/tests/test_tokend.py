@@ -74,13 +74,17 @@ def test_wifi_for_board(monkeypatch, networks, expected):
 def status(tmp_path, monkeypatch):
     path = tmp_path / "status.json"
     monkeypatch.setattr(tokend, "STATUS", str(path))
+    monkeypatch.setattr(tokend, "_status", {"seen": None, "at": 0.0, "rl": {}, "org": "", "sid": ""})
+    monkeypatch.setattr(tokend, "_newest", {})
     monkeypatch.setitem(tokend._org, "changed_at", 0.0)
     monkeypatch.setitem(tokend._org, "name", "")
+    reset = time.time() + 3 * 3600
 
-    def write(p5, age=0):
-        reset = time.time() + 3 * 3600
-        path.write_text(json.dumps({"rate_limits": {"five_hour": {"used_percentage": p5, "resets_at": reset},
-                                                    "seven_day": {"used_percentage": 5, "resets_at": reset}}}))
+    def write(p5, age=0, sid="a", five=True):
+        rl = {"seven_day": {"used_percentage": 5, "resets_at": reset}}
+        if five:
+            rl["five_hour"] = {"used_percentage": p5, "resets_at": reset}
+        path.write_text(json.dumps({"session_id": sid, "rate_limits": rl}))
         os.utime(path, (time.time() - age, time.time() - age))
     return write
 
@@ -99,10 +103,45 @@ def test_api_is_the_fallback_when_statusline_is_old(status, monkeypatch):
     assert not tokend.status_fresh() and tokend.limits()["p5"] == 80
 
 
+def test_idle_session_does_not_overwrite_newer_percent(status, monkeypatch):
+    monkeypatch.setattr(tokend, "_api", {"five": None, "week": None, "at": 0.0, "err": "", "org": ""})
+    status(37, age=30, sid="ativa")
+    assert tokend.limits()["p5"] == 37
+    status(2, age=20, sid="parada")  # o refreshInterval faz a sessão parada repetir o % de quando parou
+    assert tokend.limits()["p5"] == 37
+    status(0, age=10, sid="parada", five=False)  # janela de 5 h dela já expirou: sem o campo
+    assert tokend.limits()["p5"] == 37
+    status(38, sid="outra")
+    assert tokend.limits()["p5"] == 38
+
+
+def test_api_wins_when_a_subagent_spends_past_the_statusline(status, monkeypatch):
+    status(41)
+    reset = json.loads(Path(tokend.STATUS).read_text())["rate_limits"]["five_hour"]["resets_at"]
+    api = {"five": {"utilization": 42, "resets_at": datetime.fromtimestamp(reset + 30).astimezone().isoformat()},
+           "week": {"utilization": 7}, "at": time.time() - 60, "err": "", "org": ""}
+    monkeypatch.setattr(tokend, "_api", api)
+    assert tokend.status_fresh() and tokend.limits()["p5"] == 42
+    api["five"]["resets_at"] = datetime.fromtimestamp(reset - 5 * 3600).astimezone().isoformat()  # janela anterior
+    assert tokend.limits()["p5"] == 41
+
+
+def test_stalled_only_with_tokens_and_a_frozen_statusline(monkeypatch):
+    monkeypatch.setitem(tokend._tokens, "at", time.time() - 10)
+    monkeypatch.setitem(tokend._status, "rose", time.time() - tokend.STALL - 1)
+    assert tokend.stalled()
+    monkeypatch.setitem(tokend._status, "rose", time.time() - 30)
+    assert not tokend.stalled()
+    monkeypatch.setitem(tokend._status, "rose", 0.0)
+    monkeypatch.setitem(tokend._tokens, "at", time.time() - 600)
+    assert not tokend.stalled()
+
+
 def test_statusline_percent_belongs_to_the_org_with_that_weekly_reset(tmp_path, monkeypatch):
     path = tmp_path / "status.json"
     monkeypatch.setattr(tokend, "STATUS", str(path))
-    monkeypatch.setattr(tokend, "_status", {"seen": None, "at": 0.0, "rl": {}, "org": ""})
+    monkeypatch.setattr(tokend, "_status", {"seen": None, "at": 0.0, "rl": {}, "org": "", "sid": ""})
+    monkeypatch.setattr(tokend, "_newest", {})
     monkeypatch.setattr(tokend, "_per_org", {})
     monkeypatch.setitem(tokend._org, "name", "Jus Team")
     team, jus = time.time() + 6 * 86400, time.time() + 86400
@@ -165,11 +204,21 @@ def test_statusline_chains_and_restores(claude_home):
     setup.install("/opt/tp/host/statusline.sh")
     line = json.loads(claude_home.read_text())["statusLine"]
     assert line["command"] == "/opt/tp/host/statusline.sh '/x/s.sh --a 2'" and line["padding"] == 1
+    assert line["refreshInterval"] == setup.REFRESH
     setup.install("/novo/host/statusline.sh")  # reinstalar não encadeia duas vezes
     assert json.loads(claude_home.read_text())["statusLine"]["command"] == "/novo/host/statusline.sh '/x/s.sh --a 2'"
     setup.remove()
     settings = json.loads(claude_home.read_text())
     assert settings["statusLine"]["command"] == "/x/s.sh --a 2" and settings["model"] == "opus"
+    assert "refreshInterval" not in settings["statusLine"]
+
+
+def test_statusline_keeps_own_refresh_interval(claude_home):
+    claude_home.write_text(json.dumps({"statusLine": {"type": "command", "command": "/x/s.sh", "refreshInterval": 5}}))
+    setup.install("/opt/tp/host/statusline.sh")
+    assert json.loads(claude_home.read_text())["statusLine"]["refreshInterval"] == 5
+    setup.remove()
+    assert json.loads(claude_home.read_text())["statusLine"] == {"type": "command", "command": "/x/s.sh", "refreshInterval": 5}
 
 
 def test_statusline_without_previous(claude_home):
