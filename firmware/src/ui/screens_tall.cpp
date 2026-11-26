@@ -116,8 +116,14 @@ void stepIcon(int x, int y, int state) {
     fb().fillSmoothCircle(x, y, u(9), blend(BG, GREEN, 0.25f));
     gfx::wideLine(x - u(4), y, x - u(1), y + u(3), 1.1f, GREEN);
     gfx::wideLine(x - u(1), y + u(3), x + u(5), y - u(4), 1.1f, GREEN);
-  } else if (state == 1) {
-    gfx::ring(x, y, u(9), max(2, u(3)), 0.25f + 0.2f * breath(1200), AMBER, TRACK);
+  } else if (state == 1) {  // em andamento: um arco com rastro dando voltas sobre o trilho, uma por segundo
+    const int r = u(9), t = max(2, u(3));
+    const float rm = r - t / 2.f, a0 = millis() % 1000 / 1000.f * TAU;
+    fb().fillArc(x, y, r, r - t, 0, 360, TRACK);
+    for (int i = 7; i >= 0; i--) {
+      const float a = a0 - i * 0.2f;
+      fb().fillSmoothCircle(x + rm * sinf(a), y - rm * cosf(a), t / 2.f + 0.5f, blend(TRACK, AMBER, 1 - i / 8.f));
+    }
   } else {
     fb().fillSmoothCircle(x, y, max(2, u(3)), DIM);
   }
