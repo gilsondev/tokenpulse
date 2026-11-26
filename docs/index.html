@@ -15,7 +15,7 @@
 <meta property="og:locale" content="pt_BR">
 <meta property="og:url" content="https://gilsondev.github.io/tokenpulse/">
 <meta property="og:title" content="tokenpulse: o uso do Claude Code ao vivo na sua mesa">
-<meta property="og:description" content="Janela de 5 h, semana, sessões e custo do Claude Code numa tela ESP32 com touch, pela USB, sem Wi-Fi.">
+<meta property="og:description" content="Janela de 5 h, semana, sessões e custo do Claude Code numa tela ESP32 com touch, pela USB ou sem fio.">
 <meta property="og:image" content="https://gilsondev.github.io/tokenpulse/assets/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
@@ -182,7 +182,7 @@
     <img src="assets/logo.svg" width="88" height="88" alt="Logo do tokenpulse: um anel de progresso com uma linha de pulso">
     <h1>O uso do Claude Code,<br><b>ao vivo</b> na sua mesa.</h1>
     <p class="lead">Uma tela ESP32 com touch que mostra quanto da janela de 5 horas e da semana você já usou, o que cada
-      sessão está fazendo e quanto esse uso custaria pela API. Pela USB, sem Wi-Fi, sem conta nova.</p>
+      sessão está fazendo e quanto esse uso custaria pela API. Pela USB ou sem fio, sem conta nova.</p>
     <div class="cta">
       <a class="btn primary" href="https://github.com/gilsondev/tokenpulse/releases/latest">Baixar o firmware</a>
       <a class="btn" href="https://github.com/gilsondev/tokenpulse">Ver no GitHub</a>
@@ -219,9 +219,12 @@
       <div class="feature"><div class="ico">~</div><h3>Fluido</h3><p>Fontes Inter suaves, anti-aliasing e o envio da tela no segundo núcleo do ESP32: cerca de 30 quadros por segundo.</p></div>
       <div class="feature"><div class="ico">◐</div><h3>Animações com propósito</h3><p>Mola nas barras e no anel, halo na ponta do progresso, pulso quando muda de faixa. Parado, fica calmo.</p></div>
       <div class="feature"><div class="ico">☾</div><h3>Discreto à noite</h3><p>Escurece quando ninguém mexe e quase apaga das 22h às 7h. Um toque acende sem trocar de tela.</p></div>
-      <div class="feature"><div class="ico">⇄</div><h3>Várias orgs</h3><p>Troque de org pela tela. Pede dois toques, porque troca o login de todas as sessões do Mac.</p></div>
+      <div class="feature"><div class="ico">⇄</div><h3>Várias orgs</h3><p>Com o claude-swap, troque de org pela tela, com dois toques, porque troca o login de todas as sessões do Mac. Sem ele, a placa mostra a conta logada.</p></div>
       <div class="feature"><div class="ico">↑</div><h3>Atualiza pela USB</h3><p>Firmware novo em cerca de 15 segundos, com verificação de md5 e a versão anterior preservada se algo falhar.</p></div>
       <div class="feature"><div class="ico">⌂</div><h3>Seus dados ficam no Mac</h3><p>Nada vai para a nuvem: os logs, o token e as sessões ficam no seu computador. A placa só desenha.</p></div>
+      <div class="feature"><div class="ico">▤</div><h3>Contexto por sessão</h3><p>Uma barra no pé de cada cartão mostra quanto da janela de contexto a sessão usa. Fica âmbar a 75% e vermelha a 90%, antes do auto-compact.</p></div>
+      <div class="feature"><div class="ico">z</div><h3>Dorme junto com o Mac</h3><p>Mac bloqueado: o mascote dorme e anda pela tela com a hora. A placa não muda nada no Mac, e os alertas esperam você desbloquear.</p></div>
+      <div class="feature"><div class="ico">≋</div><h3>Longe do cabo</h3><p>Fora da USB, os dados chegam por Bluetooth ou pela rede WiFi de 2,4 GHz, nas placas que têm. Você escolhe em Ajustes → Conexão.</p></div>
     </div>
   </div>
 </section>
@@ -236,6 +239,7 @@
       <tr><td>Tokens, modelos, custo, histórico</td><td>sim, dos logs do Claude Code</td><td>sim</td></tr>
       <tr><td>Estado (trabalhando, sua vez, parada)</td><td>estimado pelos logs</td><td>o do herdr, na hora</td></tr>
       <tr><td>"Precisa de você" (esperando aprovação)</td><td>—</td><td>sim</td></tr>
+      <tr><td>Contexto da sessão</td><td>sim</td><td>sim</td></tr>
       <tr><td>Agrupamento</td><td>por projeto (pasta)</td><td>pelos workspaces do herdr</td></tr>
       <tr><td>Nome no cartão</td><td>título da sessão ou pasta</td><td>o nome que você deu à aba</td></tr>
       <tr><td>Tocar para trazer à frente</td><td>Desktop: abre o app</td><td>sim, no painel do herdr</td></tr>
@@ -334,7 +338,7 @@ flowchart LR
           <dt>Interface</dt><dd>todas as telas no layout grande; gira sozinha pelo acelerômetro; descanso contra marcas no vidro</dd>
           <dt>Som</dt><dd>alto-falante: sessão pedindo aprovação, 5 h esgotada ou renovada, semana esgotada, bateria fraca, Mac sem dados e Bluetooth, com 11 opções e volume em Ajustes → Som</dd>
           <dt>Bateria</dt><dd>ícone de carga no cabeçalho, porcentagem e previsão de carga completa no Sobre; carrega até 4,1 V para durar mais</dd>
-          <dt>Sem fio</dt><dd>fora da USB, os dados chegam por Bluetooth; o Mac aprende a placa na primeira conexão pelo cabo</dd>
+          <dt>Sem fio</dt><dd>fora da USB, os dados chegam por Bluetooth ou WiFi (Ajustes → Conexão); o Mac aprende a placa na primeira conexão pelo cabo</dd>
           <dt>Extras</dt><dd>relógio no RTC; histórico diário no cartão microSD, além dos 14 dias</dd>
           <dt>Botões</dt><dd>KEY3 troca de tela; PWR entra e sai do descanso e, segurado por 2 s, desliga a placa; BOOT silencia por 1 h</dd>
           <dt>Atualização</dt><dd>OTA pela USB em ~25 s</dd>
@@ -382,7 +386,7 @@ flowchart LR
       <div class="callout on" data-only="guition-jc3248w535">A JC3248W535 só passa dados pela USB-C num dos lados do plugue. Se a placa liga mas o Mac não a vê, gire o plugue.</div>
       <div class="callout" data-only="cyd-2432s028r">A ESP32-2432S028R tem touch resistivo: use a caneta que vem com ela. Na primeira vez ela pede quatro toques, um em cada canto, para calibrar. Use um cabo USB que passe dados.</div>
       <div class="callout" data-only="waveshare-s3-lcd-147b">A Waveshare de 1,47" não tem touch: o botão BOOT troca de tela e segurar volta para a principal. Ela gira sozinha pelo acelerômetro.</div>
-      <div class="callout" data-only="waveshare-amoled-216">Ligue a AMOLED 2,16" pela USB-C na primeira vez: o Mac aprende o nome dela e, quando ela sai do cabo, continua mandando os dados por Bluetooth. Segurar o botão PWR por 2 s desliga a placa.</div>
+      <div class="callout" data-only="waveshare-amoled-216">Ligue a AMOLED 2,16" pela USB-C na primeira vez: o Mac aprende o nome dela e, quando ela sai do cabo, continua mandando os dados por Bluetooth ou WiFi. Segurar o botão PWR por 2 s desliga a placa.</div>
       <div class="callout" data-only="smalltv-ultra">O SmallTV-Ultra não tem USB de dados: tudo vai pelo WiFi, e o <code>setup.sh</code> não serve para ele. O firmware de fábrica da GeekMagic é substituído e só volta com o <code>.bin</code> dele.</div>
     </div>
     <div class="flash" data-not="smalltv-ultra">
