@@ -200,12 +200,16 @@ class Usage:
         if cur and cur["ts"] > ts:
             return
         msg = d.get("message") if isinstance(d.get("message"), dict) else {}
-        q = (cur or {}).get("q", "")
+        q, ctx = (cur or {}).get("q", ""), (cur or {}).get("ctx")
         if kind == "assistant":
             q = ask_summary(msg.get("content")) or q
+            u = msg.get("usage") or {}
+            used = sum(u.get(k) or 0 for k in ("input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens"))
+            if used and not d.get("isSidechain"):  # o subagente tem contexto próprio
+                ctx = (msg.get("model"), used)
         self.sessions[sid] = {"ts": ts, "kind": kind, "stop": msg.get("stop_reason"),
                               "project": os.path.basename((d.get("cwd") or "").rstrip("/")) or "?", "cwd": d.get("cwd") or "",
-                              "entry": d.get("entrypoint", "cli"), "q": q}
+                              "entry": d.get("entrypoint", "cli"), "q": q, "ctx": ctx}
 
     def _ingest_line(self, d):
         msg = d.get("message")
@@ -670,7 +674,8 @@ def sessions(state, titles, herdr, events, now):
     """Sessões agrupadas pelos workspaces do herdr.
     ws: [nome, sessões, trabalhando, precisa de você, sua vez, em foco, 1 Claude Desktop / 3 Multica], na ordem do herdr.
     rows: [nome, CLI/Desk, estado, tokens, minutos desde a última atividade (-1: sem dado), índice do workspace,
-           id curto da sessão (para o toque trazê-la à frente), em foco no herdr, o que ela pede (só esperando você)].
+           id curto da sessão (para o toque trazê-la à frente), em foco no herdr, o que ela pede (só esperando você),
+           % da janela de contexto (-1: sem o tamanho da janela)].
     Entram todos os painéis de Claude do herdr e as outras sessões com atividade na última hora.
     Estado: block (esperando você aprovar), work, turn (o Claude terminou, sua vez) ou idle.
     O estado do herdr vale mais que a heurística do .jsonl; o nome é o título da sessão quando existe."""
@@ -706,6 +711,7 @@ def sessions(state, titles, herdr, events, now):
         row = [cut(name, 48), origin, st, fmt_tokens(tokens[sid]) if sid in tokens else "--",
                int(age // 60) if age is not None else -1]
         ask = s.get("q", "") if s and st in ("block", "turn") and age is not None and age <= 3600 else ""
+        row.append(context_pct(sid, s and s.get("ctx")))
         _known_sessions[sid[:8]] = {"pane": h["pane"] if h else None, "desk": origin == "Desk"}
         # sem herdr na máquina, o agrupamento natural é o projeto (pasta) da sessão
         group = (MULTICA_WS if origin == "Multica" else h["ws"] if h else DESKTOP if origin == "Desk"
@@ -719,7 +725,7 @@ def sessions(state, titles, herdr, events, now):
         count = lambda st: sum(1 for r in items if r[0] == st)
         ws.append([cut(key[1], 32), len(items), count("work"), count("block"), count("turn"),
                    1 if seen and key == _herdr.get("focused_ws") else 0, 1 if key == DESKTOP else 3 if key == MULTICA_WS else 0])
-        rows += [r[2] + [i, r[3], 1 if r[4] else 0] + ([r[5]] if r[5] else []) for r in items[:MAX_PER_WS]]
+        rows += [r[2][:5] + [i, r[3], 1 if r[4] else 0, r[5], r[2][5]] for r in items[:MAX_PER_WS]]
     return {"n": sum(w[1] for w in ws), "ws": ws, "rows": rows[:MAX_SESSIONS]}
 
 
@@ -1105,6 +1111,17 @@ def org_of(rl):
     return _org["name"]
 
 
+_ctx_size = {}  # sessão ou modelo -> tamanho da janela de contexto, como a statusline informa
+
+
+def context_pct(sid, ctx):
+    """% da janela de contexto que a sessão usa; -1 sem o tamanho da janela (nenhuma statusline daquele modelo)."""
+    if not ctx:
+        return -1
+    size = _ctx_size.get(sid) or _ctx_size.get(ctx[0])
+    return min(100, round(100 * ctx[1] / size)) if size else -1
+
+
 def statusline():
     """(hora, rate_limits, org) da última escrita da statusline com o % mais novo. Com o refreshInterval, sessões
     paradas também escrevem, repetindo o % de quando pararam: um número menor não vale, e o mesmo número de outra org
@@ -1114,6 +1131,8 @@ def statusline():
         if (STATUS, at) != _status["seen"]:
             _status["seen"] = (STATUS, at)
             d = json.load(open(STATUS))
+            if size := (d.get("context_window") or {}).get("context_window_size"):
+                _ctx_size[d.get("session_id")] = _ctx_size[(d.get("model") or {}).get("id")] = size
             rl = d.get("rate_limits") or {}
             five, org = rl.get("five_hour") or {}, org_of(rl)
             mark = (round((five.get("resets_at") or 0) / 60), five.get("used_percentage") or 0)
@@ -2160,14 +2179,14 @@ def demo_frame():
         d = now - timedelta(days=back)
         hist.append([WEEKDAYS[d.weekday()], d.day, float(tok), round(tok * 0.42)])
     sessions = [
-        ["Refatorar o checkout", "CLI", "work", "12,4M", 0, 0, "0000000a", 1],
-        ["Revisar PR de pagamentos", "CLI", "block", "3,1M", 1, 0, "0000000b", 0, "Bash: gh pr merge 482 --squash"],
-        ["Testes do carrinho", "CLI", "turn", "6,8M", 4, 0, "0000000c", 0, "Os 42 testes passaram. Abro o PR agora ou reviso a cobertura do checkout antes?"],
-        ["Pipeline de deploy", "CLI", "turn", "2,2M", 9, 1, "0000000e", 0],
-        ["Alertas do cluster", "CLI", "idle", "--", -1, 1, "0000000f", 0],
-        ["Terraform da VPC", "CLI", "idle", "540k", 130, 1, "00000010", 0],
-        ["Blog pessoal", "CLI", "idle", "--", -1, 2, "00000011", 0],
-        ["Migração do banco", "Desk", "turn", "1,2M", 6, 3, "0000000d", 0, "Rodo a migração em staging primeiro?"],
+        ["Refatorar o checkout", "CLI", "work", "12,4M", 0, 0, "0000000a", 1, "", 62],
+        ["Revisar PR de pagamentos", "CLI", "block", "3,1M", 1, 0, "0000000b", 0, "Bash: gh pr merge 482 --squash", 34],
+        ["Testes do carrinho", "CLI", "turn", "6,8M", 4, 0, "0000000c", 0, "Os 42 testes passaram. Abro o PR agora ou reviso a cobertura do checkout antes?", 81],
+        ["Pipeline de deploy", "CLI", "turn", "2,2M", 9, 1, "0000000e", 0, "", 18],
+        ["Alertas do cluster", "CLI", "idle", "--", -1, 1, "0000000f", 0, "", -1],
+        ["Terraform da VPC", "CLI", "idle", "540k", 130, 1, "00000010", 0, "", 9],
+        ["Blog pessoal", "CLI", "idle", "--", -1, 2, "00000011", 0, "", -1],
+        ["Migração do banco", "Desk", "turn", "1,2M", 6, 3, "0000000d", 0, "Rodo a migração em staging primeiro?", 45],
     ]
     f = {
         "m": "Opus 5.5 · high", "tot": "84,2M", "rate": fmt_tokens(sum(sp[-5:]) / 5), "sp": sp, "cli": 3, "desk": 1,

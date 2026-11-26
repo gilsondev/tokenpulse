@@ -39,10 +39,16 @@ When the 5-hour window runs out and there is another org saved in claude-swap, t
 switching to the one with the lowest usage. The org switch only shows up with claude-swap installed; without
 it the board shows the account Claude Code is logged into.
 
-**Mac locked.** When you lock the Mac the board rests too, and wakes when you unlock. While it is locked, a tap
+**Mac locked.** When you lock the Mac the board rests too: the mascot sleeps and drifts across the screen with the
+time, and the board wakes when you unlock. Approval alerts and finished sessions wait for the unlock. While it is locked, a tap
 that would change something on the Mac (switch org, log in, update, open a Multica issue, change a setting the
 daemon saves) shows the mascot saying no instead; the daemon refuses those actions as well. Bringing a session to
 the front still works.
+
+**Context per session.** Each session card has a thin bar at the bottom with how much of the context window the
+session uses, and the % next to the state when it fits. It turns amber at 75% and red at 90%, before the
+auto-compact. The window size comes from the statusline of each model, so a model shows the bar after one of its
+sessions has written the statusline.
 
 **Landscape.** In Settings → Display → horizontal, every screen gets a landscape version: the ring on the
 left, sessions in 3 columns and the model detail with the projects beside it.

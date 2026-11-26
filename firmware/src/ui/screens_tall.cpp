@@ -949,6 +949,24 @@ void drawSaver() {
     mascot::draw(x, y + 2 * px, px, mascot::OFFLINE, 0);
     return text(s, x + mw / 2, y + 10 * px + gap, gfx::LABEL, 0x6B4D, top_center, 0);
   }
+  if (hostlink::macLocked()) {  // o Mac bloqueado: o mascote dorme junto, com a hora embaixo
+    char clk[8] = "";
+    if (const int32_t s = app::secondsOfDay(); s >= 0) snprintf(clk, sizeof clk, "%02d:%02d", (int)(s / 3600), (int)(s / 60 % 60));
+    const int px = u(7), mw = mascot::W * px, gap = u(16), th = gfx::lineHeight(gfx::TITLE), sh = gfx::lineHeight(gfx::SMALL);
+    const char* sub = "Computador bloqueado";
+    w = max(mw, gfx::textWidth(sub, gfx::SMALL)), h = 4 * px + 8 * px + gap + th + u(6) + sh;
+    // anda devagar e rebate nas bordas, como a logo do DVD: cada eixo vai e volta no próprio vão
+    const uint32_t d = millis() / 40 * u(1);  // ~25 px/s; sem sinal, não vira negativo depois de semanas ligada
+    auto bounce = [d](int span) {
+      if (span <= 0) return 0;
+      const int p = d % (2u * span);
+      return p < span ? p : 2 * span - p;
+    };
+    x = bounce(W() - w), y = bounce(gfx::height() - h);
+    mascot::draw(x + (w - mw) / 2, y + 4 * px, px, mascot::IDLE, 0);  // o "z" sobe acima do mascote
+    text(clk, x + w / 2, y + 12 * px + gap, gfx::TITLE, REST_TEXT, top_center, 0);
+    return text(sub, x + w / 2, y + 12 * px + gap + th + u(6), gfx::SMALL, REST_MUTED, top_center, 0);
+  }
   using Page = bool (*)(int, int, bool, int&, int&);
   static const Page PAGES[] = {restClock, restUsage, restSessions, restModels, restHistory};
   const uint8_t on = settings::web.restPages ? settings::web.restPages : 1;
@@ -1197,7 +1215,8 @@ void sessionCard(int r, int k, bool desk) {
   const float in = anim::entrance(k);
   card(x, y + (int)((1 - in) * u(16)), cw, ch, u(14), cardBg, focused);
   if (in < 0.9f) return;
-  const int pad = u(12), statusY = y + ch - max(u(20), gfx::lineHeight(gfx::SMALL) + 2);
+  const int ctx = row[9] | -1, barH = max(2, u(3));  // com o contexto, o estado sobe para a barra caber no pé
+  const int pad = u(12), statusY = y + ch - max(u(20), gfx::lineHeight(gfx::SMALL) + 2) - (ctx >= 0 ? barH + u(4) : 0);
   const int iconY = y + (COMPACT() ? u(10) : u(14)), px = MASCOT_PX();
   if (desk) spark(x + pad + 4 * px, iconY + 4 * px, 4 * px + px / 2);
   const char* origin = row[1] | "CLI";
@@ -1225,6 +1244,17 @@ void sessionCard(int r, int k, bool desk) {
   else snprintf(buf, sizeof buf, "Parada há %d min", mins);
   const uint16_t sc = mood == mascot::WORK ? GREEN : mood == mascot::BLOCK ? RED : mood == mascot::TURN ? YELLOW : DIM;
   text(fit(buf, gfx::SMALL, maxW).c_str(), x + pad, statusY, gfx::SMALL, sc, top_left, cardBg);
+  // o contexto da sessão: uma barra fina no pé do cartão, que sempre cabe, e o número ao lado do estado se couber.
+  // Âmbar perto do auto-compact, vermelho quase cheio.
+  if (ctx < 0) return;
+  const uint16_t cc = ctx >= 90 ? RED : ctx >= 75 ? AMBER : blend(cardBg, TEXT, 0.45f);
+  const int barW = cw - 2 * pad, bY = y + ch - barH - max(4, u(8));
+  fb().fillRect(x + pad, bY, barW, barH, blend(cardBg, TEXT, 0.12f));
+  fb().fillRect(x + pad, bY, max(barH, barW * ctx / 100), barH, cc);
+  char pct[8];
+  snprintf(pct, sizeof pct, "%d%%", ctx);
+  if (cw - u(10) - pad - gfx::textWidth(buf, gfx::SMALL) - u(10) >= gfx::textWidth(pct, gfx::SMALL))
+    text(pct, x + cw - u(10), statusY, gfx::SMALL, ctx >= 75 ? cc : DIM, top_right, cardBg);
 }
 
 // Página das sessões de um workspace, por prioridade. O título volta para a lista.

@@ -37,10 +37,15 @@ Quando a janela de 5 h esgota e há outra org salva no claude-swap, a tela princ
 menor uso. A troca de org só aparece com o claude-swap instalado; sem ele, a placa mostra a conta em que o
 Claude Code está logado.
 
-**Mac bloqueado.** Quando você bloqueia o Mac, a placa descansa junto e acorda quando ele desbloqueia. Com ele
+**Mac bloqueado.** Quando você bloqueia o Mac, a placa descansa junto: o mascote dorme e anda pela tela com a hora,
+e a placa acorda quando ele desbloqueia. O alerta de aprovação e as sessões que terminaram esperam o desbloqueio. Com ele
 bloqueado, o toque que mudaria algo no Mac (trocar de org, fazer login, atualizar, abrir uma issue do Multica,
 mudar um ajuste que o daemon grava) mostra o mascote dizendo que não; o daemon também recusa essas ações. Trazer
 uma sessão para a frente continua funcionando.
+
+**Contexto por sessão.** Cada cartão de sessão tem uma barra fina no pé com quanto da janela de contexto a sessão
+usa, e o % ao lado do estado quando cabe. Ela fica âmbar a 75% e vermelha a 90%, antes do auto-compact. O tamanho
+da janela vem da statusline de cada modelo: o modelo mostra a barra depois que uma sessão dele escreveu a statusline.
 
 **Deitada.** Em Ajustes → Tela → horizontal, cada tela ganha uma versão deitada: o anel à esquerda, as sessões
 em 3 colunas e o detalhe do modelo com os projetos ao lado.

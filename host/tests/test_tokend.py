@@ -250,3 +250,13 @@ def test_locked_mac_refuses_actions_but_focus(monkeypatch, tmp_path):
     ioreg["out"] = '| {"IOConsoleUsers" = ({"kCGSSessionOnConsoleKey"=Yes})}'
     tokend.run_action("prov codex")
     assert (tmp_path / "prov").read_text() == "codex"
+
+
+def test_context_pct_uses_the_window_the_statusline_reports():
+    tokend._ctx_size.clear()
+    assert tokend.context_pct("s1", ("claude-opus-5-5", 150_000)) == -1  # sem statusline: não chuta 200k
+    tokend._ctx_size["claude-opus-5-5"] = 1_000_000
+    assert tokend.context_pct("s1", ("claude-opus-5-5", 150_000)) == 15
+    tokend._ctx_size["s1"] = 200_000  # a sessão com outra janela vale mais que o modelo
+    assert tokend.context_pct("s1", ("claude-opus-5-5", 150_000)) == 75
+    assert tokend.context_pct("s2", None) == -1

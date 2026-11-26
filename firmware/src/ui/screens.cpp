@@ -562,7 +562,8 @@ void checkAttention() {
   static uint32_t seenFrame = 0;
   static String waiting;  // "id,id," de quem já esperava no frame anterior
   static bool first = true;
-  if (app::lastFrameMs == seenFrame) return;
+  // Mac bloqueado: o pedido espera. Sem atualizar quem já esperava, o que chegou no bloqueio vira alerta ao desbloquear
+  if (app::lastFrameMs == seenFrame || hostlink::macLocked()) return;
   seenFrame = app::lastFrameMs;
   String now;
   int pick = -1, i = 0;
@@ -705,7 +706,7 @@ void render() {
     const float p = min(1.f, (shutHeldMs - 500) / 1500.f);
     return gfx::frame([p] { tall::drawShutdown(p); });
   }
-  if (const int r = attentionRow(); r >= 0 && gfx::full() && !settingsOpen && app::hasData())
+  if (const int r = attentionRow(); r >= 0 && gfx::full() && !settingsOpen && app::hasData() && !hostlink::macLocked())
     return gfx::frame([r] { tall::drawAttention(r, millis() - attnMs); });
   if (gfx::full() && !app::frame["fwup"].isNull()) return updatingMs = 0, gfx::frame(tall::drawFwUp);
   // o daemon avisou que está se atualizando (qualquer placa tocou): o progresso aparece em todas
@@ -731,7 +732,8 @@ void render() {
     updSeen = app::frame["upd"] | "", updLaterMs = millis();
   }
   updAskMs = 0;
-  if (board::PROFILE.oled && power::idle()) return gfx::frame(tall::drawSaver);
+  // as telas LCD só usam o descanso com o Mac bloqueado: sem burn-in, parada elas só escurecem
+  if ((board::PROFILE.oled || (gfx::full() && hostlink::macLocked())) && power::idle()) return gfx::frame(tall::drawSaver);
   const bool dark = settings::v.theme == 0 ? (bool)(app::frame["dark"] | true) : settings::v.theme == 2;
   if (dark != color::dark) color::apply(dark);
   if (!gfx::ready()) return board::setLed(breath(800) > 0.5f ? 40 : 0, 0, 0);  // sem canvas: LED vermelho piscando
