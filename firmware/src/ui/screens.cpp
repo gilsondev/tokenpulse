@@ -127,7 +127,7 @@ void drawInstall() {
 bool askAnswered = false;
 bool askOpen() {
   if (app::frame["pask"].isNull()) return askAnswered = false;
-  return !askAnswered;
+  return !askAnswered && !hostlink::macLocked();
 }
 void answerAsk(const char* mode) {
   char cmd[24];
@@ -522,8 +522,9 @@ bool mcAlertOpen() {
 // Perguntas do primeiro uso depois dos provedores: o Multica (só com ele no Mac) e o login do Claude (só sem
 // ele). Respondida aqui, some na hora; o daemon para de mandar quando a resposta chega.
 bool mcAskDone = false, loginDone = false;
-bool mcAskOpen() { return !app::frame["mask"].isNull() && !mcAskDone; }
-bool loginOpen() { return !app::frame["lask"].isNull() && !loginDone; }
+// com o Mac bloqueado as perguntas esperam: a resposta é uma ação que o daemon recusaria
+bool mcAskOpen() { return !app::frame["mask"].isNull() && !mcAskDone && !hostlink::macLocked(); }
+bool loginOpen() { return !app::frame["lask"].isNull() && !loginDone && !hostlink::macLocked(); }
 
 // Versão nova: a placa pergunta uma vez por versão; "Depois" esconde até a próxima.
 bool onboarding() { return askOpen() || mcAskOpen() || loginOpen(); }
@@ -553,7 +554,7 @@ String updSeen, updTarget;  // updTarget: a versão pedida no "Atualizar agora",
 uint32_t updLaterMs = 0, updatingMs = 0;
 bool updOpen() {
   const char* v = app::frame["upd"] | "";
-  return *v && (updSeen != v || millis() - updLaterMs > 6UL * 3600 * 1000);
+  return *v && !hostlink::macLocked() && (updSeen != v || millis() - updLaterMs > 6UL * 3600 * 1000);
 }
 bool updShown() { return updOpen() && !onboarding(); }
 
@@ -697,6 +698,9 @@ void render() {
     const int left = 20 - (millis() - orientConfirmMs) / 1000;
     return gfx::frame([left] { tall::drawOrient(orientConfirmMs, left); });
   }
+  static bool wasLocked = false;  // a placa descansa junto com o Mac e acorda quando ele desbloqueia
+  if (hostlink::macLocked() != wasLocked) (wasLocked = !wasLocked) ? power::rest() : power::wake();
+  if (gfx::full() && hostlink::refusedMs() && millis() - hostlink::refusedMs() < 3000) return gfx::frame(tall::drawLocked);
   if (shutHeldMs > 500 && gfx::full()) {  // o main desliga a placa aos 2 s
     const float p = min(1.f, (shutHeldMs - 500) / 1500.f);
     return gfx::frame([p] { tall::drawShutdown(p); });

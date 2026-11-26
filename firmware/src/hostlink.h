@@ -14,6 +14,8 @@
 namespace hostlink {
 
 void action(const char* line);  // pede uma ação ao Mac (ACTION ...): pela serial, pelo BLE e pelo WiFi
+bool macLocked();     // a tela do Mac está bloqueada (o daemon manda "lock")
+uint32_t refusedMs();  // quando uma ação foi recusada por o Mac estar bloqueado (0: nunca)
 bool ingest(const String& line);  // um frame do daemon, venha da serial, do BLE ou do WiFi; false se não é JSON válido
 
 void begin();

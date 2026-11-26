@@ -34,7 +34,13 @@ fazendo e quanto esse uso custaria pela API. Tudo ao vivo, pela USB, sem Wi-Fi.
 <p align="center"><img src="docs/screenshots/10-esgotado.png" alt="Janela de 5 h esgotada, com o botão para trocar de org" width="32%"></p>
 
 Quando a janela de 5 h esgota e há outra org salva no claude-swap, a tela principal sugere a troca para a de
-menor uso.
+menor uso. A troca de org só aparece com o claude-swap instalado; sem ele, a placa mostra a conta em que o
+Claude Code está logado.
+
+**Mac bloqueado.** Quando você bloqueia o Mac, a placa descansa junto e acorda quando ele desbloqueia. Com ele
+bloqueado, o toque que mudaria algo no Mac (trocar de org, fazer login, atualizar, abrir uma issue do Multica,
+mudar um ajuste que o daemon grava) mostra o mascote dizendo que não; o daemon também recusa essas ações. Trazer
+uma sessão para a frente continua funcionando.
 
 **Deitada.** Em Ajustes → Tela → horizontal, cada tela ganha uma versão deitada: o anel à esquerda, as sessões
 em 3 colunas e o detalhe do modelo com os projetos ao lado.

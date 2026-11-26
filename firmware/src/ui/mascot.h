@@ -9,6 +9,10 @@ enum Mood : uint8_t { WORK, TURN, IDLE, BLOCK, OFFLINE };  // BLOCK: esperando v
 
 constexpr int W = 12;  // em pixels do sprite; na tela cada um vira um bloco de `px` × `px`
 constexpr int W_OFFLINE = 23;  // com o cabo e a tomada ao lado
+constexpr int W_NOPE = 18, H_NOPE = 15;  // com o cadeado em cima, à direita
+
+// "Não" com o computador bloqueado: o corpo parado, o rosto vira para os lados uma vez a partir de `sinceMs`
+void drawNope(int x, int y, int px, uint16_t bg, uint32_t sinceMs);
 
 // (x, y): canto superior esquerdo; `seed` desencontra a animação de mascotes vizinhos. codex: o bichinho verde
 // com o rosto ">_" das sessões do Codex, no lugar do laranja do Claude

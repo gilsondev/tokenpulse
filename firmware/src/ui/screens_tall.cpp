@@ -2494,6 +2494,15 @@ void drawMcAsk() {
 }
 int mcAskTap(int x, int y) { return choiceTap(x, y, 2); }
 
+void drawLocked() {
+  gfx::clear();
+  const int cx = W() / 2, px = u(6), cy = gfx::height() / 2;
+  mascot::drawNope(cx - mascot::W_NOPE * px / 2, cy - u(36) - mascot::H_NOPE * px, px, BG, hostlink::refusedMs());
+  text("Desbloqueie o computador", cx, cy, gfx::TITLE, TEXT, middle_center);
+  text(fit("Com ele bloqueado, a placa não muda nada nele", gfx::LABEL, W() - 2 * M()).c_str(), cx,
+       cy + below(gfx::TITLE, 32), gfx::LABEL, MUTED, middle_center);
+}
+
 void drawLoginAsk() {
   gfx::clear();
   const int cx = W() / 2, bw = W() - 2 * M(), bh = max(u(56), TAP());

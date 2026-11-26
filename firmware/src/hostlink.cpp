@@ -209,7 +209,19 @@ bool ingest(const String& line) {
   return true;
 }
 
+uint32_t refused = 0;
+bool macLocked() { return (int)(app::frame["lock"] | 0); }
+uint32_t refusedMs() { return refused; }
+
 void action(const char* line) {
+  // o mesmo que o daemon recusa com o Mac bloqueado: a placa avisa em vez de mandar
+  static const char* const LOCKED[] = {"switch", "login", "update", "mcopen", "prov", "mc", "mcws", "lskip", "wifi"};
+  if (macLocked() && !strncmp(line, "ACTION ", 7)) {
+    const char* verb = line + 7;
+    const size_t n = strcspn(verb, " ");
+    for (const char* v : LOCKED)
+      if (strlen(v) == n && !strncmp(verb, v, n)) return void(refused = millis() | 1);
+  }
   Serial.println(line);
   String l = String(line) + "\n";
   ble::send(l.c_str());

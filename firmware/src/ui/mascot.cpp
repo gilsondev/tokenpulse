@@ -73,4 +73,25 @@ void draw(int x, int y, int px, Mood mood, uint16_t bg, uint32_t seed, bool code
   if (mood == BLOCK) gfx::text("?", x + W * px + px / 2, y - px, gfx::TITLE, color::RED, top_left, bg);
 }
 
+void drawNope(int x, int y, int px, uint16_t bg, uint32_t sinceMs) {
+  // num sprite de 12 px mover o corpo parece falha de tela: quem vira é o rosto (olhos e boca deslizam 1 px)
+  static const int8_t SHAKE[] = {-1, 1, -1, 1};  // 120 ms cada, uma vez por toque
+  const uint32_t k = (millis() - sinceMs) / 120;
+  const int s = k < sizeof SHAKE ? SHAKE[k] : 0;
+  auto& fb = gfx::fb();
+  const int by = y + 7 * px;
+  for (int r = 0; r < 8; r++) {
+    const char* row = r < 7 ? BODY_ROWS[r] : LEGS[0];
+    for (int c = 0; c < W; c++)
+      if (row[c] != '.') fb.fillRect(x + c * px, by + r * px, px, px, BODY);
+  }
+  for (int c : {2, 8}) fb.fillRect(x + (c + s) * px, by + 3 * px, 2 * px, 2 * px, EYE);
+  fb.fillRect(x + (5 + s) * px, by + 5 * px, 2 * px, px, EYE);  // boca séria
+  // o cadeado diz o porquê do "não"
+  static const char* const PAD[] = {"..ooo..", ".o...o.", ".o...o.", "ooooooo", "ooo.ooo", "ooo.ooo", "ooooooo"};
+  for (int r = 0; r < 7; r++)
+    for (int c = 0; c < 7; c++)
+      if (PAD[r][c] == 'o') fb.fillRect(x + (11 + c) * px, y + r * px, px, px, color::AMBER);
+}
+
 }  // namespace mascot

@@ -923,11 +923,26 @@ def focus_session(sid8):
         subprocess.run(["open", "-a", "Claude"], capture_output=True, timeout=5)
 
 
+# Com o Mac bloqueado, ninguém na mesa muda a conta, abre o navegador ou grava ajuste pela placa.
+LOCKED_ACTIONS = {"switch", "login", "update", "mcopen", "prov", "mc", "mcws", "lskip", "wifi"}
+
+
+def locked():
+    """A tela do Mac está bloqueada: o macOS só publica a chave no ioreg enquanto bloqueia (~10 ms)."""
+    try:
+        out = subprocess.run(["ioreg", "-n", "Root", "-d1"], capture_output=True, text=True, timeout=2).stdout
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return '"CGSSessionScreenIsLocked"=Yes' in out
+
+
 def run_action(cmd):
     """Ação pedida pela placa: "switch N" troca para a conta N do cswap; "login" entra numa org nova.
     Conta com login válido troca na hora; sem ele, abre o login do Claude Code no navegador e, quando
     ele terminar, registra a conta no cswap."""
     parts = cmd.split()
+    if parts and parts[0] in LOCKED_ACTIONS and locked():
+        return log(f"ação recusada com o Mac bloqueado: {parts[0]}")
     if len(parts) == 2 and parts[0] == "focus" and re.fullmatch(r"[0-9a-f-]{8}", parts[1]):
         return focus_session(parts[1])  # trazer à frente não troca nada: sem confirmação nem estado
     if len(parts) == 2 and parts[0] == "prov" and parts[1] in PROVIDER_MODES:  # o ajuste Provedores, da placa
@@ -2342,7 +2357,7 @@ def serve(board, frame):
         *lines, board.buf = board.buf.split(b"\n")  # só linhas completas: "ACTION switch 12" não vira "1"
         for raw in lines:
             line = raw.decode(errors="replace").strip()
-            if line == "ACTION wifi" and "wifi" in board.caps:  # a placa sem rede pediu o WiFi deste computador
+            if line == "ACTION wifi" and "wifi" in board.caps and not locked():  # a placa sem rede pediu o WiFi deste computador
                 threading.Thread(target=wifi_setup, args=(board,), daemon=True).start()
             board_action(line)
             if line:
@@ -2598,7 +2613,8 @@ def main():
             # a escolha explícita em Provedores vale mesmo sem uso recente: não muda a placa sozinha depois de 7 dias
             cx = codex.snapshot(chosen=provider_mode() in ("codex", "both"))
             frame = (usage.snapshot() | limits() | account_frame() | ({"st": _claude["st"]} if _claude["st"] else {})
-                     | {"clk": datetime.now().strftime("%H:%M"), "t": local_time(), "dark": dark_mode(), "agv": AGENT})
+                     | {"clk": datetime.now().strftime("%H:%M"), "t": local_time(), "dark": dark_mode(), "agv": AGENT}
+                     | ({"lock": 1} if locked() else {}))
             if cx or os.path.exists(PROVIDERS):  # depois de escolhido, o ajuste continua nos ajustes da placa
                 frame = with_codex(frame, cx, usage.events, codex, usage.recent)
             frame |= multica_frame() | update_frame() | login_frame()

@@ -236,3 +236,17 @@ def test_no_account_switch_without_cswap(monkeypatch, tmp_path):
     (tmp_path / "cswap").touch()
     monkeypatch.setattr(tokend, "accounts_frame", lambda: [])
     assert tokend.account_frame()["accts"] == []
+
+
+def test_locked_mac_refuses_actions_but_focus(monkeypatch, tmp_path):
+    ioreg = {"out": '| {"IOConsoleUsers" = ({"CGSSessionScreenIsLocked"=Yes,"kCGSSessionOnConsoleKey"=Yes})}'}
+    monkeypatch.setattr(tokend.subprocess, "run", lambda *a, **k: type("R", (), {"stdout": ioreg["out"]})())
+    monkeypatch.setattr(tokend, "PROVIDERS", str(tmp_path / "prov"))
+    focused = []
+    monkeypatch.setattr(tokend, "focus_session", focused.append)
+    tokend.run_action("prov codex")
+    tokend.run_action("focus 1a2b3c4d")
+    assert not (tmp_path / "prov").exists() and focused == ["1a2b3c4d"]
+    ioreg["out"] = '| {"IOConsoleUsers" = ({"kCGSSessionOnConsoleKey"=Yes})}'
+    tokend.run_action("prov codex")
+    assert (tmp_path / "prov").read_text() == "codex"

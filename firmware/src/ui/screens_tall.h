@@ -29,6 +29,7 @@ int mcListTap(int x, int y);   // nas issues do projeto: a issue (índice em mc.
 void drawMcAlert(uint32_t ageMs);
 void drawMcAsk();                // primeiro uso com o Multica no Mac ("mask"): mostrar ou não
 int mcAskTap(int x, int y);      // 1 mostrar, 2 agora não, 0 nada
+void drawLocked();               // ação recusada com o Mac bloqueado: o mascote diz que não
 void drawLoginAsk();             // o Claude Code sem login ("lask"): como logar, ou pular
 bool loginSkipAt(int x, int y);  // o toque caiu em "Pular"
 void drawFwUp();                 // o daemon vai gravar o firmware novo ("fwup"): a versão e os segundos que faltam
