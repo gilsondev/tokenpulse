@@ -435,7 +435,7 @@ void drawOrgs() {
 
 // Sem toque nem botão, as telas passam sozinhas a cada config::v.interval s. Tela sem conteúdo
 // (nenhum projeto na última hora) fica de fora da volta.
-enum Page : uint8_t { MAIN, SESSIONS, MODELS, MODEL, PROJECTS, HISTORY, ORGS, ASK, MULTI, MCALERT };
+enum Page : uint8_t { MAIN, SESSIONS, MODELS, MODEL, PROJECTS, HISTORY, ORGS, ASK, MULTI, MCALERT, LOCKED };
 struct Slot {
   Page page;
   uint8_t sub;  // qual modelo, no detalhe
@@ -470,6 +470,8 @@ Slot pageNow() {
   int at = -1;
   for (int i = 0; i < n; i++)
     if (list[i].page == cur.page && list[i].sub == cur.sub) at = i;
+  // Mac bloqueado: o mascote dorme e nada mais aparece, nem os alertas, até desbloquear
+  if ((int)(f["lock"] | 0)) return sinceMs = millis(), cur = {LOCKED, 0};
   // alertas passam na frente da volta: sessão pedindo aprovação segura a tela de sessões enquanto durar,
   // e cruzar 70/80/90% segura a principal por 2 min
   if ((config::v.alerts & 1) && ui.blocks > 0) return sinceMs = millis(), cur = {SESSIONS, 0};
@@ -506,7 +508,29 @@ void drawAsk() {
   text(until, W / 2, 204, LABEL, DIM, top_center);
 }
 
+// Mac bloqueado: o mascote dormindo com a hora, andando devagar e rebatendo nas bordas (a tela redesenha a cada 1 s)
+void drawLocked() {
+  static const char* const ROWS[] = {"..oooooooo..", ".oooooooooo.", "oooooooooooo", "oooooooooooo",
+                                     "ooeeooooeeoo", "oooooooooooo", ".oooooooooo.", ".o.o....o.o."};
+  constexpr int PX = 5, MW = 12 * PX, BW = 150, BH = 8 * PX + 12 + 30 + 4 + 18;
+  const uint32_t d = millis() / 160;  // ~6 px/s
+  auto bounce = [d](int span) {
+    const int p = d % (2u * span);
+    return p < span ? p : 2 * span - p;
+  };
+  const int x = bounce(W - BW), y = bounce(H - BH), mx = x + (BW - MW) / 2;
+  band.fillScreen(0);
+  const uint16_t body = blend(0xDBAA, 0, 0.55f);
+  for (int r = 0; r < 8; r++)
+    for (int c = 0; c < 12; c++)
+      if (ROWS[r][c] != '.') band.fillRect(mx + c * PX, y + r * PX - oy, PX, PX, ROWS[r][c] == 'e' ? 0x18E3 : body);
+  text("z", mx + MW, y - 6 - (int)(d % 6), LABEL, DIM, top_left, 0);
+  text(app::frame["clk"] | "", x + BW / 2, y + 8 * PX + 12, NUM, TEXT, top_center, 0);
+  text("Computador bloqueado", x + BW / 2, y + 8 * PX + 46, LABEL, MUTED, top_center, 0);
+}
+
 void draw(Slot slot) {
+  if (slot.page == LOCKED) return drawLocked();
   if (slot.page == ASK) return drawAsk();
   if (slot.page == MULTI) return drawMulti();
   if (slot.page == MCALERT) return drawMcAlert();

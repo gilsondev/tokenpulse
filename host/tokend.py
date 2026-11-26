@@ -2391,7 +2391,7 @@ def serve(board, frame):
 # Placas pelo WiFi (o SmallTV-Ultra, que só tem USB de energia). Elas se anunciam por mDNS como
 # _tokenpulse._tcp e recebem um frame enxuto por HTTP, com só o que a tela principal delas mostra.
 NET_KEYS = ("p5", "r5", "pw", "rw", "tot", "rate", "sp", "m", "org", "clk", "dark", "age", "mods", "projs", "hist", "accts", "cx",
-            "prov", "cxok", "st", "pask", "cxo", "mc", "mcs", "mca", "upd", "mask", "lask")
+            "prov", "cxok", "st", "pask", "cxo", "mc", "mcs", "mca", "upd", "mask", "lask", "lock")
 # o codinome de cada placa (uma árvore que lembra ela), o mesmo do firmware; nos logs no lugar do modelo
 NICKS = {"smalltv-ultra": "Caixeta", "waveshare-amoled-216": "Jabuticaba", "guition-jc3248w535": "Sumaúma",
          "cyd-2432s028r": "Ipê", "waveshare-s3-lcd-147b": "Açaí"}

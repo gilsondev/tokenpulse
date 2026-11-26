@@ -733,7 +733,7 @@ void render() {
   }
   updAskMs = 0;
   // as telas LCD só usam o descanso com o Mac bloqueado: sem burn-in, parada elas só escurecem
-  if ((board::PROFILE.oled || (gfx::full() && hostlink::macLocked())) && power::idle()) return gfx::frame(tall::drawSaver);
+  if ((board::PROFILE.oled || hostlink::macLocked()) && power::idle()) return gfx::frame(tall::drawSaver);
   const bool dark = settings::v.theme == 0 ? (bool)(app::frame["dark"] | true) : settings::v.theme == 2;
   if (dark != color::dark) color::apply(dark);
   if (!gfx::ready()) return board::setLed(breath(800) > 0.5f ? 40 : 0, 0, 0);  // sem canvas: LED vermelho piscando

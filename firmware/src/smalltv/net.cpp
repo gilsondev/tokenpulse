@@ -86,6 +86,10 @@ void handleState() {
 // Campos ausentes ficam como estão; fora da faixa, são cortados para a faixa.
 void handleConfig() {
   if (locked()) return;
+  // o daemon recusa com o Mac bloqueado: a página diz por quê em vez de "Salvo"
+  if ((int)(app::frame["lock"] | 0))
+    for (const char* k : {"prov", "update", "lskip", "mc", "mcws"})
+      if (server.hasArg(k)) return server.send(423, "text/plain", "O computador está bloqueado: desbloqueie para mudar isso.");
   auto& v = config::v;
   auto num = [](const char* k, int lo, int hi, uint8_t& field) {
     if (server.hasArg(k)) field = constrain(server.arg(k).toInt(), lo, hi);
