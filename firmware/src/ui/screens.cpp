@@ -745,8 +745,10 @@ void render() {
   }
   updAskMs = 0;
   if (gfx::full() && updCheckMs) {
-    if (*(const char*)(app::frame["upd"] | "")) updSeen = "", updLaterMs = 0, settingsOpen = false, about = 0, updCheckMs = 0;
-    else if (const int st = updCheckState(); updCheckMs) return gfx::frame([st] { tall::drawUpdCheck(st); });
+    // a oferta só depois da busca: o "upd" de antes dela pode ser de uma versão que já não é a última
+    const int st = updCheckState();
+    if (st == 2 && *(const char*)(app::frame["upd"] | "")) updSeen = "", updLaterMs = 0, settingsOpen = false, about = 0, updCheckMs = 0;
+    else if (updCheckMs) return gfx::frame([st] { tall::drawUpdCheck(st); });
   }
   // as telas LCD só usam o descanso com o Mac bloqueado: sem burn-in, parada elas só escurecem
   if ((board::PROFILE.oled || hostlink::macLocked()) && power::idle()) return gfx::frame(tall::drawSaver);
@@ -898,8 +900,8 @@ void tap(int x, int y) {
         }
         return void(about = 4);
       }
-      if (b == 4) {  // procurar atualização: com versão nova já conhecida, a oferta aparece direto
-        if (!*(const char*)(app::frame["upd"] | "")) hostlink::action("ACTION updcheck");
+      if (b == 4) {  // procurar atualização: sempre pergunta ao GitHub de novo, mesmo com versão nova já conhecida
+        hostlink::action("ACTION updcheck");
         updCheckMs = millis() | 1, updResultMs = 0;
         return;
       }
