@@ -29,7 +29,7 @@ fazendo e quanto esse uso custaria pela API. Tudo ao vivo, pela USB, sem Wi-Fi.
 | ![Modelos](docs/screenshots/04-modelos.png) | ![Detalhe do modelo](docs/screenshots/05-modelo.png) | ![Histórico](docs/screenshots/06-historico.png) |
 | **Modelos** usados hoje e a fatia de cada um. | **Detalhe do modelo**: entrada, saída e cache, custo equivalente na API e os projetos que mais usaram. | **Histórico** de 14 dias; toque numa barra para ver o dia. |
 | ![Ajustes](docs/screenshots/07-ajustes.png) | ![Trocar de org](docs/screenshots/08-org.png) | ![Sobre](docs/screenshots/09-sobre.png) |
-| **Ajustes** pela engrenagem, numa lista de grupos como no celular: Tela (brilho, escurecer, tema, posição, custo), Som e Descanso nas placas que têm, Conta e Sobre. | **Trocar de org** pelo nome no topo, com o último % de cada uma. Usa o [claude-swap](https://github.com/realiti4/claude-swap) e pede dois toques, porque troca o login de todas as sessões do Mac. | **Sobre**: placa, firmware, memória, conexão, reiniciar e o endereço da página web (toque para abrir o QR). |
+| **Ajustes** pela engrenagem, numa lista de grupos como no celular: Tela (brilho, escurecer, tema, posição, custo), Som e Descanso nas placas que têm, Conta e Sobre. | **Trocar de org** pelo nome no topo, com o último % de cada uma. Usa o [claude-swap](https://github.com/realiti4/claude-swap) e pede dois toques, porque troca o login de todas as sessões do Mac. | **Sobre**: placa, firmware, memória, conexão, procurar atualização (sem esperar a checagem de 6 h), reiniciar e o endereço da página web (toque para abrir o QR). |
 
 <p align="center"><img src="docs/screenshots/10-esgotado.png" alt="Janela de 5 h esgotada, com o botão para trocar de org" width="32%"></p>
 

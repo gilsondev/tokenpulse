@@ -558,6 +558,18 @@ bool updOpen() {
 }
 bool updShown() { return updOpen() && !onboarding(); }
 
+// Sobre → Procurar atualização: o diálogo até a resposta do daemon. Versão nova fecha o diálogo e os ajustes e
+// mostra a oferta de sempre; sem resposta, avisa e some sozinho em 8 s.
+uint32_t updCheckMs = 0, updResultMs = 0;
+int updCheckState() {
+  const int ck = millis() - updCheckMs < 1500 ? 0 : app::frame["updck"] | 0;  // o "updck" de uma busca anterior não vale
+  const int st = ck >= 2 ? ck : ck == 1 || millis() - updCheckMs < 10000 ? 1 : 4;
+  if (st == 1) return updResultMs = 0, 1;
+  if (!updResultMs) updResultMs = millis();
+  if (millis() - updResultMs > 8000) updCheckMs = 0;
+  return st;
+}
+
 void checkAttention() {
   static uint32_t seenFrame = 0;
   static String waiting;  // "id,id," de quem já esperava no frame anterior
@@ -732,6 +744,10 @@ void render() {
     updSeen = app::frame["upd"] | "", updLaterMs = millis();
   }
   updAskMs = 0;
+  if (gfx::full() && updCheckMs) {
+    if (*(const char*)(app::frame["upd"] | "")) updSeen = "", updLaterMs = 0, settingsOpen = false, about = 0, updCheckMs = 0;
+    else if (const int st = updCheckState(); updCheckMs) return gfx::frame([st] { tall::drawUpdCheck(st); });
+  }
   // as telas LCD só usam o descanso com o Mac bloqueado: sem burn-in, parada elas só escurecem
   if ((board::PROFILE.oled || hostlink::macLocked()) && power::idle()) return gfx::frame(tall::drawSaver);
   const bool dark = settings::v.theme == 0 ? (bool)(app::frame["dark"] | true) : settings::v.theme == 2;
@@ -819,6 +835,7 @@ void tap(int x, int y) {
     return dismissAttention();
   }
   if (gfx::full() && !app::frame["fwup"].isNull()) return void(hostlink::action("ACTION fwlater"));
+  if (gfx::full() && updCheckMs) return void(updCheckMs = 0);  // o diálogo da busca: qualquer toque fecha
   if (gfx::full() && updShown() && app::hasData()) {
     const int b = tall::updateTap(x, y);
     if (b == 1) hostlink::action("ACTION update"), updatingMs = millis(), updTarget = app::frame["upd"] | "";
@@ -880,6 +897,11 @@ void tap(int x, int y) {
           hostlink::action("ACTION wifi");  // o daemon pede a senha do WiFi do computador e manda pelo cabo
         }
         return void(about = 4);
+      }
+      if (b == 4) {  // procurar atualização: com versão nova já conhecida, a oferta aparece direto
+        if (!*(const char*)(app::frame["upd"] | "")) hostlink::action("ACTION updcheck");
+        updCheckMs = millis() | 1, updResultMs = 0;
+        return;
       }
       if (b == 0) return void(about = 0);
       if (b == 2) {  // calibrar o toque: some o Sobre e volta para os ajustes

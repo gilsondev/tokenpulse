@@ -31,7 +31,7 @@ what that usage would cost through the API. All live, over USB, no Wi-Fi.
 | ![Models](docs/screenshots/04-modelos.png) | ![Model detail](docs/screenshots/05-modelo.png) | ![History](docs/screenshots/06-historico.png) |
 | **Models** used today and each one's share. | **Model detail**: input, output and cache, equivalent API cost and the projects that used it most. | **History** of 14 days; tap a bar to see the day. |
 | ![Settings](docs/screenshots/07-ajustes.png) | ![Switch org](docs/screenshots/08-org.png) | ![About](docs/screenshots/09-sobre.png) |
-| **Settings** from the gear, as a list of groups like on a phone: Display (brightness, dimming, theme, orientation, cost), Sound and Screensaver on boards that have them, Account and About. | **Switch org** from the name at the top, with each org's last %. It uses [claude-swap](https://github.com/realiti4/claude-swap) and asks for two taps, because it switches the login of every session on the Mac. | **About**: board, firmware, memory, connection, restart and the web page address (tap to open the QR). |
+| **Settings** from the gear, as a list of groups like on a phone: Display (brightness, dimming, theme, orientation, cost), Sound and Screensaver on boards that have them, Account and About. | **Switch org** from the name at the top, with each org's last %. It uses [claude-swap](https://github.com/realiti4/claude-swap) and asks for two taps, because it switches the login of every session on the Mac. | **About**: board, firmware, memory, connection, check for updates (without waiting for the 6-hour check), restart and the web page address (tap to open the QR). |
 
 <p align="center"><img src="docs/screenshots/10-esgotado.png" alt="5-hour window used up, with the button to switch org" width="32%"></p>
 

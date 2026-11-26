@@ -56,7 +56,7 @@ SHOT_DIR = os.path.join(HOME, ".claude/esp-tokens-shot")  # o shot.sh grava <pla
 OTA_CONFIRM = 25  # s: o firmware marca a imagem nova como boa aos 20 s (main.cpp)
 OTA_DIR = os.path.join(HOME, ".claude/esp-tokens-ota")  # o flash.sh grava <placa> com o caminho do .bin
 # o que uma placa pede pelo WiFi, sempre provando ter o token que ela nos deu (o WiFi do computador é só no cabo)
-NET_ACTIONS = {"prov", "mc", "mcws", "mcopen", "mcproj", "lskip", "update", "fwlater", "focus", "switch", "login"}
+NET_ACTIONS = {"prov", "mc", "mcws", "mcopen", "mcproj", "lskip", "update", "updcheck", "fwlater", "focus", "switch", "login"}
 KEYS = os.path.join(HOME, ".claude/esp-tokens-keys.json")  # o token de cada placa de WiFi, entregue no /hello; só este usuário lê
 BOARDS = os.path.join(HOME, ".claude/esp-tokens-boards.json")  # placas conectadas e o firmware de cada uma (update.sh)
 # Placas com Bluetooth que já estiveram na USB deste Mac: o daemon só conecta sem fio a elas, nunca à de um colega
@@ -964,6 +964,9 @@ def run_action(cmd):
         return _wake.set()
     if parts == ["update"]:
         return run_update()
+    if parts == ["updcheck"]:  # só lê o GitHub: vale com o Mac bloqueado
+        _rel["asked"] = time.time()
+        return _rel_check.set()
     if parts == ["fwlater"]:  # a pessoa adiou a gravação na placa: uma hora sem perguntar
         for state in _fw.values():
             state.update(later=time.time() + 3600)
@@ -1959,6 +1962,7 @@ FW_CACHE = os.path.join(HOME, ".cache/tokenpulse")
 RELEASE_EVERY = 6 * 3600
 FW_WARN = 5  # s de aviso antes de gravar
 _rel = {"latest": ""}
+_rel_check = threading.Event()  # a placa pediu "procurar agora" (Sobre → Firmware)
 _fw = {}  # placa -> {"start": quando grava, "later": adiado até}
 
 
@@ -1981,9 +1985,14 @@ def release_loop():
                 tag = r.geturl().rstrip("/").rsplit("/", 1)[-1]
             if vtuple(tag):
                 _rel["latest"] = tag
+            _rel["ok"] = True
         except Exception as e:  # sem rede: tenta na próxima volta
             log(f"release: {type(e).__name__}")
-        time.sleep(RELEASE_EVERY)
+            _rel["ok"] = False
+        _rel["checked"] = time.time()
+        _wake.set()
+        _rel_check.wait(RELEASE_EVERY)
+        _rel_check.clear()
 
 
 ONBOARD = os.path.join(HOME, ".claude/esp-tokens-onboard.json")  # perguntas do primeiro uso que a pessoa pulou
@@ -2015,7 +2024,10 @@ def update_frame():
     mine = vtuple(RELEASE)
     if _rel.get("updating"):  # o install.sh já está rodando: todas as placas mostram o progresso, não só a tocada
         return {"updg": _rel["updating"]}
-    return {"upd": latest} if mine and vtuple(latest) and vtuple(latest) > mine else {}
+    out = {"upd": latest} if mine and vtuple(latest) and vtuple(latest) > mine else {}
+    if time.time() - _rel.get("asked", 0) < 60:  # a busca pedida pela placa: 1 procurando, 2 achou a última, 3 falhou
+        out["updck"] = 1 if _rel.get("checked", 0) < _rel["asked"] else 2 if _rel.get("ok") else 3
+    return out
 
 
 def run_update():

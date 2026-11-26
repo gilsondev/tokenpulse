@@ -68,7 +68,8 @@ int historyBarAt(int x, int y);  // dia do histórico sob o toque, ou -1
 int settingsTap(int x, int y);   // 0 trocou um ajuste, 1 abriu o Sobre, 2 abriu a Conta, -1 nada
 bool accountTap(int x, int y);   // pediu uma troca de conta ao Mac; false: fechar o painel
 bool switchFinished();           // a troca pedida pela placa terminou bem: hora de voltar para a home
-int aboutButtonAt(int x, int y); // sob o toque: 1 reiniciar, 2 calibrar o toque, 3 página web, 0 nenhum
+int aboutButtonAt(int x, int y); // sob o toque: 1 reiniciar, 2 calibrar o toque, 3 página web, 4 procurar atualização, 0 nenhum
+void drawUpdCheck(int state);    // resposta do "procurar atualização": 1 procurando, 2 é a última, 3 GitHub, 4 computador
 bool gearAt(int x, int y);       // o toque caiu na engrenagem do cabeçalho
 bool orgTitleAt(int x, int y);   // o toque caiu no nome da org (tela principal)
 bool suggestionAt(int x, int y); // o toque caiu no botão "esgotado · trocar para…" (tela principal)

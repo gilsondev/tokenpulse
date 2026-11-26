@@ -1914,7 +1914,8 @@ int aboutRows() { return aboutItems(); }  // uma coluna, que rola: em duas os va
 int RESTART_Y() { return L() ? max(u(232), SET_Y() + u(4) + aboutRows() * aboutStep() + u(6)) : max(u(384), SET_Y() + u(4) + aboutRows() * aboutStep() + u(6)); }
 // Rolagem em linhas inteiras: o item de cima sempre começa logo abaixo do cabeçalho
 int aboutOff = 0;
-int aboutMaxOff() { return max(0, (RESTART_Y() + ABOUT_BTN_H() + u(12) - gfx::height() + aboutStep() - 1) / aboutStep()); }
+int BTN2_Y() { return RESTART_Y() + ABOUT_BTN_H() + u(10); }  // reiniciar, embaixo do "procurar atualização"
+int aboutMaxOff() { return max(0, (BTN2_Y() + ABOUT_BTN_H() + u(12) - gfx::height() + aboutStep() - 1) / aboutStep()); }
 void aboutTop() { aboutOff = 0; }
 bool aboutScroll(int dir) {
   const int to = constrain(aboutOff + dir * 3, 0, aboutMaxOff());
@@ -2004,8 +2005,12 @@ void drawAbout(bool live, bool armed) {
   }
   // touch resistivo: calibrar o toque divide a linha com o reiniciar
   const bool cal = board::PROFILE.calibrate;
-  const int bw = cal ? (W() - 2 * M() - u(8)) / 2 : W() - 2 * M(), rx = W() - M() - bw, by = RESTART_Y() - off * step, bh = ABOUT_BTN_H();
+  const int bw = cal ? (W() - 2 * M() - u(8)) / 2 : W() - 2 * M(), rx = W() - M() - bw, by = BTN2_Y() - off * step, bh = ABOUT_BTN_H();
   const uint16_t c = armed ? RED : blend(BG, TRACK, 0.7f);
+  const int cy0 = RESTART_Y() - off * step, cw0 = W() - 2 * M();
+  fb().fillSmoothRoundRect(M(), cy0, cw0, bh, u(12), blend(BG, TRACK, 0.7f));
+  text("Procurar atualização", M() + cw0 / 2, cy0 + bh / 2, fontFor(bh) == gfx::SMALL ? gfx::LABEL : fontFor(bh), TEXT, middle_center,
+       blend(BG, TRACK, 0.7f));
   if (cal) {
     const uint16_t cb = blend(BG, TRACK, 0.7f);
     fb().fillSmoothRoundRect(M(), by, bw, bh, u(12), cb);
@@ -2025,7 +2030,8 @@ int aboutButtonAt(int x, int y) {
   const int cols = 1, colW = W() - 2 * M(), k = aboutWebItem();
   const int ix = M() + (k / aboutRows()) * (colW + u(16)), iy = SET_Y() + u(4) + k % aboutRows() * aboutStep();
   if (x >= ix && x < ix + colW && y >= iy - u(4) && y < iy + aboutStep()) return 3;
-  if (y < RESTART_Y() || y >= RESTART_Y() + ABOUT_BTN_H()) return 0;
+  if (y >= RESTART_Y() && y < RESTART_Y() + ABOUT_BTN_H()) return 4;
+  if (y < BTN2_Y() || y >= BTN2_Y() + ABOUT_BTN_H()) return 0;
   return board::PROFILE.calibrate && x < W() / 2 ? 2 : 1;
 }
 bool gearAt(int x, int y) { return x >= W() - max(u(64), TAPPX()) && y < max(u(52), TAPPX() * 2 / 3); }
@@ -2602,6 +2608,28 @@ void drawUpdate(int secsLeft) {
     text(labels[k], cx, updBtnY(k) + bh / 2, fontFor(bh) == gfx::SMALL ? gfx::LABEL : fontFor(bh), k ? TEXT : BG, middle_center, c);
   }
 }
+// A busca pedida em Sobre → Procurar atualização: 1 procurando, 2 já é a última, 3 o GitHub não respondeu,
+// 4 o computador não respondeu. Versão nova não passa por aqui: vira a oferta de sempre.
+void drawUpdCheck(int state) {
+  gfx::clear();
+  const int cx = W() / 2, bh = max(u(52), TAP()), bw = W() - 2 * M();
+  static const char* const TITLE[] = {"", "Procurando atualização", "Você está na última versão", "Não deu para procurar",
+                                      "Sem resposta do computador"};
+  text(fit(TITLE[state], gfx::TITLE, bw).c_str(), cx, u(40), gfx::TITLE, TEXT, middle_center);
+  const char* agv = app::frame["agv"] | hostlink::firmware();
+  String sub = state == 1 ? String("Perguntando ao GitHub…") : state == 2 ? String(agv)
+             : state == 3 ? String("O GitHub não respondeu. Tente de novo daqui a pouco.")
+                          : String("O tokenpulse no computador não respondeu.");
+  String l2, l1 = wrap2(sub.c_str(), gfx::LABEL, bw, l2);
+  const int ty = u(40) + below(gfx::TITLE, 34);
+  text(l1.c_str(), cx, ty, gfx::LABEL, state == 2 ? ACCENT : MUTED, middle_center);
+  if (l2.length()) text(fit(l2.c_str(), gfx::LABEL, bw).c_str(), cx, ty + below(gfx::LABEL, 24), gfx::LABEL, MUTED, middle_center);
+  if (state == 1) return;
+  const uint16_t c = blend(BG, TRACK, 0.7f);
+  fb().fillSmoothRoundRect(M(), updBtnY(1), bw, bh, min(bh / 2, u(26)), c);
+  text("OK", cx, updBtnY(1) + bh / 2, fontFor(bh) == gfx::SMALL ? gfx::LABEL : fontFor(bh), TEXT, middle_center, c);
+}
+
 // O código que libera a página web no navegador: grande, com o tempo que falta. Some sozinho depois de usado.
 void drawPairCode(int code, int secs) {
   gfx::clear();

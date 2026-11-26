@@ -260,3 +260,16 @@ def test_context_pct_uses_the_window_the_statusline_reports():
     tokend._ctx_size["s1"] = 200_000  # a sessão com outra janela vale mais que o modelo
     assert tokend.context_pct("s1", ("claude-opus-5-5", 150_000)) == 75
     assert tokend.context_pct("s2", None) == -1
+
+
+def test_update_check_reports_progress_to_the_board(monkeypatch):
+    monkeypatch.setattr(tokend, "RELEASE", "v0.29.0")
+    monkeypatch.setattr(tokend, "_rel", {"latest": "v0.29.0"})
+    assert "updck" not in tokend.update_frame()
+    tokend.run_action("updcheck")
+    assert tokend.update_frame() == {"updck": 1} and tokend._rel_check.is_set()
+    tokend._rel.update(checked=time.time() + 1, ok=True, latest="v0.30.0")
+    assert tokend.update_frame() == {"upd": "v0.30.0", "updck": 2}
+    tokend._rel.update(ok=False)
+    assert tokend.update_frame()["updck"] == 3
+    tokend._rel_check.clear()
