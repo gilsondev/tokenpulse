@@ -13,6 +13,7 @@
 #include "ui/anim.h"
 #include "ui/gfx.h"
 #include "ui/screens.h"
+#include "ui/screens_tall.h"
 
 #include <esp_ota_ops.h>
 
@@ -148,6 +149,23 @@ void checkTouch() {
 
 }  // namespace
 
+// Desligada, a USB plugada liga a placa pela PMU, mas ninguém pediu para ligar: só a carga na tela, com brilho
+// baixo. O PWR liga de verdade (o restart vira um boot normal); tirar a USB desliga de novo.
+[[noreturn]] void chargeOnly() {
+  board::setBrightness(40);
+  bool wasDown = board::restPressed();  // o PWR ainda apertado do boot não conta
+  for (;;) {
+    board::PowerState ps;
+    if (board::powerState(ps) && !ps.usb) board::powerOff();
+    gfx::frame([&ps] { screens::tall::drawCharging(ps); });
+    for (int i = 0; i < 20; i++, delay(50)) {
+      const bool down = board::restPressed();
+      if (wasDown && !down) ESP.restart();
+      wasDown = down;
+    }
+  }
+}
+
 void setup() {
   hostlink::begin();
   settings::begin();
@@ -163,6 +181,7 @@ void setup() {
   } else {
     gfx::setRotation(settings::v.orient);  // a posição gravada, inclusive a 0 (o padrão da placa pode ser outro)
   }
+  if (board::chargeBoot()) chargeOnly();
   screens::bootSplash();
   // touch resistivo sem calibração gravada: calibra antes de tudo, senão os toques caem longe da caneta
   if (board::PROFILE.calibrate && !settings::cal.ok) screens::calibrateTouch();

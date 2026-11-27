@@ -37,6 +37,8 @@
 //   bool restPressed()                    botão de descanso (PWR); as placas sem ele devolvem false
 //   bool mutePressed()                    botão de silenciar (BOOT, quando ele não é o botão principal)
 //   void powerOff()                       desliga a placa (PMU); as placas sem PMU não fazem nada
+//   bool chargeBoot()                     a PMU ligou a placa porque a USB entrou com ela desligada (não pelo
+//                                         PWR): só carregar; false sem PMU
 //   bool powerState(PowerState& s)        bateria e USB (profile.h); false sem PMU
 //   bool rtcRead(uint32_t& t)             hora local guardada no RTC (segundos desde 1970); false sem RTC ou parado
 //   void rtcWrite(uint32_t t)             grava a hora local no RTC

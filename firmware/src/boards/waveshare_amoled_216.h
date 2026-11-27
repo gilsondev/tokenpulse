@@ -92,6 +92,17 @@ inline void powerOff() {
   if (Wire.endTransmission(false) == 0 && Wire.requestFrom(PMU_ADDR, (uint8_t)1) == 1) pmuWrite(0x10, Wire.read() | 1);
 }
 
+// A origem do último ligar fica no 0x20 da PMU: bit 2 a USB entrou, bit 0 o PWR. Um restart do ESP não muda o
+// registrador, então só vale no boot de energia
+inline bool chargeBoot() {
+  if (esp_reset_reason() != ESP_RST_POWERON) return false;
+  Wire.beginTransmission(PMU_ADDR);
+  Wire.write(0x20);
+  if (Wire.endTransmission(false) != 0 || Wire.requestFrom(PMU_ADDR, (uint8_t)1) != 1) return false;
+  const uint8_t src = Wire.read();
+  return (src & 0b100) && !(src & 0b1);
+}
+
 inline bool touch(int16_t& x, int16_t& y) {
   int16_t tx, ty;
   if (!touchNative(tx, ty)) return false;

@@ -160,6 +160,7 @@ inline void play(uint8_t, uint8_t, uint16_t = 0, uint8_t = 1) {}
 inline bool restPressed() { return false; }
 inline bool mutePressed() { return false; }
 inline void powerOff() {}
+inline bool chargeBoot() { return false; }
 inline bool powerState(PowerState&) { return false; }
 inline bool rtcRead(uint32_t&) { return false; }
 inline void rtcWrite(uint32_t) {}

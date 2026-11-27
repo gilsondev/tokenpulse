@@ -69,7 +69,8 @@ board's hardware:
 
 - **Battery:** the icon in the header shows the charge and whether the board is on USB. About shows the
   percentage and the estimated time to a full charge. Charging stops at 4.1 V instead of 4.2 V, so the battery
-  lasts more cycles.
+  lasts more cycles. Plugging USB-C into a board that is off only charges it: the screen shows the charge until
+  you press PWR, and unplugging turns it off again.
 - **Bluetooth or WiFi:** off the cable, the board keeps receiving data wirelessly. Settings → Connection picks
   which. Bluetooth uses less battery over an encrypted link: the Mac learns its name ("TokenPulse AMOLED" plus
   the end of its WiFi name) on the first USB connection, and if the board is fully erased, remove it in the Mac's

@@ -64,7 +64,8 @@ versões resumidas das telas (relógio flip, anel de uso, sessões, modelos e 14
 lugar novo, para o vidro não marcar. Ela usa o resto do hardware da placa:
 
 - **Bateria:** o ícone no cabeçalho mostra a carga e se a placa está na USB. O Sobre mostra a porcentagem e
-  a previsão de carga completa. A carga para em 4,1 V em vez de 4,2 V, para a bateria durar mais ciclos.
+  a previsão de carga completa. A carga para em 4,1 V em vez de 4,2 V, para a bateria durar mais ciclos. Plugar a
+  USB-C com a placa desligada só carrega: a tela mostra a carga até você apertar o PWR, e tirar o cabo desliga de novo.
 - **Bluetooth ou WiFi:** fora do cabo, a placa continua recebendo os dados sem fio. Em Ajustes → Conexão você
   escolhe por onde. O Bluetooth gasta menos bateria e usa um link criptografado: o Mac aprende o nome dela
   ("TokenPulse AMOLED" e o final do WiFi dela) na primeira conexão pela USB, e se a placa for apagada por completo,

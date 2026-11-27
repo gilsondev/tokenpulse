@@ -2536,6 +2536,33 @@ void drawMcAsk() {
 }
 int mcAskTap(int x, int y) { return choiceTap(x, y, 2); }
 
+void drawCharging(const board::PowerState& ps) {
+  gfx::clear(0);
+  char pct[8] = "--";
+  if (ps.pct >= 0) snprintf(pct, sizeof pct, "%d%%", ps.pct);
+  const char* st = !ps.charging && ps.pct >= 0 ? "Carregada" : "Carregando";
+  // a bateria: corpo, polo e o nível; anda devagar pela tela, contra marca no AMOLED
+  const int bw = u(120), bh = u(56), tip = u(8), t = max(2, u(4)), gap = u(14);
+  const int lh = gfx::lineHeight(gfx::NUM), sh = gfx::lineHeight(gfx::SMALL);
+  const int w = max(bw + tip, gfx::textWidth("Aperte o PWR para ligar", gfx::SMALL)), h = bh + gap + lh + u(4) + sh + u(10) + sh;
+  const uint32_t d = millis() / 400;
+  auto bounce = [d](int span) {
+    if (span <= 0) return 0;
+    const int p = d % (2u * span);
+    return p < span ? p : 2 * span - p;
+  };
+  const int x = bounce(W() - w), y = bounce(gfx::height() - h), bx = x + (w - bw - tip) / 2;
+  const uint16_t c = ps.pct >= 0 && ps.pct < 20 ? RED : GREEN;
+  fb().fillSmoothRoundRect(bx, y, bw, bh, u(10), 0x4208);
+  fb().fillSmoothRoundRect(bx + t, y + t, bw - 2 * t, bh - 2 * t, u(7), 0);
+  fb().fillSmoothRoundRect(bx + bw, y + bh / 3, tip, bh / 3, u(3), 0x4208);
+  const int in = bw - 4 * t;
+  if (ps.pct > 0) fb().fillSmoothRoundRect(bx + 2 * t, y + 2 * t, max(u(6), in * ps.pct / 100), bh - 4 * t, u(5), c);
+  text(pct, x + w / 2, y + bh + gap, gfx::NUM, REST_TEXT, top_center, 0);
+  text(st, x + w / 2, y + bh + gap + lh + u(4), gfx::SMALL, REST_MUTED, top_center, 0);
+  text("Aperte o PWR para ligar", x + w / 2, y + bh + gap + lh + u(4) + sh + u(10), gfx::SMALL, 0x6B4D, top_center, 0);
+}
+
 void drawLocked() {
   gfx::clear();
   const int cx = W() / 2, px = u(6), cy = gfx::height() / 2;
